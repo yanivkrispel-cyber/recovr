@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build artifacts
+dist/
+build/
+*.tsbuildinfo
+.vite/
+
+# Supabase
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+
+# Env files (never commit secrets)
+.env
+.env.local
+.env.*.local
+apps/clinician/.env
+apps/patient/.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage/
+.nyc_output/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# Misc
+.cache/
+.tmp/

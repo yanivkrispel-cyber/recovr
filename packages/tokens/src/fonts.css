@@ -1,0 +1,19 @@
+/* Frank Ruhl Libre — Hebrew serif (display) */
+@font-face {
+  font-family: 'Frank Ruhl Libre';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: local('Frank Ruhl Libre'), local('FrankRuhlLibre-Regular');
+  unicode-range: U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+}
+
+/* Heebo — Hebrew sans (UI) */
+@font-face {
+  font-family: 'Heebo';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: local('Heebo'), local('Heebo-Regular');
+  unicode-range: U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+}

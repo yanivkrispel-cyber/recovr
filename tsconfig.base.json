@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "jsx": "react-jsx",
+    "isolatedModules": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "ui/*": ["packages/ui/*"],
+      "tokens/*": ["packages/tokens/*"],
+      "shared/*": ["packages/shared/*"],
+      "offline/*": ["packages/offline/*"]
+    }
+  },
+  "include": ["tsconfig.json", "src/**/*", "packages/**/src/**/*", "apps/**/src/**/*"]
+}

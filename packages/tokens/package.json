@@ -1,0 +1,13 @@
+{
+  "name": "tokens",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.css",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "node scripts/generate.js"
+  },
+  "devDependencies": {
+    "cssesc": "^3.0.0"
+  }
+}

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&family=Frank+Ruhl+Libre:wght@500;600;700;800;900&family=Cormorant+Garamond:ital,wght@1,500&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#8C6423}
+a:hover{color:#6E4E18}
+</style>
+</helmet>
+
+<div dir="rtl" style="font-family:'Heebo',system-ui,sans-serif;background:#E9DCC4;min-height:100vh;padding:44px 40px 72px;box-sizing:border-box;">
+<div style="max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:40px;">
+
+  <div style="background:#1B2140;border-radius:16px;padding:30px 32px;color:#F6EFE3;display:flex;align-items:flex-end;justify-content:space-between;gap:24px;">
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <svg width="26" height="22" viewBox="0 0 26 22" fill="none" aria-hidden="true"><path d="M1 21V5l6 6 6-10 6 10 6-6v16H1Z" stroke="#C9A24B" stroke-width="1.6" stroke-linejoin="round"></path><path d="M5.5 16.5h15" stroke="#C9A24B" stroke-width="1.6"></path></svg>
+        <div style="font-family:'Frank Ruhl Libre',Georgia,serif;font-weight:800;font-size:15px;letter-spacing:0.14em;text-transform:uppercase;">RecoveryOS</div>
+      </div>
+      <div style="font-family:'Frank Ruhl Libre',Georgia,serif;font-size:30px;font-weight:700;letter-spacing:-0.01em;">מפרט מערכת עיצוב</div>
+      <div style="display:flex;align-items:baseline;gap:8px;">
+        <span style="font-size:13px;color:#A8A08C;">טיפוגרפיה · צבעים · מרווחים</span>
+        <span style="font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;font-size:15px;color:rgba(201,162,75,.8);">type, color, spacing</span>
+      </div>
+    </div>
+    <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;font-weight:600;color:#7E8AAE;text-align:left;line-height:1.8;">PRD §26<br/>v0.2</div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px;">
+    <div style="display:flex;align-items:baseline;gap:10px;border-bottom:1px solid #CDBB9C;padding-bottom:10px;">
+      <div style="font-family:'Frank Ruhl Libre',Georgia,serif;font-size:19px;font-weight:700;color:#221C14;">טיפוגרפיה</div>
+      <div style="font-size:12px;color:#6E6353;">Typography · Frank Ruhl Libre לכותרות, Heebo לגוף הטקסט</div>
+    </div>
+    <div style="background:#FBF6EC;border:1px solid #DCCCAE;border-radius:14px;overflow:hidden;">
+      <sc-for list="{{ typeScale }}" as="t" hint-placeholder-count="7">
+        <div style="display:grid;grid-template-columns:150px 1fr 220px;gap:20px;align-items:center;padding:18px 22px;border-top:1px solid #E5D7BC;">
+          <div>
+            <div style="font-size:12px;font-weight:700;color:#221C14;letter-spacing:0.06em;">{{ t.name }}</div>
+            <div style="font-size:11px;color:#A99D88;margin-top:2px;">{{ t.usage }}</div>
+          </div>
+          <div style="{{ t.sampleStyle }}">שיקום מדויק, שלב אחר שלב</div>
+          <div style="font-size:11px;color:#6E6353;line-height:1.7;text-align:left;font-family:'Archivo',monospace;">{{ t.spec }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px;">
+    <div style="display:flex;align-items:baseline;gap:10px;border-bottom:1px solid #CDBB9C;padding-bottom:10px;">
+      <div style="font-family:'Frank Ruhl Libre',Georgia,serif;font-size:19px;font-weight:700;color:#221C14;">פלטת צבעים</div>
+      <div style="font-size:12px;color:#6E6353;">Palette · צבעי סטטוס רק כשהם משמעותיים</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:22px;">
+      <sc-for list="{{ colorGroups }}" as="g" hint-placeholder-count="3">
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <div style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8C6423;">{{ g.title }}</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+            <sc-for list="{{ g.swatches }}" as="c" hint-placeholder-count="4">
+              <div style="background:#FBF6EC;border:1px solid #DCCCAE;border-radius:12px;overflow:hidden;">
+                <div style="{{ c.chipStyle }}"></div>
+                <div style="padding:11px 13px;display:flex;flex-direction:column;gap:3px;">
+                  <div style="font-size:12px;font-weight:600;color:#221C14;">{{ c.name }}</div>
+                  <div style="font-size:11px;color:#6E6353;font-family:'Archivo',monospace;letter-spacing:0.04em;">{{ c.hex }}</div>
+                  <div style="font-size:10px;color:#A99D88;line-height:1.5;">{{ c.usage }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px;">
+    <div style="display:flex;align-items:baseline;gap:10px;border-bottom:1px solid #CDBB9C;padding-bottom:10px;">
+      <div style="font-family:'Frank Ruhl Libre',Georgia,serif;font-size:19px;font-weight:700;color:#221C14;">מרווחים ורדיוסים</div>
+      <div style="font-size:12px;color:#6E6353;">Spacing &amp; radii · סקאלה של 4px</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:16px;">
+      <div style="background:#FBF6EC;border:1px solid #DCCCAE;border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:14px;">
+        <div style="font-size:12px;font-weight:700;color:#221C14;">סקאלת מרווחים · Spacing scale</div>
+        <sc-for list="{{ spacing }}" as="sp" hint-placeholder-count="6">
+          <div style="display:grid;grid-template-columns:64px 1fr;gap:14px;align-items:center;">
+            <div style="font-size:11px;color:#6E6353;font-family:'Archivo',monospace;">{{ sp.label }}</div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="{{ sp.barStyle }}"></div>
+              <div style="font-size:11px;color:#A99D88;">{{ sp.usage }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div style="background:#FBF6EC;border:1px solid #DCCCAE;border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:14px;">
+          <div style="font-size:12px;font-weight:700;color:#221C14;">רדיוסים · Radii</div>
+          <div style="display:flex;gap:12px;align-items:flex-end;">
+            <sc-for list="{{ radii }}" as="r" hint-placeholder-count="4">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:7px;">
+                <div style="{{ r.boxStyle }}"></div>
+                <div style="font-size:10px;color:#6E6353;font-family:'Archivo',monospace;">{{ r.label }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="background:#FBF6EC;border:1px solid #DCCCAE;border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:9px;">
+          <div style="font-size:12px;font-weight:700;color:#221C14;">כללי פריסה · Layout rules</div>
+          <div style="font-size:12px;color:#4A4032;line-height:1.75;">מטפל: desktop-first, 1440px, שימושי עד 1024px.<br/>מטופל: mobile-first, 390px.<br/>אזור תוכן: padding 26–30px, gap 22px בין בלוקים.<br/>כרטיסים: מסגרת 1px, רדיוס 12–14px, ללא צל.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="font-size:11px;color:#8C7F6A;text-align:center;padding-top:6px;">מלאי הקומפוננטות המלא (Button, Input, Badge, Table, Timeline, Metric card…) עדיין לא נכנס למפרט הזה — מוגדר ב-<a href="Rehab Platform Prototype.dc.html">אב-הטיפוס</a>.</div>
+
+</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const serif = "'Frank Ruhl Libre',Georgia,serif";
+    const sans = "'Heebo',system-ui,sans-serif";
+    const typeScale = [
+      {name:'Display', usage:'מסך פתיחה, מספרים גדולים', font:serif, size:34, weight:700, ls:'-0.02em', color:'#221C14'},
+      {name:'H1', usage:'כותרת מסך', font:serif, size:24, weight:700, ls:'-0.01em', color:'#221C14'},
+      {name:'H2', usage:'כותרת מקטע', font:serif, size:19, weight:700, ls:'-0.01em', color:'#221C14'},
+      {name:'H3', usage:'כותרת כרטיס', font:sans, size:15, weight:700, ls:'0', color:'#221C14'},
+      {name:'Body', usage:'טקסט רץ, טבלאות', font:sans, size:13, weight:400, ls:'0', color:'#4A4032'},
+      {name:'Caption', usage:'הסבר משני, תרגום', font:sans, size:12, weight:400, ls:'0', color:'#6E6353'},
+      {name:'Label', usage:'תגיות, כותרות עמודה', font:sans, size:10, weight:700, ls:'0.09em', color:'#8C6423'}
+    ].map(t => ({
+      name: t.name, usage: t.usage,
+      spec: t.size + 'px / ' + t.weight + ' / ' + (t.font === serif ? 'Frank Ruhl Libre' : 'Heebo'),
+      sampleStyle: 'font-family:' + t.font + ';font-size:' + t.size + 'px;font-weight:' + t.weight + ';letter-spacing:' + t.ls + ';color:' + t.color + ';line-height:1.3;' + (t.name === 'Label' ? 'text-transform:uppercase;' : '')
+    }));
+
+    const chip = (hex) => 'height:62px;background:' + hex + ';border-bottom:1px solid rgba(34,28,20,0.12);';
+    const group = (title, list) => ({title, swatches: list.map(c => ({name:c[0], hex:c[1], usage:c[2], chipStyle: chip(c[1])}))});
+    const colorGroups = [
+      group('בסיס · Surfaces', [
+        ['Ink', '#1B2140', 'כרום, אפליקציית מטופל'],
+        ['Canvas', '#E9DCC4', 'רקע מסך'],
+        ['Panel', '#F3EAD9', 'רקע אזור תוכן'],
+        ['Card', '#FBF6EC', 'כרטיסים, סרגל צד']
+      ]),
+      group('מותג וטקסט · Brand & text', [
+        ['Bronze', '#8C6423', 'פעולה ראשית, מצב נבחר'],
+        ['Gold', '#C9A24B', 'CTA בצד המטופל, הדגשה'],
+        ['Text', '#221C14', 'טקסט ראשי'],
+        ['Muted', '#6E6353', 'טקסט משני']
+      ]),
+      group('סטטוס · Status (רק כשמשמעותי)', [
+        ['Alert', '#9E3B2E', 'דורש תשומת לב, כאב עולה'],
+        ['Alert bg', '#F7E0D7', 'רקע התראה'],
+        ['Success', '#3F6B4A', 'במסלול, קריטריון הושלם'],
+        ['Border', '#DCCCAE', 'מסגרות והפרדות']
+      ])
+    ];
+
+    const spacing = [
+      {n:4, usage:'בין תגית לטקסט'},
+      {n:8, usage:'בין כפתורים'},
+      {n:14, usage:'gap בין כרטיסים'},
+      {n:18, usage:'padding כרטיס'},
+      {n:22, usage:'בין בלוקים במסך'},
+      {n:30, usage:'padding אזור תוכן'}
+    ].map(sp => ({
+      label: sp.n + 'px', usage: sp.usage,
+      barStyle: 'height:12px;width:' + (sp.n * 4) + 'px;border-radius:3px;background:#DCCCAE;border:1px solid #CDBB9C;'
+    }));
+
+    const radii = [6, 10, 14, 999].map(r => ({
+      label: r === 999 ? 'pill' : r + 'px',
+      boxStyle: 'width:46px;height:36px;background:#EFE3CE;border:1px solid #CDBB9C;border-radius:' + r + 'px;'
+    }));
+
+    return {typeScale, colorGroups, spacing, radii};
+  }
+}
+
+</script>
+</body>
+</html>
