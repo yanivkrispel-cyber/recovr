@@ -8,7 +8,7 @@
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
-    "test": "vitest",
+    "test": "vitest run --passWithNoTests",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
   },
   "dependencies": {

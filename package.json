@@ -10,7 +10,9 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "format": "pnpm -r format"
+    "format": "pnpm -r format",
+    "ingest:exercises": "deno run --allow-read --allow-write --allow-net --allow-env scripts/ingest-exercises.ts --verify",
+    "verify:media": "deno run --allow-net --allow-env scripts/verify-media.ts"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

@@ -116,17 +116,43 @@ supabase db reset        # drops, re-applies all migrations, then runs supabase/
 
 ### Create a test clinician (one time)
 
-The seed references a clinician by email. Create the auth user once via Studio (`http://127.0.0.1:54323`) → Authentication → Users → Add user → email `clinician@demo.recoveryos.app`, password `demo1234`, email confirm off. Then re-run the seed (or just `supabase db reset`).
+The seed creates the demo clinician auth user directly: `clinician@demo.recoveryos.app` / `demo12345678`.
 
 ## Scripts
 
 ```bash
-pnpm dev         # run both apps in parallel
-pnpm build       # build all packages + apps
-pnpm lint        # eslint across the monorepo
-pnpm typecheck   # tsc --noEmit across the monorepo
-pnpm test        # vitest across the monorepo
+pnpm dev              # run both apps in parallel
+pnpm build            # build all packages + apps
+pnpm lint             # eslint across the monorepo
+pnpm typecheck        # tsc --noEmit across the monorepo
+pnpm test             # vitest across the monorepo
+pnpm ingest:exercises # T-14 — load exercises-dataset-main media into the system library (needs deno)
+pnpm verify:media     # T-14 — verify / unverify ingested media selectively (see below)
 ```
+
+### Exercise media (T-14) — local seed step
+
+`pnpm ingest:exercises` walks `exercises-dataset-main/`, upserts `app.exercise` /
+`app.exercise_media` (system library), uploads the 180×180 thumbnails and GIFs to
+the `exercise-media` Storage bucket, and (via the `--verify` flag baked into the
+script) marks all ingested media **verified** so it shows in the clinician detail
+view, the patient exercise flow, and the printed program. Run it after every
+`supabase db reset` — a reset wipes `app.exercise_media`. Idempotent; prints a
+report of missing files, unreferenced files, and exercises still without media.
+
+Bare `deno run scripts/ingest-exercises.ts` (no `--verify`) leaves media
+unverified. Note the dataset media is © Gym visual — see
+`exercises-dataset-main/NOTICE.md`; auto-verify here is a dev convenience.
+
+`verify:media` toggles verification selectively once the stack is up:
+
+```bash
+ALLOW_MEDIA_VERIFY=true VERIFIED_BY=<app.user id> pnpm verify:media -- --exercise 0001
+pnpm verify:media -- --unverify --all
+```
+
+Env for both scripts: `SUPABASE_DB_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+(from `supabase status`). Requires [deno](https://deno.com/) on PATH.
 
 ## License
 

@@ -3,7 +3,7 @@ import React from 'react';
 interface SkeletonProps {
   width?: string | number;
   height?: string | number;
-  radius?: string;
+  radius?: string | number;
   count?: number;
 }
 

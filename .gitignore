@@ -43,3 +43,9 @@ yarn-debug.log*
 # Misc
 .cache/
 .tmp/
+
+# Ingest reports (scripts/ingest-exercises.ts --report)
+*.ingest-report.json
+
+# Deno (scripts/*.ts use inline jsr: specifiers, no deno.json)
+deno.lock

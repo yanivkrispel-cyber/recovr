@@ -16,8 +16,8 @@ export function Tabs({ defaultValue, children, onChange }: TabsProps) {
         role="tablist"
         style={{
           display: 'flex',
-          gap: 4,
-          borderBottom: '1px solid var(--line)',
+          gap: 22,
+          borderBottom: '1px solid var(--shell-border)',
           fontFamily: 'var(--font-ui)',
         }}
       >
@@ -34,15 +34,16 @@ export function Tabs({ defaultValue, children, onChange }: TabsProps) {
                 onChange?.(value);
               }}
               style={{
-                padding: '12px 18px',
+                padding: '10px 4px',
                 background: 'transparent',
                 border: 'none',
-                borderBottom: isActive ? '2px solid var(--gold)' : '2px solid transparent',
+                borderBottom: isActive ? '2px solid var(--gold-deep)' : '2px solid transparent',
                 cursor: 'pointer',
                 fontFamily: 'var(--font-ui)',
                 fontSize: 14,
-                fontWeight: 600,
-                color: isActive ? 'var(--navy)' : 'var(--muted)',
+                letterSpacing: '0.02em',
+                fontWeight: isActive ? 700 : 500,
+                color: isActive ? 'var(--gold-deep)' : 'var(--nav-inactive-text)',
                 transition: 'var(--motion-hover)',
               }}
             >

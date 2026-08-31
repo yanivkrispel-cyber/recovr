@@ -13,6 +13,15 @@ interface Input {
   override_reason?: string;
 }
 
+interface Criterion {
+  id: string;
+  type: string;
+  operator: string;
+  value: number;
+  is_met: boolean;
+  met_at: string | null;
+}
+
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 });
@@ -31,7 +40,8 @@ Deno.serve(async (req) => {
 
   // Verify role
   const { data: roleRow } = await userClient
-    .from('app.user')
+    .schema('app')
+    .from('user')
     .select('role, clinic_id')
     .eq('id', user.id)
     .single();
@@ -45,47 +55,36 @@ Deno.serve(async (req) => {
 
   const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-  // Resolve clinic + scope
-  const { data: clinic } = await service.rpc('resolve_clinic_for_patient', {
+  // The clinician's own clinic, expressed as a schema name — this is what
+  // the patient's resolved schema must match. (Comparing a schema name to
+  // roleRow.clinic_id directly, as the original code did, compares a
+  // string like "clinic_demo" to a UUID and can never match.)
+  const { data: clinicRow } = await service
+    .schema('app')
+    .from('clinic')
+    .select('slug')
+    .eq('id', roleRow.clinic_id)
+    .single();
+  const expectedSchema = clinicRow ? `clinic_${clinicRow.slug}` : null;
+
+  const { data: patientSchema } = await service.schema('app').rpc('resolve_clinic_for_patient', {
     p_patient_id: patientId,
   });
-  if (!clinic || clinic !== roleRow.clinic_id) {
+  if (!patientSchema || !expectedSchema || patientSchema !== expectedSchema) {
     return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
   }
-
-  await service.rpc('set_config', {
-    setting: 'search_path',
-    value: clinic,
-    is_local: true,
-  });
 
   // Load plan + current criteria snapshot
-  const { data: plan } = await service
-    .from('plan')
-    .select('id, current_phase_n')
-    .eq('patient_id', patientId)
-    .single();
+  const { data: planData } = await service
+    .schema('app')
+    .rpc('get_plan_for_phase_transition', { p_schema: patientSchema, p_patient_id: patientId });
 
-  if (!plan) {
+  if (!planData) {
     return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
   }
 
-  const { data: criteria } = await service
-    .from('plan_criterion')
-    .select('id, type, operator, value, is_met, met_at')
-    .eq('plan_phase_id',
-      // load phase → current plan_version
-      (
-        await service
-          .from('plan_version')
-          .select('id, plan_phase!inner(id)')
-          .eq('plan_id', plan.id)
-          .eq('is_current', true)
-          .single()
-      ).data?.plan_phase[0]?.id ?? '00000000-0000-0000-0000-000000000000'
-    );
-
-  const unmet = (criteria ?? []).filter((c) => !c.is_met);
+  const criteria: Criterion[] = planData.criteria ?? [];
+  const unmet = criteria.filter((c) => !c.is_met);
   if (unmet.length > 0 && !body.override_reason) {
     return new Response(
       JSON.stringify({
@@ -97,39 +96,23 @@ Deno.serve(async (req) => {
     );
   }
 
-  // Write immutable transition
+  // Write immutable transition + advance plan.current_phase_n
   const { data: transition, error: txErr } = await service
-    .from('phase_transition')
-    .insert({
-      plan_id: plan.id,
-      from_phase_n: plan.current_phase_n,
-      to_phase_n: body.to_phase_n,
-      direction: body.direction,
-      approved_by: user.id,
-      criteria_snapshot: criteria,
-      override_reason: body.override_reason,
-    })
-    .select()
-    .single();
+    .schema('app')
+    .rpc('write_phase_transition', {
+      p_schema: patientSchema,
+      p_plan_id: planData.plan_id,
+      p_from_phase_n: planData.current_phase_n,
+      p_to_phase_n: body.to_phase_n,
+      p_direction: body.direction,
+      p_approved_by: user.id,
+      p_criteria_snapshot: criteria,
+      p_override_reason: body.override_reason ?? null,
+    });
 
   if (txErr) {
     return new Response(JSON.stringify({ error: 'validation_failed', details: txErr }), { status: 422 });
   }
-
-  // Update plan.current_phase_n
-  await service
-    .from('plan')
-    .update({ current_phase_n: body.to_phase_n })
-    .eq('id', plan.id);
-
-  // Audit log
-  await service.from('app.audit_log').insert({
-    actor_type: 'clinician',
-    actor_id: user.id,
-    action: 'phase_transition',
-    entity_type: 'plan',
-    entity_id: plan.id,
-  });
 
   return new Response(JSON.stringify({ transition }), {
     headers: { 'Content-Type': 'application/json' },

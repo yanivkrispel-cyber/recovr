@@ -31,6 +31,33 @@
   --flag-red: #9E3B2E;
   --flag-neutral: #221C14;
 
+  /* Clinician app shell surfaces — exact values from the prototype
+     (Rehab Platform Prototype.dc.html), distinct from the rounder
+     DESIGN_TOKENS.md paper/sand pair used elsewhere. */
+  --shell-sidebar-bg: #FBF6EC;
+  --shell-content-bg: #F3EAD9;
+  --shell-border: #DCCCAE;
+  --shell-border-soft: #E5D7BC;
+  --nav-active-bg: #EFE3CE;
+  --nav-inactive-text: #6E6353;
+  --pill-good-bg: #E4E9D6;
+  --pill-attention-bg: #F7E0D7;
+
+  /* Patient app — dark navy theme (Rehab Platform Prototype.dc.html,
+     isPatientSide), distinct from the clinician app's light theme. */
+  --patient-bg: #1B2140;
+  --patient-card: #242B4E;
+  --patient-card-light: #2C3358;
+  --patient-tabbar-bg: #161B33;
+  --patient-text: #F3EAD9;
+  --patient-muted: #A8A08C;
+  --patient-dim: #7E8AAE;
+  --patient-border: rgba(243,234,217,0.18);
+  --patient-gold: #C9A24B;
+  --patient-gold-ink: #15171A;
+  --patient-success: #7FB98C;
+  --patient-danger: #E4A99C;
+
   /* Typography */
   --font-display: "Frank Ruhl Libre", serif;
   --font-ui: "Heebo", sans-serif;

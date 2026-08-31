@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useState, useContext } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { loginSchema, type LoginInput } from 'shared';
-import { t } from 'shared';
+import { loginSchema, t, tZodError, type LoginInput } from 'shared';
+import { SupabaseContext } from '../App';
 import { Button } from 'ui';
 import { Input } from 'ui';
 import { Card } from 'ui';
 
 export default function Login() {
+  const supabase = useContext(SupabaseContext);
   const {
     register,
     handleSubmit,
@@ -18,11 +19,6 @@ export default function Login() {
   const [resetSent, setResetSent] = useState(false);
 
   async function onSubmit(data: LoginInput) {
-    const { createClient } = await import('@supabase/supabase-js');
-    const supabase = createClient(
-      import.meta.env.VITE_SUPABASE_URL,
-      import.meta.env.VITE_SUPABASE_ANON_KEY,
-    );
     const { error } = await supabase.auth.signInWithPassword({
       email: data.email,
       password: data.password,
@@ -42,7 +38,6 @@ export default function Login() {
         justifyContent: 'center',
         padding: 24,
         fontFamily: 'var(--font-ui)',
-        dir: 'rtl',
       }}
     >
       <Card
@@ -81,14 +76,14 @@ export default function Login() {
             type="email"
             autoComplete="email"
             {...register('email')}
-            error={errors.email?.message}
+            error={tZodError(errors.email?.message)}
           />
           <Input
             label="סיסמה"
             type="password"
             autoComplete="current-password"
             {...register('password')}
-            error={errors.password?.message}
+            error={tZodError(errors.password?.message)}
           />
           <Button
             type="submit"

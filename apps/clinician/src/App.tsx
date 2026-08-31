@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { RouterProvider } from '@tanstack/react-router';
 import { t } from 'shared';
 import type { User } from 'shared';
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
+import { router } from './router';
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -22,11 +23,26 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   React.useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session?.user && import.meta.env.DEV && import.meta.env.VITE_DEV_AUTO_LOGIN === '1') {
+        // Dev-only convenience: skip the login form by signing in with a
+        // seeded account automatically. `import.meta.env.DEV` is a Vite
+        // build-time constant — this whole branch is dead-code-eliminated
+        // from production bundles, so it can never ship live.
+        const { error } = await supabase.auth.signInWithPassword({
+          email: import.meta.env.VITE_DEV_AUTO_LOGIN_EMAIL ?? 'clinician@demo.recoveryos.app',
+          password: import.meta.env.VITE_DEV_AUTO_LOGIN_PASSWORD ?? 'demo12345678',
+        });
+        if (error) console.warn('VITE_DEV_AUTO_LOGIN sign-in failed:', error.message);
+        const { data: { session: newSession } } = await supabase.auth.getSession();
+        session = newSession;
+      }
+
       if (session?.user) {
         // Load user metadata
         supabase
-          .from('app.user')
+          .schema('app')
+          .from('user')
           .select('*')
           .eq('id', session.user.id)
           .single()
@@ -43,7 +59,8 @@ export default function App() {
       async (_event, session) => {
         if (session?.user) {
           const { data } = await supabase
-            .from('app.user')
+            .schema('app')
+            .from('user')
             .select('*')
             .eq('id', session.user.id)
             .single();
@@ -81,7 +98,7 @@ export default function App() {
   return (
     <SupabaseContext.Provider value={supabase}>
       <AuthContext.Provider value={{ user, loading, signOut }}>
-        {user ? <Dashboard user={user} /> : <Login />}
+        {user ? <RouterProvider router={router} /> : <Login />}
       </AuthContext.Provider>
     </SupabaseContext.Provider>
   );

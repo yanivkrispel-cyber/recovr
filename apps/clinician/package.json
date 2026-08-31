@@ -8,8 +8,8 @@
     "build": "tsc -p tsconfig.app.json && vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext .ts,.tsx",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest",
+    "typecheck": "tsc -p tsconfig.app.json",
+    "test": "vitest run --passWithNoTests",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
   },
   "dependencies": {

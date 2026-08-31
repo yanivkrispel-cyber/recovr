@@ -1,17 +1,11 @@
-import { useState } from 'react';
+import { useContext, useState, type CSSProperties } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import { t } from 'shared';
-import { Card } from 'ui';
-import { Table } from 'ui';
-import { Badge, Pill } from 'ui';
-import { Button } from 'ui';
-import { Skeleton } from 'ui';
-import { EmptyState } from 'ui';
-import type { User, Patient, Alert, Plan } from 'shared';
-
-interface DashboardProps {
-  user: User;
-}
+import { Badge, Button, EmptyState, Skeleton } from 'ui';
+import type { Alert } from 'shared';
+import { SupabaseContext, AuthContext } from '../App';
+import AppShell from '../components/AppShell';
 
 type PatientRow = {
   id: string;
@@ -23,58 +17,62 @@ type PatientRow = {
   lastActivity: string;
 };
 
-export default function Dashboard({ user }: DashboardProps) {
+const FILTERS = [
+  ['all', 'הכל', 'All'],
+  ['attention', 'תשומת לב', 'Attention'],
+  ['ready', 'מוכנים לקידום', 'Ready'],
+  ['inactive', 'לא פעיל', 'Inactive'],
+] as const;
+
+const statusLabel: Record<PatientRow['status'], string> = {
+  ontrack: 'במסלול',
+  attention: 'תשומת לב',
+  ready: 'מוכן לקידום',
+  inactive: 'לא פעיל',
+};
+
+function chipStyle(active: boolean): CSSProperties {
+  return active
+    ? { padding: '6px 15px', borderRadius: 'var(--radius-pill)', background: 'var(--gold-deep)', color: 'var(--cream)', fontSize: 12, fontWeight: 600, letterSpacing: '0.03em', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }
+    : { padding: '6px 15px', borderRadius: 'var(--radius-pill)', background: 'transparent', border: '1px solid var(--line-input)', color: 'var(--nav-inactive-text)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' };
+}
+
+export default function Dashboard() {
+  const { user } = useContext(AuthContext);
+  const supabase = useContext(SupabaseContext);
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<'all' | 'attention' | 'ready' | 'inactive'>('all');
+  const [notifOpen, setNotifOpen] = useState(false);
   const queryClient = useQueryClient();
 
-  const { data: kpis, isLoading: kpisLoading } = useQuery({
+  const { data: kpis, isLoading: kpisLoading, error: kpisError } = useQuery({
     queryKey: ['dashboard-kpis'],
     queryFn: async () => {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabase = createClient(
-        import.meta.env.VITE_SUPABASE_URL,
-        import.meta.env.VITE_SUPABASE_ANON_KEY,
-      );
-      const { data, error } = await supabase.functions.invoke('dashboard', {
-        method: 'GET',
-      });
+      const { data, error } = await supabase.functions.invoke('dashboard', { method: 'GET' });
       if (error) throw error;
       return data as {
         active_patients: number;
         avg_adherence: number;
         attention_count: number;
         ready_count: number;
+        completed_today: number;
       };
     },
   });
 
-  const { data: patients, isLoading: patientsLoading } = useQuery({
+  const { data: patients, isLoading: patientsLoading, error: patientsError } = useQuery({
     queryKey: ['patients', filter],
     queryFn: async () => {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabase = createClient(
-        import.meta.env.VITE_SUPABASE_URL,
-        import.meta.env.VITE_SUPABASE_ANON_KEY,
-      );
-      const { data, error } = await supabase.functions.invoke(`patients?filter=${filter}`, {
-        method: 'GET',
-      });
+      const { data, error } = await supabase.functions.invoke(`patients?filter=${filter}`, { method: 'GET' });
       if (error) throw error;
       return data as PatientRow[];
     },
   });
 
-  const { data: alerts, isLoading: alertsLoading } = useQuery({
+  const { data: alerts } = useQuery({
     queryKey: ['alerts'],
     queryFn: async () => {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabase = createClient(
-        import.meta.env.VITE_SUPABASE_URL,
-        import.meta.env.VITE_SUPABASE_ANON_KEY,
-      );
-      const { data, error } = await supabase.functions.invoke('alerts?state=open', {
-        method: 'GET',
-      });
+      const { data, error } = await supabase.functions.invoke('alerts?state=open', { method: 'GET' });
       if (error) throw error;
       return data as Alert[];
     },
@@ -82,263 +80,167 @@ export default function Dashboard({ user }: DashboardProps) {
 
   const reviewAlert = useMutation({
     mutationFn: async (alertId: string) => {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabase = createClient(
-        import.meta.env.VITE_SUPABASE_URL,
-        import.meta.env.VITE_SUPABASE_ANON_KEY,
-      );
       await supabase.functions.invoke(`alerts/${alertId}/review`, { method: 'POST' });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['alerts'] }),
   });
 
-  const statusBadge = (status: PatientRow['status']) => {
-    const map = {
-      ontrack: { label: 'במסלול', tone: 'gold' as const },
-      attention: { label: 'תשומת לב', tone: 'danger' as const },
-      ready: { label: 'מוכן לקידום', tone: 'gold' as const },
-      inactive: { label: 'לא פעיל', tone: 'danger' as const },
-    };
-    const { label, tone } = map[status];
-    return <Badge tone={tone}>{label}</Badge>;
-  };
+  if (!user) return null; // AppShell requires a signed-in user; App.tsx never routes here otherwise
 
-  const columns = [
-    { key: 'name', header: 'מטופל', width: '25%' },
-    { key: 'injury', header: 'פציעה', width: '20%' },
-    {
-      key: 'phase',
-      header: 'שלב נוכחי',
-      render: (row: PatientRow) => (
-        <span style={{ fontSize: 13, color: 'var(--ink-soft)' }}>{row.phaseName}</span>
-      ),
-    },
-    {
-      key: 'adherence',
-      header: 'היענות',
-      align: 'center' as const,
-      render: (row: PatientRow) => (
-        <span
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: row.adherence >= 70 ? 'var(--flag-green)' : 'var(--danger)',
-          }}
-        >
-          {row.adherence}%
-        </span>
-      ),
-    },
-    {
-      key: 'status',
-      header: 'סטטוס',
-      render: (row: PatientRow) => statusBadge(row.status),
-    },
-    {
-      key: 'lastActivity',
-      header: 'פעילות אחרונה',
-      align: 'end' as const,
-      render: (row: PatientRow) => (
-        <span style={{ fontSize: 12, color: 'var(--muted)' }}>{row.lastActivity}</span>
-      ),
-    },
+  const kpiCards = [
+    { label: 'מטופלים פעילים', labelEn: 'Active Patients', value: kpis?.active_patients ?? 0, color: 'var(--ink)' },
+    { label: 'דורש תשומת לב', labelEn: 'Needs Attention', value: kpis?.attention_count ?? 0, color: 'var(--flag-red)' },
+    { label: 'הושלם היום', labelEn: 'Completed Today', value: kpis?.completed_today ?? 0, color: 'var(--ink)' },
+    { label: 'היענות ממוצעת', labelEn: 'Avg. Adherence', value: kpis ? `${kpis.avg_adherence}%` : '—', color: 'var(--flag-green)' },
   ];
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: 'var(--sand)',
-        fontFamily: 'var(--font-ui)',
-        dir: 'rtl',
-      }}
-    >
-      {/* Header */}
-      <header
-        style={{
-          background: 'var(--navy)',
-          color: 'var(--cream)',
-          padding: '16px 28px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <path d="M14 4L4 8v6c0 5.5 4.3 10.6 10 12 5.7-1.4 10-6.5 10-12V8L14 4z" fill="var(--gold)" />
-          </svg>
-          <span style={{ fontSize: 18, fontWeight: 700, fontFamily: 'var(--font-display)' }}>
-            RecoveryOS
-          </span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <span style={{ fontSize: 14, color: 'var(--navy-muted)' }}>{user.name}</span>
-          <button
-            onClick={() => {
-              import('@supabase/supabase-js').then(({ createClient }) => {
-                createClient(
-                  import.meta.env.VITE_SUPABASE_URL,
-                  import.meta.env.VITE_SUPABASE_ANON_KEY,
-                ).auth.signOut();
-              });
-            }}
-            style={{
-              background: 'transparent',
-              border: '1px solid rgba(255,255,255,0.2)',
-              color: 'var(--cream)',
-              padding: '6px 14px',
-              borderRadius: 'var(--radius-button)',
-              cursor: 'pointer',
-              fontSize: 13,
-            }}
-          >
-            {t('auth.logout')}
-          </button>
-        </div>
-      </header>
-
-      <main style={{ padding: 28 }}>
-        <h1 style={{ margin: '0 0 24px', fontSize: 22, fontWeight: 700, color: 'var(--navy)', fontFamily: 'var(--font-display)' }}>
-          {t('clinician.dashboard.title')}
-        </h1>
-
-        {/* KPI cards */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: 16,
-            marginBottom: 28,
-          }}
-        >
-          {[
-            { label: 'מטופלים פעילים', value: kpis?.active_patients ?? 0, color: 'var(--navy)' },
-            { label: 'היענות ממוצעת', value: kpis ? `${kpis.avg_adherence}%` : '—', color: 'var(--flag-green)' },
-            { label: 'דורשים תשומת לב', value: kpis?.attention_count ?? 0, color: 'var(--danger)' },
-            { label: 'מוכנים לקידום', value: kpis?.ready_count ?? 0, color: 'var(--gold)' },
-          ].map((kpi) => (
-            <Card key={kpi.label} padding={20}>
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>
-                {kpi.label}
-              </div>
-              <div style={{ fontSize: 28, fontWeight: 800, color: kpi.color, fontFamily: 'var(--font-display)' }}>
-                {kpisLoading ? <Skeleton width={48} height={32} /> : kpi.value}
-              </div>
-            </Card>
-          ))}
-        </div>
-
-        {/* Alert inbox */}
-        {(alerts?.length ?? 0) > 0 && (
-          <Card padding={20} style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>
-                {t('clinician.alerts.title')} ({alerts?.length})
-              </h2>
+    <AppShell user={user}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.01em', fontSize: 21, fontWeight: 700, color: 'var(--ink)' }}>
+              {t('dashboard.greeting', { name: user.name })}{' '}
+              <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--nav-inactive-text)' }}>Good morning</span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {alerts?.slice(0, 5).map((alert) => (
-                <div
-                  key={alert.id}
+            <div style={{ fontSize: 13, color: 'var(--nav-inactive-text)', marginTop: 4 }}>
+              סקירה של המטופלים שלך <span style={{ opacity: 0.8 }}>· Overview of your patients</span>
+            </div>
+          </div>
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setNotifOpen((v) => !v)}
+              style={{
+                width: 38, height: 38, borderRadius: 10, background: 'var(--shell-sidebar-bg)',
+                border: '1px solid var(--shell-border)', fontSize: 16, cursor: 'pointer', position: 'relative',
+              }}
+              aria-label={t('clinician.alerts.title')}
+            >
+              🔔
+              {(alerts?.length ?? 0) > 0 && (
+                <span
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '12px 16px',
-                    background: 'var(--warn-bg)',
-                    borderRadius: 'var(--radius-card)',
-                    border: '1px solid var(--warn-line)',
+                    position: 'absolute', top: -4, insetInlineEnd: -4, background: 'var(--flag-red)', color: 'var(--cream)',
+                    fontSize: 10, fontWeight: 700, borderRadius: 'var(--radius-pill)', width: 16, height: 16,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}
                 >
-                  <div>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>
-                      {alert.type}
-                    </span>
-                    <span style={{ fontSize: 12, color: 'var(--muted)', marginInlineStart: 8 }}>
-                      {new Date(alert.created_at).toLocaleDateString('he-IL')}
-                    </span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => reviewAlert.mutate(alert.id)}
-                  >
-                    {t('clinician.alerts.review')}
-                  </Button>
+                  {alerts!.length}
+                </span>
+              )}
+            </button>
+            {notifOpen && (
+              <div
+                style={{
+                  position: 'absolute', top: 44, insetInlineEnd: 0, width: 280, background: 'var(--shell-sidebar-bg)',
+                  border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--shadow-floating)',
+                  padding: 8, zIndex: 10, display: 'flex', flexDirection: 'column', gap: 4,
+                }}
+              >
+                {(alerts?.length ?? 0) === 0 ? (
+                  <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--nav-inactive-text)' }}>{t('empty.alerts.title')}</div>
+                ) : (
+                  alerts!.slice(0, 6).map((alert) => (
+                    <div
+                      key={alert.id}
+                      onClick={() => reviewAlert.mutate(alert.id)}
+                      style={{ padding: '10px 12px', borderRadius: 8, fontSize: 12, color: 'var(--ink-soft)', cursor: 'pointer', display: 'flex', gap: 9, alignItems: 'flex-start' }}
+                    >
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--flag-red)', marginTop: 4, flex: 'none' }} />
+                      <span>{alert.type}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {kpisError ? (
+          <EmptyState
+            title={t('error.generic.title')}
+            body={t('error.generic.body')}
+            action={<Button size="sm" onClick={() => queryClient.invalidateQueries({ queryKey: ['dashboard-kpis'] })}>{t('error.generic.action')}</Button>}
+          />
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+            {kpiCards.map((kpi) => (
+              <div key={kpi.label} style={{ background: 'var(--shell-sidebar-bg)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-card)', padding: 18 }}>
+                <div style={{ fontSize: 12, color: 'var(--nav-inactive-text)' }}>
+                  {kpi.label} <span style={{ opacity: 0.7 }}>{kpi.labelEn}</span>
                 </div>
-              ))}
-            </div>
-          </Card>
+                <div style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.01em', fontSize: 28, fontWeight: 700, color: kpi.color, marginTop: 6 }}>
+                  {kpisLoading ? <Skeleton width={48} height={28} /> : kpi.value}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
 
-        {/* Patient table */}
-        <Card padding={20}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>
-              {t('clinician.patients.title')}
-            </h2>
-            <Button
-              size="sm"
-              onClick={() => {/* TODO: open add patient modal */}}
-            >
+        <div style={{ background: 'var(--shell-sidebar-bg)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-panel)', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', borderBottom: '1px solid var(--shell-border)' }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {FILTERS.map(([key, label, labelEn]) => (
+                <button key={key} onClick={() => setFilter(key)} style={chipStyle(filter === key)}>
+                  {label} · {labelEn}
+                </button>
+              ))}
+            </div>
+            <Button size="sm" onClick={() => navigate({ to: '/patients' })}>
               + {t('clinician.patient.add')}
             </Button>
           </div>
 
-          {/* Filter tabs */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            {([
-              ['all', 'הכול'],
-              ['attention', 'תשומת לב'],
-              ['ready', 'מוכנים לקידום'],
-              ['inactive', 'לא פעילים'],
-            ] as const).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setFilter(key)}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: 'var(--radius-pill)',
-                  border: filter === key ? '1px solid var(--navy)' : '1px solid var(--line)',
-                  background: filter === key ? 'var(--navy)' : 'var(--white)',
-                  color: filter === key ? 'var(--cream)' : 'var(--ink-soft)',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  transition: 'var(--motion-hover)',
-                }}
-              >
-                {label}
-              </button>
-            ))}
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.6fr 1fr 1fr 1fr 1.2fr', padding: '12px 18px', fontSize: 11, color: 'var(--nav-inactive-text)', fontWeight: 600 }}>
+            <div>מטופל · Patient</div>
+            <div>אבחנה · Condition</div>
+            <div>שלב · Phase</div>
+            <div>היענות · Adherence</div>
+            <div>פעילות אחרונה</div>
+            <div>סטטוס · Status</div>
           </div>
 
           {patientsLoading ? (
             <div style={{ padding: 20 }}>
               <Skeleton count={5} height={20} />
             </div>
+          ) : patientsError ? (
+            <div style={{ padding: 20 }}>
+              <EmptyState
+                title={t('error.generic.title')}
+                body={t('error.generic.body')}
+                action={<Button size="sm" onClick={() => queryClient.invalidateQueries({ queryKey: ['patients', filter] })}>{t('error.generic.action')}</Button>}
+              />
+            </div>
           ) : patients?.length === 0 ? (
-            <EmptyState
-              title={t('empty.patients.title')}
-              body={t('empty.patients.body')}
-              action={
-                <Button size="sm">{t('empty.patients.action')}</Button>
-              }
-            />
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--nav-inactive-text)', fontSize: 13, borderTop: '1px solid var(--shell-border-soft)' }}>
+              {filter === 'all' ? t('empty.patients.title') : t('empty.patients.filtered.title')}
+            </div>
           ) : (
-            <Table
-              columns={columns}
-              rows={patients ?? []}
-              rowKey={(r) => r.id}
-              onRowClick={(row) => {
-                // Navigate to patient overview — TODO: router integration
-                window.location.href = `/app/patients/${row.id}`;
-              }}
-            />
+            patients?.map((row) => (
+              <div
+                key={row.id}
+                onClick={() => navigate({ to: '/patients/$patientId', params: { patientId: row.id } })}
+                style={{
+                  display: 'grid', gridTemplateColumns: '2fr 1.6fr 1fr 1fr 1fr 1.2fr', padding: '14px 18px',
+                  borderTop: '1px solid var(--shell-border-soft)', cursor: 'pointer', alignItems: 'center',
+                }}
+              >
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>{row.name}</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{row.injury}</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{row.phaseName}</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{row.adherence}%</div>
+                <div style={{ fontSize: 12, color: 'var(--nav-inactive-text)' }}>{row.lastActivity}</div>
+                <div>
+                  <Badge tone={row.status === 'attention' || row.status === 'inactive' ? 'attention' : 'success'}>
+                    {statusLabel[row.status]}
+                  </Badge>
+                </div>
+              </div>
+            ))
           )}
-        </Card>
-      </main>
-    </div>
+        </div>
+      </div>
+    </AppShell>
   );
 }

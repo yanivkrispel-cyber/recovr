@@ -1,70 +1,57 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S deno run --allow-net --allow-env
 // scripts/apply-to-all-clinics.ts
-// Reads each clinic schema name from app.clinic, then applies the template DDL to it.
-// Usage: deno run --allow-all scripts/apply-to-all-clinics.ts
+// Ensures every clinic schema has the current CLINIC SCHEMA TEMPLATE table
+// set applied. Calls create_clinic_tables() per clinic over a direct
+// Postgres connection: that function (and every clinic_<slug> schema it
+// targets) is not exposed through PostgREST — see [api] schemas in
+// config.toml, which lists only app/storage/graphql_public — so this
+// can't go through supabase-js/REST like the rest of the codebase does.
+// create_clinic_tables() only adds missing tables/indexes
+// (CREATE ... IF NOT EXISTS); it never drops or alters existing ones, so
+// this is safe to run against live clinic data.
+//
+// Usage: deno run --allow-net --allow-env scripts/apply-to-all-clinics.ts
+// Requires: SUPABASE_DB_URL (see `supabase status` -> DB_URL).
+// DRY_RUN=true previews without applying.
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { Client } from 'jsr:@db/postgres@0.19';
 
-const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const DRY_RUN = process.env.DRY_RUN === 'true';
-
-const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-async function applyToAllClinics() {
-  const { data: clinics, error } = await admin
-    .from('app.clinic')
-    .select('slug, name');
-
-  if (error) throw error;
-  if (!clinics?.length) {
-    console.log('No clinics found.');
-    return;
-  }
-
-  console.log(`Applying to ${clinics.length} clinic(s)...`);
-
-  for (const clinic of clinics) {
-    const schemaName = `clinic_${clinic.slug}`;
-    console.log(`  → ${clinic.name} (${schemaName})`);
-
-    if (DRY_RUN) {
-      console.log('    [DRY RUN — skipped]');
-      continue;
-    }
-
-    // Set search_path to the clinic schema and apply the migration
-    // The template schema SQL is applied as-is with schema prefix replaced.
-    const migrationSQL = Deno.readTextFileSync('supabase/migrations/0001_initial_schema.sql');
-
-    // Extract only the clinic-schema tables (everything after the line that starts clinic schema)
-    const lines = migrationSQL.split('\n');
-    const clinicSectionStart = lines.findIndex(
-      (l) => l.includes('-- CLINIC SCHEMA TEMPLATE'),
-    );
-    if (clinicSectionStart === -1) {
-      console.warn(`  WARNING: No clinic schema section found in migration`);
-      continue;
-    }
-
-    const clinicDDL = lines.slice(clinicSectionStart).join('\n');
-
-    // Replace all unqualified table references with schema-qualified ones
-    const qualified = clinicDDL.replace(
-      /CREATE TABLE ([a-z_]+)/gi,
-      `CREATE TABLE ${schemaName}.$1`,
-    );
-
-    try {
-      await admin.rpc('exec', { sql: qualified });
-      console.log(`    ✓ Applied`);
-    } catch (err) {
-      console.error(`    ✗ Failed: ${err}`);
-    }
-  }
-}
-
-applyToAllClinics().catch((e) => {
-  console.error(e);
+const DB_URL = Deno.env.get('SUPABASE_DB_URL');
+if (!DB_URL) {
+  console.error('SUPABASE_DB_URL is required (see `supabase status` -> DB_URL).');
   Deno.exit(1);
-});
+}
+const DRY_RUN = Deno.env.get('DRY_RUN') === 'true';
+
+const client = new Client(DB_URL);
+await client.connect();
+
+try {
+  const { rows: clinics } = await client.queryObject<{ slug: string; name: string }>(
+    'SELECT slug, name FROM app.clinic',
+  );
+
+  if (clinics.length === 0) {
+    console.log('No clinics found.');
+  } else {
+    console.log(`Applying to ${clinics.length} clinic(s)...`);
+    for (const clinic of clinics) {
+      const schemaName = `clinic_${clinic.slug}`;
+      console.log(`  → ${clinic.name} (${schemaName})`);
+
+      if (DRY_RUN) {
+        console.log('    [DRY RUN — skipped]');
+        continue;
+      }
+
+      try {
+        await client.queryObject('SELECT create_clinic_tables($1)', [schemaName]);
+        console.log('    ✓ Applied');
+      } catch (err) {
+        console.error(`    ✗ Failed: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+  }
+} finally {
+  await client.end();
+}

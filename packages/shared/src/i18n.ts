@@ -110,6 +110,7 @@ export const he = {
   'auth.reset.title': 'בחירת סיסמה חדשה',
   'auth.invite.title': 'הפעלת החשבון שלך',
   'auth.invite.body': '{clinician} הזמין אותך לעקוב אחרי תוכנית השיקום שלך.',
+  'auth.invite.submit': 'הפעלת החשבון',
   'auth.consent.label': 'קראתי ואני מאשר את תנאי השימוש ומדיניות הפרטיות',
   'auth.logout': 'יציסה',
 
@@ -135,10 +136,21 @@ export const he = {
 
   // Clinician
   'clinician.dashboard.title': 'לוח בקרה',
+  'clinician.dashboard.nav_en': 'Dashboard',
+  'dashboard.greeting': 'בוקר טוב, {name}',
   'clinician.patients.title': 'מטופלים',
+  'clinician.patients.nav_en': 'Patients',
   'clinician.patient.add': 'הזמן מטופל',
   'clinician.protocol.title': 'ספריית פרוטוקולים',
+  'clinician.protocol.nav': 'פרוטוקולים',
+  'clinician.protocol.nav_en': 'Protocols',
   'clinician.exercise.title': 'ספריית תרגילים',
+  'clinician.exercise.nav': 'תרגילים',
+  'clinician.exercise.nav_en': 'Exercises',
+  'clinician.assessments.nav': 'הערכות',
+  'clinician.assessments.nav_en': 'Assessments',
+  'clinician.settings.nav': 'הגדרות',
+  'clinician.settings.nav_en': 'Settings',
   'clinician.plan.edit': 'עריכת תוכנית',
   'clinician.plan.save': 'שמור תוכנית',
   'clinician.plan.discard': 'בטל שינויים',
@@ -166,4 +178,27 @@ export function t(key: I18nKey, vars?: InterpolationVars): string {
     }
   }
   return str;
+}
+
+/**
+ * Translate a zod validation message if it's a known i18n key, otherwise return as-is.
+ * Pass:  tZodError(error?.message)
+ */
+export function tZodError(msg?: string): string | undefined {
+  if (!msg) return msg;
+  if (msg in he) return t(msg as I18nKey);
+  return msg;
+}
+
+/**
+ * Translate all FieldErrors from react-hook-form (mutates nothing, returns a new object).
+ */
+export function translateErrors<T extends Record<string, { message?: string }>>(
+  errors: T,
+): T {
+  const out = {} as T;
+  for (const [k, v] of Object.entries(errors)) {
+    out[k as keyof T] = (v?.message ? { ...v, message: tZodError(v.message) } : v) as T[keyof T];
+  }
+  return out;
 }

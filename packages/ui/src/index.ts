@@ -11,7 +11,7 @@ export { Card } from './components/Card';
 export { Table } from './components/Table';
 export { Modal } from './components/Modal';
 export { Drawer } from './components/Drawer';
-export { Toast, ToastProvider, useToast } from './components/Toast';
+export { ToastProvider, useToast } from './components/Toast';
 export { Tabs, Tab, TabPanel } from './components/Tabs';
 export { EmptyState } from './components/EmptyState';
 export { Skeleton } from './components/Skeleton';

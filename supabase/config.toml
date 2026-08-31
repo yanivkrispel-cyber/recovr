@@ -22,6 +22,9 @@ pool_mode = "transaction"
 default_pool_size = 20
 max_client_conn = 100
 
+[db.seed]
+sql_paths = ['./seed/protocols_import.sql', './seed/measure_definitions_import.sql', './seed/seed.sql']
+
 [realtime]
 enabled = true
 
@@ -55,7 +58,7 @@ enable_signup = false  # clinics invite only
 enable_anonymous_sign_ins = false
 
 [auth.email]
-enable_signup = false
+enable_signup = true
 double_confirm_changes = true
 enable_confirmations = false
 
@@ -73,14 +76,50 @@ verify_jwt = true
 [functions.me-sessions-items]
 verify_jwt = true
 
-[functions.me-sessions-complete]
+[functions.me-progress]
+verify_jwt = true
+
+[functions.me-plan]
+verify_jwt = true
+
+[functions.me-education]
 verify_jwt = true
 
 [functions.phase-approve]
 verify_jwt = true
 
+[functions.patient-invite]
+verify_jwt = true
+
 [functions.patient-accept]
 verify_jwt = false  # first-time invite token, not a session
 
-[functions.alerts-review]
+[functions.dashboard]
+verify_jwt = true
+
+[functions.patients]
+verify_jwt = true
+
+[functions.alerts]
+verify_jwt = true
+
+[functions.patient-overview]
+verify_jwt = true
+
+[functions.plan]
+verify_jwt = true
+
+[functions.plan-templates]
+verify_jwt = true
+
+[functions.exercises]
+verify_jwt = true
+
+[functions.criteria]
+verify_jwt = true
+
+[functions.measurements]
+verify_jwt = true
+
+[functions.assessment-visits]
 verify_jwt = true
