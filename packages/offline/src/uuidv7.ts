@@ -3,35 +3,31 @@
 // on the same id and the queue can be replayed safely (RULES §6).
 
 export function uuidv7(): string {
-  // 48-bit timestamp in ms
-  const ts = Date.now();
-  const tsHex = ts.toString(16).padStart(12, '0'); // 12 hex chars
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
 
-  // 80 random bits
-  const rand = new Uint8Array(10);
-  crypto.getRandomValues(rand);
-  let randHex = '';
-  for (const b of rand) randHex += b.toString(16).padStart(2, '0');
+  // 48-bit timestamp (ms since epoch) into the first 6 bytes
+  const ts = BigInt(Date.now());
+  bytes[0] = Number((ts >> 40n) & 0xffn);
+  bytes[1] = Number((ts >> 32n) & 0xffn);
+  bytes[2] = Number((ts >> 24n) & 0xffn);
+  bytes[3] = Number((ts >> 16n) & 0xffn);
+  bytes[4] = Number((ts >> 8n) & 0xffn);
+  bytes[5] = Number(ts & 0xffn);
 
-  // Build the UUID structure:
-  //   time_hi(4) | time_mid(2) | time_low(2) |
-  //   version(2) | rand_a(2) | variant(2) | rand_b(14)
-  const tHi = tsHex.slice(0, 4);
-  const tMid = tsHex.slice(4, 8);
-  const tLow = tsHex.slice(8, 12);
+  // Version 7 in the high nibble of byte 6
+  bytes[6] = (bytes[6] & 0x0f) | 0x70;
+  // Variant 10xx in the high bits of byte 8
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
-  // Version 7 → set high nibble of next byte to 7
-  const versionByte = `7${randHex.slice(0, 1)}`;
-  // Variant → 10xx
-  const variantByte = ((0b10 << 2) | (parseInt(randHex.slice(1, 2), 16) & 0b11))
-    .toString(16)
-    .padStart(2, '0');
-
-  const rest = randHex.slice(2, 14);
+  let hex = '';
+  for (const b of bytes) hex += b.toString(16).padStart(2, '0');
 
   return [
-    tHi, tMid, tLow,
-    versionByte,
-    variantByte + randHex.slice(0, 0) + randHex.slice(0, 0) + rest.slice(0, 0),
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20, 32),
   ].join('-');
 }

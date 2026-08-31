@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Skeleton } from 'ui';
 import { supabase } from '../App';
@@ -13,20 +14,27 @@ interface TodayItem {
 interface Today {
   session_id: string;
   date: string;
-  phase: { name: string };
+  patient: { name: string; day: number };
+  plan: { protocol_name: string; updated_recently: boolean };
+  phase: { name: string; n: number };
+  est_minutes: number;
   items: TodayItem[];
   progress: { done: number; total: number };
 }
 
 interface HomeProps {
   onStartExercise: (index: number) => void;
+  onOpenProgress: () => void;
+  onOpenEducation: () => void;
 }
 
-export default function Home({ onStartExercise }: HomeProps) {
+export default function Home({ onStartExercise, onOpenProgress, onOpenEducation }: HomeProps) {
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
   const { data, isLoading } = useQuery<Today>({
     queryKey: ['today'],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('me/today', { method: 'GET' });
+      const { data, error } = await supabase.functions.invoke('me-today', { method: 'GET' });
       if (error) throw error;
       return data;
     },
@@ -34,219 +42,140 @@ export default function Home({ onStartExercise }: HomeProps) {
 
   if (isLoading) {
     return (
-      <div style={{ padding: 20, paddingTop: 60 }}>
-        <Skeleton width="60%" height={28} />
-        <div style={{ marginTop: 24 }}>
-          <Skeleton count={4} height={72} radius={14} />
-        </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <Skeleton width={170} height={19} />
+        <Skeleton width={120} height={12} />
+        <Skeleton height={150} radius={16} />
+        <Skeleton count={4} height={52} radius={12} />
       </div>
     );
   }
 
   if (!data) {
     return (
-      <div style={{ padding: 24, paddingTop: 60, textAlign: 'center' }}>
-        <h1 style={{ fontSize: 22, color: 'var(--navy)' }}>אין אימון מתוכנן</h1>
+      <div style={{ textAlign: 'center', padding: '60px 10px' }}>
+        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 17, color: 'var(--patient-text)' }}>אין תכנית פעילה</h1>
       </div>
     );
   }
 
   const firstIncompleteIdx = data.items.findIndex((i) => !i.done);
+  const allDone = data.progress.total > 0 && data.progress.done === data.progress.total;
+  const firstName = data.patient.name.split(' ')[0];
   const progressPct = data.progress.total === 0 ? 0 : Math.round((data.progress.done / data.progress.total) * 100);
 
   return (
-    <div>
-      {/* Header */}
-      <header style={{ padding: '20px 20px 16px', background: 'var(--cream)' }}>
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: '0.14em',
-            textTransform: 'uppercase',
-            color: 'var(--muted)',
-            marginBottom: 4,
-          }}
-        >
-          {data.date}
-        </div>
-        <h1
-          style={{
-            margin: 0,
-            fontSize: 28,
-            fontWeight: 800,
-            color: 'var(--navy)',
-            fontFamily: 'var(--font-display)',
-          }}
-        >
-          היום שלי
-        </h1>
-        <div style={{ marginTop: 8, fontSize: 14, color: 'var(--muted)' }}>
-          {data.phase.name}
-        </div>
-      </header>
-
-      {/* Progress ring */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 16,
-          padding: 20,
-          background: 'var(--white)',
-          margin: '0 20px 16px',
-          borderRadius: 'var(--radius-panel)',
-        }}
-      >
-        <ProgressRing value={progressPct} />
-        <div>
-          <div style={{ fontSize: 13, color: 'var(--muted)' }}>התקדמות</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--navy)' }}>
-            {data.progress.done} / {data.progress.total} תרגילים
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {data.plan.updated_recently && !bannerDismissed && (
+        <div style={{ background: 'var(--patient-card-light)', border: '1px solid rgba(201,162,75,.4)', borderRadius: 14, padding: '13px 15px', display: 'flex', gap: 11, alignItems: 'flex-start' }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--patient-gold)', marginTop: 5, flex: 'none' }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--patient-text)' }}>התכנית שלך עודכנה</div>
+            <div style={{ fontSize: 12, color: 'var(--patient-muted)', marginTop: 2, lineHeight: 1.5 }}>
+              המטפל עדכן את תכנית השיקום שלך לאחרונה <span style={{ opacity: 0.8 }}>· Your plan was updated</span>
+            </div>
           </div>
+          <button onClick={() => setBannerDismissed(true)} style={{ background: 'none', border: 'none', color: 'var(--patient-dim)', fontSize: 15, cursor: 'pointer', padding: 0, lineHeight: 1 }}>✕</button>
+        </div>
+      )}
+
+      <div>
+        <div style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.01em', fontSize: 19, fontWeight: 700, color: 'var(--patient-text)' }}>
+          בוקר טוב, {firstName} <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--patient-muted)' }}>Good morning</span>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--patient-muted)', marginTop: 2 }}>
+          יום {data.patient.day} · שלב {data.phase.n} <span style={{ opacity: 0.75 }}>Day {data.patient.day} · Phase {data.phase.n}</span>
         </div>
       </div>
 
-      {/* Exercise list */}
-      <ul style={{ listStyle: 'none', padding: 0, margin: '0 20px' }}>
-        {data.items.map((item, idx) => (
-          <li
-            key={item.id}
-            style={{
-              padding: 16,
-              background: 'var(--white)',
-              border: '1px solid var(--line-soft)',
-              borderRadius: 'var(--radius-card)',
-              marginBottom: 10,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              opacity: item.done ? 0.6 : 1,
-            }}
-          >
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
-                background: item.done ? 'var(--flag-green)' : 'var(--navy)',
-                color: 'var(--cream)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 14,
-                fontWeight: 700,
-                flexShrink: 0,
-              }}
-            >
-              {item.done ? '✓' : idx + 1}
-            </div>
-            <div style={{ flex: 1 }}>
-              <div
-                style={{
-                  fontSize: 15,
-                  fontWeight: 600,
-                  color: 'var(--ink)',
-                }}
-              >
-                {item.exercise.name}
-              </div>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: 'var(--muted)',
-                  marginTop: 2,
-                }}
-              >
-                {item.sets} × {item.reps}
-              </div>
-            </div>
-            {!item.done && (
-              <button
-                onClick={() => onStartExercise(idx)}
-                style={{
-                  background: 'var(--gold)',
-                  color: 'var(--navy)',
-                  border: 'none',
-                  borderRadius: 'var(--radius-pill)',
-                  padding: '6px 14px',
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  minHeight: 44,
-                  minWidth: 44,
-                }}
-              >
-                התחל
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-
-      {/* Primary CTA */}
-      {firstIncompleteIdx >= 0 && (
-        <div style={{ padding: '8px 20px 32px' }}>
-          <button
-            onClick={() => onStartExercise(firstIncompleteIdx)}
-            style={{
-              width: '100%',
-              minHeight: 56,
-              background: 'var(--navy)',
-              color: 'var(--cream)',
-              border: 'none',
-              borderRadius: 'var(--radius-button)',
-              fontSize: 16,
-              fontWeight: 700,
-              fontFamily: 'var(--font-ui)',
-              cursor: 'pointer',
-            }}
-          >
-            {data.progress.done > 0 ? 'המשך' : 'התחל'} את האימון
-          </button>
+      <div style={{ background: 'var(--patient-card)', border: '1px solid rgba(201,162,75,.45)', borderRadius: 16, padding: 20, color: 'var(--patient-text)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <svg width="18" height="15" viewBox="0 0 26 22" fill="none" aria-hidden="true">
+            <path d="M1 21V5l6 6 6-10 6 10 6-6v16H1Z" stroke="var(--patient-gold)" strokeWidth={2} strokeLinejoin="round" />
+          </svg>
+          <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 15 }}>השיקום של היום · Today's Rehabilitation</div>
         </div>
-      )}
+        <div style={{ height: 1, background: 'linear-gradient(90deg,rgba(201,162,75,.6),rgba(201,162,75,0))' }} />
+        <div style={{ fontSize: 12, color: 'var(--patient-muted)' }}>
+          {data.progress.total} פעילויות · כ-{data.est_minutes} דקות <span>· {data.progress.total} activities, ~{data.est_minutes} min</span>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--patient-dim)' }}>
+          מתוך {data.plan.protocol_name} · שלב {data.phase.n} — {data.phase.name}
+        </div>
+        {allDone ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '10px 0 4px', textAlign: 'center' }}>
+            <div style={{ fontSize: 26 }}>🎉</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--patient-text)' }}>סיימת להיום</div>
+            <div style={{ fontSize: 12, color: 'var(--patient-muted)', lineHeight: 1.5 }}>
+              האימון הבא שלך: מחר <span style={{ opacity: 0.8 }}>· You're done for today</span>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => onStartExercise(Math.max(0, firstIncompleteIdx))}
+            style={{ background: 'var(--patient-gold)', color: 'var(--patient-gold-ink)', border: 'none', borderRadius: 999, padding: 13, fontSize: 14, fontWeight: 700, letterSpacing: '0.03em', cursor: 'pointer', fontFamily: 'inherit', marginTop: 4, width: '100%' }}
+          >
+            {data.progress.done > 0 ? 'המשך' : 'התחל'} את התכנית · Start Today's Plan
+          </button>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={onOpenEducation} style={secondaryBtnStyle}>
+          <span style={{ display: 'block', fontSize: 12, fontWeight: 600 }}>ℹ אודות השלב</span>
+          <span style={{ display: 'block', fontSize: 10, color: 'var(--patient-muted)' }}>About phase</span>
+        </button>
+        <button onClick={onOpenProgress} style={secondaryBtnStyle}>
+          <span style={{ display: 'block', fontSize: 12, fontWeight: 600 }}>◔ ההתקדמות שלי</span>
+          <span style={{ display: 'block', fontSize: 10, color: 'var(--patient-muted)' }}>My Progress</span>
+        </button>
+      </div>
+
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--patient-muted)', marginBottom: 6 }}>
+          <span>התקדמות היום · Today's progress</span>
+          <span>{data.progress.done} / {data.progress.total}</span>
+        </div>
+        <div style={{ height: 8, background: 'rgba(243,234,217,0.18)', borderRadius: 999, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${progressPct}%`, background: 'var(--patient-gold)', borderRadius: 999 }} />
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {data.items.map((item, idx) => (
+          <div
+            key={item.id}
+            onClick={() => onStartExercise(idx)}
+            style={{ background: 'var(--patient-card)', border: '1px solid var(--patient-border)', borderRadius: 12, padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
+          >
+            {item.done ? (
+              <span style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--patient-success)', color: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, flex: 'none' }}>✓</span>
+            ) : (
+              <span style={{ width: 22, height: 22, borderRadius: '50%', border: '1.5px solid rgba(243,234,217,0.28)', flex: 'none' }} />
+            )}
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--patient-text)' }}>
+                {item.exercise.name} <span style={{ fontWeight: 400, color: 'var(--patient-muted)', fontSize: 11 }}>{item.exercise.name_en}</span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--patient-muted)' }}><bdi>{item.sets} × {item.reps}</bdi></div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function ProgressRing({ value }: { value: number }) {
-  const r = 28;
-  const c = 2 * Math.PI * r;
-  const offset = c - (value / 100) * c;
-  return (
-    <svg width="64" height="64" viewBox="0 0 64 64">
-      <circle
-        cx="32"
-        cy="32"
-        r={r}
-        stroke="var(--line-soft)"
-        strokeWidth="6"
-        fill="none"
-      />
-      <circle
-        cx="32"
-        cy="32"
-        r={r}
-        stroke="var(--gold)"
-        strokeWidth="6"
-        fill="none"
-        strokeDasharray={c}
-        strokeDashoffset={offset}
-        strokeLinecap="round"
-        transform="rotate(-90 32 32)"
-      />
-      <text
-        x="32"
-        y="36"
-        textAnchor="middle"
-        fontSize="14"
-        fontWeight="700"
-        fill="var(--navy)"
-        fontFamily="var(--font-ui)"
-      >
-        {value}%
-      </text>
-    </svg>
-  );
-}
+const secondaryBtnStyle = {
+  flex: 1,
+  minWidth: 0,
+  background: 'var(--patient-card)',
+  border: '1px solid var(--patient-border)',
+  borderRadius: 12,
+  padding: '11px 12px',
+  color: 'var(--patient-text)',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  textAlign: 'right' as const,
+  lineHeight: 1.35,
+};

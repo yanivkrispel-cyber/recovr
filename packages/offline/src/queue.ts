@@ -44,7 +44,16 @@ export class OfflineQueue {
     private readonly options: { retryDelayMs?: number; maxAttempts?: number } = {},
   ) {
     if (typeof window !== 'undefined') {
-      window.addEventListener('online', () => this.scheduleFlush(0));
+      // A prior failed flush may have a retry timer parked up to
+      // retryDelayMs out; reconnecting should flush immediately rather than
+      // wait for it, so cancel it before scheduling.
+      window.addEventListener('online', () => {
+        if (this.flushTimer) {
+          clearTimeout(this.flushTimer);
+          this.flushTimer = null;
+        }
+        this.scheduleFlush(0);
+      });
     }
   }
 
@@ -59,6 +68,20 @@ export class OfflineQueue {
     };
     await db.put(STORE, entry);
     this.scheduleFlush();
+  }
+
+  // The server is the source of truth for which exercises are "done", but
+  // that flag can only update once a queued item has synced — while offline
+  // (or before the next successful sync) it stays stale. Callers that need
+  // to know what's already been logged *this* session — e.g. deciding which
+  // exercise to advance to next — should merge this with the server's
+  // `done` flags rather than trusting either alone.
+  async getQueuedPlanExerciseIds(session_id: string): Promise<Set<string>> {
+    const db = await getDb();
+    const all = (await db.getAll(STORE)) as QueueEntry[];
+    return new Set(
+      all.filter((e) => e.session_id === session_id).map((e) => e.item.plan_exercise_id),
+    );
   }
 
   async size(): Promise<number> {

@@ -23,63 +23,59 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 });
   }
 
-  // Get patient + clinic
   const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-  const { data: patient } = await service
-    .from('app.patient_auth')
+
+  // app.patient_auth lives in the exposed `app` schema, so this is a
+  // direct table read — it's the clinic-scoped session lookup below that
+  // needs the RPC (clinic_<slug> schemas aren't reachable via PostgREST
+  // directly; see app.patient_today in the migration).
+  const { data: patientAuth } = await service
+    .schema('app')
+    .from('patient_auth')
     .select('patient_id')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
-  if (!patient) {
+  if (!patientAuth) {
     return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
   }
-
-  // Resolve clinic schema from patient_id
-  const { data: clinic } = await service
-    .rpc('resolve_clinic_for_patient', { p_patient_id: patient.patient_id });
-
-  if (!clinic) {
-    return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
-  }
-
-  // Set search_path to the clinic schema
-  await service.rpc('set_config', {
-    setting: 'search_path',
-    value: clinic,
-    is_local: true,
-  });
 
   const today = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Jerusalem', // override from patient.timezone
+    timeZone: 'Asia/Jerusalem', // TODO: use the patient's own timezone once available here
     year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(new Date());
 
-  // Read or create today's session
-  const { data: session } = await service
-    .from('session')
-    .select(`
-      id, date, status, items_planned, items_done, completion_ratio,
-      plan_version_id,
-      plan_exercise:plan_exercise!inner(
-        id, exercise_id, sets, reps, load, load_unit, tempo, hold_sec, rest_sec, side, order,
-        exercise:exercise!inner(name, name_en)
-      )
-    `)
-    .eq('patient_id', patient.patient_id)
-    .eq('date', today)
-    .maybeSingle();
+  // Creates today's session on first read if needed and returns
+  // {session_id, date, phase, items, progress} per API_CONTRACT.md.
+  const { data: result, error: rpcErr } = await service
+    .schema('app')
+    .rpc('patient_today', { p_patient_auth_id: user.id, p_today: today });
 
-  // Audit log (cross-clinic)
-  await service.from('app.audit_log').insert({
-    actor_type: 'patient',
-    actor_id: user.id,
-    action: 'read',
-    entity_type: 'session',
-    entity_id: session?.id ?? patient.patient_id,
-  });
+  if (rpcErr) {
+    return new Response(JSON.stringify({ error: 'internal_error', details: rpcErr.message }), { status: 500 });
+  }
+  if (!result) {
+    return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
+  }
 
-  return new Response(JSON.stringify({ session, today }), {
+  // Turn the bucket-relative media paths (verified media only — the RPC already
+  // filtered) into short-lived signed URLs; the private exercise-media bucket
+  // isn't readable with a patient JWT.
+  const items = Array.isArray(result.items) ? result.items : [];
+  for (const it of items) {
+    const media = Array.isArray(it?.exercise?.media) ? it.exercise.media : [];
+    for (const m of media) {
+      for (const field of ['url', 'thumb_url'] as const) {
+        const path = m[field];
+        if (typeof path === 'string' && path && !path.startsWith('http') && !path.startsWith('/storage/')) {
+          const { data: signed } = await service.storage.from('exercise-media').createSignedUrl(path, 3600);
+          if (signed?.signedUrl) m[field] = signed.signedUrl.replace(/^https?:\/\/[^/]+/, '');
+        }
+      }
+    }
+  }
+
+  return new Response(JSON.stringify(result), {
     headers: { 'Content-Type': 'application/json' },
   });
 });

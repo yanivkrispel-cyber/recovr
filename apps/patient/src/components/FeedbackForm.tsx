@@ -14,9 +14,9 @@ export default function FeedbackForm({ onSubmit, loading }: FeedbackFormProps) {
     <div>
       <h2
         style={{
-          fontSize: 22,
+          fontSize: 20,
           fontWeight: 700,
-          color: 'var(--navy)',
+          color: 'var(--patient-text)',
           fontFamily: 'var(--font-display)',
           margin: '0 0 24px',
           textAlign: 'center',
@@ -31,7 +31,7 @@ export default function FeedbackForm({ onSubmit, loading }: FeedbackFormProps) {
           style={{
             fontSize: 13,
             fontWeight: 600,
-            color: 'var(--ink)',
+            color: 'var(--patient-text)',
             marginBottom: 8,
           }}
         >
@@ -45,13 +45,14 @@ export default function FeedbackForm({ onSubmit, loading }: FeedbackFormProps) {
               style={{
                 flex: 1,
                 minHeight: 44,
-                background: pain === i ? 'var(--navy)' : 'var(--white)',
-                color: pain === i ? 'var(--cream)' : 'var(--ink)',
-                border: '1px solid var(--line)',
-                borderRadius: 'var(--radius-button)',
+                background: pain === i ? 'var(--patient-gold)' : 'var(--patient-card)',
+                color: pain === i ? 'var(--patient-gold-ink)' : 'var(--patient-text)',
+                border: '1px solid var(--patient-border)',
+                borderRadius: 10,
                 fontSize: 14,
                 fontWeight: 600,
                 cursor: 'pointer',
+                fontFamily: 'inherit',
               }}
             >
               {i}
@@ -66,7 +67,7 @@ export default function FeedbackForm({ onSubmit, loading }: FeedbackFormProps) {
           style={{
             fontSize: 13,
             fontWeight: 600,
-            color: 'var(--ink)',
+            color: 'var(--patient-text)',
             marginBottom: 8,
           }}
         >
@@ -80,13 +81,14 @@ export default function FeedbackForm({ onSubmit, loading }: FeedbackFormProps) {
               style={{
                 flex: 1,
                 minHeight: 44,
-                background: difficulty === d ? 'var(--navy)' : 'var(--white)',
-                color: difficulty === d ? 'var(--cream)' : 'var(--ink)',
-                border: '1px solid var(--line)',
-                borderRadius: 'var(--radius-button)',
+                background: difficulty === d ? 'var(--patient-gold)' : 'var(--patient-card)',
+                color: difficulty === d ? 'var(--patient-gold-ink)' : 'var(--patient-text)',
+                border: '1px solid var(--patient-border)',
+                borderRadius: 10,
                 fontSize: 14,
                 fontWeight: 600,
                 cursor: 'pointer',
+                fontFamily: 'inherit',
               }}
             >
               {d === 'easy' ? 'קל' : d === 'medium' ? 'בינוני' : 'קשה'}
@@ -103,8 +105,10 @@ export default function FeedbackForm({ onSubmit, loading }: FeedbackFormProps) {
         style={{
           width: '100%',
           padding: 12,
-          borderRadius: 'var(--radius-button)',
-          border: '1px solid var(--line-input)',
+          borderRadius: 10,
+          border: '1px solid var(--patient-border)',
+          background: 'var(--patient-card)',
+          color: 'var(--patient-text)',
           fontSize: 14,
           fontFamily: 'var(--font-ui)',
           resize: 'none',
@@ -119,14 +123,15 @@ export default function FeedbackForm({ onSubmit, loading }: FeedbackFormProps) {
         style={{
           width: '100%',
           minHeight: 56,
-          background: 'var(--navy)',
-          color: 'var(--cream)',
+          background: 'var(--patient-gold)',
+          color: 'var(--patient-gold-ink)',
           border: 'none',
-          borderRadius: 'var(--radius-button)',
+          borderRadius: 999,
           fontSize: 16,
           fontWeight: 700,
           cursor: loading ? 'wait' : 'pointer',
           opacity: loading ? 0.6 : 1,
+          fontFamily: 'inherit',
         }}
       >
         {loading ? 'שומר…' : 'סיום תרגיל'}

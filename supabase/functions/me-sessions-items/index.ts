@@ -37,71 +37,51 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 });
   }
 
+  // Path is .../me/sessions/:id/items — id is second-to-last, not last.
   const url = new URL(req.url);
-  const sessionId = url.pathname.split('/').filter(Boolean).pop()!;
+  const parts = url.pathname.split('/').filter(Boolean);
+  const sessionId = parts[parts.length - 2]!;
   const body: { items: ItemInput[] } = await req.json();
-  const idempotencyKey = req.headers.get('Idempotency-Key');
 
   const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   // Resolve clinic + scope to clinic schema
-  const { data: clinic } = await service.rpc('resolve_clinic_for_session', {
+  const { data: schema } = await service.schema('app').rpc('resolve_clinic_for_session', {
     p_session_id: sessionId,
   });
-  if (!clinic) {
+  if (!schema) {
     return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
   }
 
-  await service.rpc('set_config', {
-    setting: 'search_path',
-    value: clinic,
-    is_local: true,
-  });
+  // Upsert, recompute session status + adherence, and audit-log — all in
+  // one atomic call. It also verifies the session actually belongs to the
+  // calling patient (the original code never checked this).
+  const { data: result, error: writeErr } = await service
+    .schema('app')
+    .rpc('write_session_items', {
+      p_schema: schema,
+      p_session_id: sessionId,
+      p_items: body.items,
+      p_actor_patient_auth_id: user.id,
+    });
 
-  // Check idempotency: if same items arrive twice, server returns the same result
-  // with no duplicates (session_item.id is the dedupe key).
-  const itemsWithSession = body.items.map((it) => ({
-    id: it.id,
-    session_id: sessionId,
-    plan_exercise_id: it.plan_exercise_id,
-    sets_done: it.sets_done,
-    reps_done: it.reps_done,
-    load_used: it.load_used,
-    pain_score: it.pain_score,
-    difficulty: it.difficulty,
-    skipped: it.skipped,
-    skip_reason: it.skip_reason,
-    note: it.note,
-    logged_at: it.logged_at,
-    synced_at: new Date().toISOString(),
-  }));
-
-  // upsert with onConflict: 'id' — re-insert of an existing id is a no-op
-  const { data, error: insertErr } = await service
-    .from('session_item')
-    .upsert(itemsWithSession, { onConflict: 'id' })
-    .select();
-
-  if (insertErr) {
-    return new Response(
-      JSON.stringify({ error: 'validation_failed', details: insertErr }),
-      { status: 422 },
-    );
+  if (writeErr) {
+    return new Response(JSON.stringify({ error: 'validation_failed', details: writeErr }), { status: 422 });
+  }
+  // Per CLAUDE.md hard rule #4: an id belonging to someone else is 404,
+  // never 403 — don't let the response distinguish "not yours" from
+  // "doesn't exist".
+  if (
+    result?.error === 'forbidden' ||
+    result?.error === 'not_found' ||
+    result?.error === 'unauthorized'
+  ) {
+    return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
   }
 
-  // Recompute session status
-  await service.rpc('recompute_session_status', { p_session_id: sessionId });
-
-  // Audit log
-  await service.from('app.audit_log').insert({
-    actor_type: 'patient',
-    actor_id: user.id,
-    action: 'write',
-    entity_type: 'session_item',
-    entity_id: sessionId,
-  });
-
-  return new Response(JSON.stringify({ items: data, deduped: body.items.length !== data?.length }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const items = result.items ?? [];
+  return new Response(
+    JSON.stringify({ items, deduped: body.items.length !== items.length }),
+    { headers: { 'Content-Type': 'application/json' } },
+  );
 });

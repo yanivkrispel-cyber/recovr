@@ -1,7 +1,14 @@
-import { createClient } from '@supabase/supabase-js';
-import { useState } from 'react';
+import { createClient, type Session } from '@supabase/supabase-js';
+import { useEffect, useState } from 'react';
+import { t } from 'shared';
+import AppShell, { type PatientTab } from './components/AppShell';
 import Home from './pages/Home';
 import ExerciseFlow from './pages/ExerciseFlow';
+import Progress from './pages/Progress';
+import Education from './pages/Education';
+import Login from './pages/Login';
+import InviteAccept from './pages/InviteAccept';
+import HomeProgramPrint from './pages/HomeProgramPrint';
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -10,53 +17,155 @@ const supabase = createClient(
 
 export { supabase };
 
-type View = 'home' | 'exercise' | 'completion';
+type View = 'home' | 'exercise' | 'completion' | 'progress' | 'messages' | 'education' | 'notifications';
+
+// /m/invite/:token and /m/program/print — the only paths this app parses;
+// everything else is local view state, matching the "no router" pattern.
+function getInviteToken(): string | null {
+  const match = window.location.pathname.match(/\/invite\/([^/]+)/);
+  return match ? match[1] : null;
+}
+
+function isPrintRoute(): boolean {
+  return /\/program\/print\/?$/.test(window.location.pathname);
+}
+
+const ACTIVE_EXERCISE_KEY = 'rehab:activeView';
+
+// Restores the exercise flow across a reload or an app restart mid-session —
+// see T-11 "interrupting mid-session and returning restores exact position".
+function loadActiveExercise(): { view: View; index: number } | null {
+  try {
+    const raw = localStorage.getItem(ACTIVE_EXERCISE_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    if (saved.view === 'exercise' && typeof saved.index === 'number') {
+      return { view: 'exercise', index: saved.index };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export default function App() {
-  const [view, setView] = useState<View>('home');
-  const [activeExerciseIndex, setActiveExerciseIndex] = useState(0);
+  const [inviteToken, setInviteToken] = useState<string | null>(getInviteToken);
+  const [session, setSession] = useState<Session | null | undefined>(undefined); // undefined = still loading
+  const [view, setView] = useState<View>(() => loadActiveExercise()?.view ?? 'home');
+  const [activeExerciseIndex, setActiveExerciseIndex] = useState(() => loadActiveExercise()?.index ?? 0);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (view === 'exercise') {
+        localStorage.setItem(ACTIVE_EXERCISE_KEY, JSON.stringify({ view, index: activeExerciseIndex }));
+      } else {
+        localStorage.removeItem(ACTIVE_EXERCISE_KEY);
+      }
+    } catch {
+      // storage unavailable — position just won't be restored
+    }
+  }, [view, activeExerciseIndex]);
+
+  if (inviteToken) {
+    return (
+      <InviteAccept
+        token={inviteToken}
+        onDone={() => {
+          window.history.replaceState({}, '', '/m/');
+          setInviteToken(null);
+        }}
+      />
+    );
+  }
+
+  if (session === undefined) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--patient-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--patient-muted)', fontFamily: 'var(--font-ui)', direction: 'rtl' }}>
+        {t('loading.generic')}
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Login />;
+  }
+
+  if (isPrintRoute()) {
+    return <HomeProgramPrint onBack={() => window.location.assign('/m/')} />;
+  }
+
+  const activeTab: PatientTab = view === 'exercise' || view === 'completion' ? 'home' : (view === 'notifications' ? 'home' : (view as PatientTab));
+
+  function handleTabChange(tab: PatientTab) {
+    setView(tab);
+  }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: 'var(--cream)',
-        fontFamily: 'var(--font-ui)',
-        direction: 'rtl',
-      }}
-    >
-      {view === 'home' && (
-        <Home
-          onStartExercise={(index) => {
-            setActiveExerciseIndex(index);
-            setView('exercise');
-          }}
-        />
-      )}
-      {view === 'exercise' && (
-        <ExerciseFlow
-          index={activeExerciseIndex}
-          onComplete={() => setView('completion')}
-          onCancel={() => setView('home')}
-        />
-      )}
-      {view === 'completion' && (
-        <CompletionScreen onDone={() => setView('home')} />
-      )}
+    <div style={{ direction: 'rtl' }}>
+      <AppShell activeTab={activeTab} onTabChange={handleTabChange} onBellClick={() => setView('notifications')}>
+        {view === 'home' && (
+          <Home
+            onStartExercise={(index) => {
+              setActiveExerciseIndex(index);
+              setView('exercise');
+            }}
+            onOpenProgress={() => setView('progress')}
+            onOpenEducation={() => setView('education')}
+          />
+        )}
+        {view === 'exercise' && (
+          <ExerciseFlow
+            key={activeExerciseIndex}
+            index={activeExerciseIndex}
+            onAdvance={(nextIndex) => setActiveExerciseIndex(nextIndex)}
+            onComplete={() => setView('completion')}
+            onCancel={() => setView('home')}
+          />
+        )}
+        {view === 'completion' && <CompletionScreen onDone={() => setView('home')} />}
+        {view === 'progress' && <Progress onBack={() => setView('home')} />}
+        {view === 'messages' && <PlaceholderView title="הודעות" titleEn="Messages" onBack={() => setView('home')} />}
+        {view === 'education' && <Education onBack={() => setView('home')} />}
+        {view === 'notifications' && <PlaceholderView title="התראות" titleEn="Notifications" onBack={() => setView('home')} />}
+      </AppShell>
+    </div>
+  );
+}
+
+function PlaceholderView({ title, titleEn, onBack }: { title: string; titleEn: string; onBack: () => void }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--patient-muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', padding: 0, textAlign: 'right' }}>
+        → חזרה · Back
+      </button>
+      <div>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, fontWeight: 700, color: 'var(--patient-text)' }}>
+          {title} <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--patient-muted)' }}>{titleEn}</span>
+        </div>
+      </div>
+      <div style={{ padding: '60px 10px', textAlign: 'center', color: 'var(--patient-muted)', fontSize: 13 }}>
+        בקרוב <span style={{ opacity: 0.8 }}>· Coming soon</span>
+      </div>
     </div>
   );
 }
 
 function CompletionScreen({ onDone }: { onDone: () => void }) {
   return (
-    <div style={{ padding: 24, textAlign: 'center', paddingTop: 80 }}>
+    <div style={{ padding: '80px 0 0', textAlign: 'center' }}>
       <div
         style={{
           width: 80,
           height: 80,
           margin: '0 auto 24px',
           borderRadius: '50%',
-          background: 'var(--flag-green)',
+          background: 'var(--patient-success)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -71,30 +180,30 @@ function CompletionScreen({ onDone }: { onDone: () => void }) {
           margin: '0 0 8px',
           fontSize: 24,
           fontWeight: 700,
-          color: 'var(--navy)',
+          color: 'var(--patient-text)',
           fontFamily: 'var(--font-display)',
         }}
       >
         סיימת להיום
       </h1>
-      <p style={{ margin: '0 0 32px', fontSize: 15, color: 'var(--muted)' }}>
+      <p style={{ margin: '0 0 32px', fontSize: 15, color: 'var(--patient-muted)' }}>
         נתראה באימון הבא
       </p>
       <button
         onClick={onDone}
         style={{
-          background: 'var(--navy)',
-          color: 'var(--cream)',
+          background: 'var(--patient-gold)',
+          color: 'var(--patient-gold-ink)',
           border: 'none',
-          borderRadius: 'var(--radius-button)',
+          borderRadius: 999,
           padding: '14px 32px',
           fontSize: 15,
-          fontWeight: 600,
+          fontWeight: 700,
           fontFamily: 'var(--font-ui)',
           cursor: 'pointer',
         }}
       >
-        צפייה בהתקדמות
+        חזרה לדף הבית
       </button>
     </div>
   );

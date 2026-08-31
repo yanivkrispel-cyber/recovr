@@ -7,13 +7,15 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc",
-    "test": "vitest"
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "idb": "^8.0.0",
     "shared": "workspace:*"
   },
   "devDependencies": {
+    "fake-indexeddb": "^6.2.5",
+    "happy-dom": "^20.11.12",
     "typescript": "^5.5.0",
     "vitest": "^1.6.0"
   }
