@@ -2,7 +2,7 @@ import { useContext, useState, type CSSProperties } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { t } from 'shared';
-import { Badge, Button, Skeleton, EmptyState, Tab, Tabs } from 'ui';
+import { Badge, Button, Skeleton, EmptyState, Tab, Tabs, clickableDivProps, useIsTablet } from 'ui';
 import { AuthContext, SupabaseContext } from '../App';
 import AppShell from '../components/AppShell';
 import EditPlan from '../components/EditPlan';
@@ -96,6 +96,7 @@ export default function PatientOverview() {
   const navigate = useNavigate();
   const { patientId } = useParams({ from: '/patients/$patientId' });
   const [editOpen, setEditOpen] = useState(false);
+  const isTablet = useIsTablet(); // T-22: tablet is view-only for v1
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['patient-overview', patientId],
@@ -144,7 +145,7 @@ export default function PatientOverview() {
                 </>
               )}
             </div>
-            <Button onClick={() => setEditOpen(true)}>{t('clinician.plan.edit')}</Button>
+            {!isTablet && <Button onClick={() => setEditOpen(true)}>{t('clinician.plan.edit')}</Button>}
           </div>
 
           <Tabs defaultValue="overview">
@@ -152,13 +153,13 @@ export default function PatientOverview() {
               <OverviewTab data={data} patientId={patientId} />
             </Tab>
             <Tab value="plan" label="תכנית · Plan">
-              <PlanTab data={data} patientId={patientId} onEditPlan={() => setEditOpen(true)} />
+              <PlanTab data={data} patientId={patientId} onEditPlan={() => setEditOpen(true)} isTablet={isTablet} />
             </Tab>
             <Tab value="progress" label="התקדמות · Progress">
               <ProgressTab data={data} patientId={patientId} />
             </Tab>
             <Tab value="assessments" label={t('clinician.assessments.title')}>
-              <AssessmentsTab patientId={patientId} patientName={data.patient.name} protocolSlug={data.plan?.protocol_slug ?? null} />
+              <AssessmentsTab patientId={patientId} patientName={data.patient.name} protocolSlug={data.plan?.protocol_slug ?? null} isTablet={isTablet} />
             </Tab>
             <Tab value="history" label={t('clinician.history.title')}>
               <HistoryTab data={data} />
@@ -291,7 +292,7 @@ function OverviewTab({ data, patientId }: { data: OverviewData; patientId: strin
   );
 }
 
-function PlanTab({ data, patientId, onEditPlan }: { data: OverviewData; patientId: string; onEditPlan: () => void }) {
+function PlanTab({ data, patientId, onEditPlan, isTablet }: { data: OverviewData; patientId: string; onEditPlan: () => void; isTablet: boolean }) {
   const supabase = useContext(SupabaseContext);
 
   const { data: plan, isLoading } = useQuery({
@@ -310,7 +311,7 @@ function PlanTab({ data, patientId, onEditPlan }: { data: OverviewData; patientI
         <EmptyState
           title="אין תכנית שיקום פעילה"
           body="השלב הנוכחי ריק מתרגילים. הוסף תרגילים או בחר פרוטוקול חדש."
-          action={<Button size="sm" onClick={onEditPlan}>צור תכנית · Create a plan</Button>}
+          action={!isTablet ? <Button size="sm" onClick={onEditPlan}>צור תכנית · Create a plan</Button> : undefined}
         />
       </div>
     );
@@ -366,12 +367,14 @@ function PlanTab({ data, patientId, onEditPlan }: { data: OverviewData; patientI
       <div style={{ background: 'var(--shell-sidebar-bg)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-panel)', overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--shell-border)' }}>
           <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>תרגילים · Exercises</div>
-          <button
-            onClick={onEditPlan}
-            style={{ background: 'transparent', color: 'var(--gold-deep)', border: '1px solid rgba(140,100,35,0.5)', borderRadius: 'var(--radius-pill)', letterSpacing: '0.04em', padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
-          >
-            + הוסף תרגיל · Add Exercise
-          </button>
+          {!isTablet && (
+            <button
+              onClick={onEditPlan}
+              style={{ background: 'transparent', color: 'var(--gold-deep)', border: '1px solid rgba(140,100,35,0.5)', borderRadius: 'var(--radius-pill)', letterSpacing: '0.04em', padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              + הוסף תרגיל · Add Exercise
+            </button>
+          )}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 0.4fr 0.4fr', padding: '10px 18px', fontSize: 11, color: 'var(--nav-inactive-text)', fontWeight: 600 }}>
@@ -397,8 +400,26 @@ function PlanTab({ data, patientId, onEditPlan }: { data: OverviewData; patientI
                   פעיל
                 </span>
               </div>
-              <div onClick={onEditPlan} title="ערוך · Edit" style={{ fontSize: 12, color: 'var(--nav-inactive-text)', cursor: 'pointer', textAlign: 'center' }}>✎</div>
-              <div onClick={onEditPlan} title="הסר מהתכנית · Remove" style={{ fontSize: 14, lineHeight: 1, color: 'var(--flag-red)', cursor: 'pointer', textAlign: 'center' }}>✕</div>
+              {!isTablet && (
+                <button
+                  onClick={onEditPlan}
+                  title="ערוך · Edit"
+                  aria-label="ערוך תרגיל · Edit exercise"
+                  style={{ background: 'none', border: 'none', padding: 0, fontSize: 12, color: 'var(--nav-inactive-text)', cursor: 'pointer', textAlign: 'center', fontFamily: 'inherit' }}
+                >
+                  ✎
+                </button>
+              )}
+              {!isTablet && (
+                <button
+                  onClick={onEditPlan}
+                  title="הסר מהתכנית · Remove"
+                  aria-label="הסר תרגיל מהתכנית · Remove exercise from plan"
+                  style={{ background: 'none', border: 'none', padding: 0, fontSize: 14, lineHeight: 1, color: 'var(--flag-red)', cursor: 'pointer', textAlign: 'center', fontFamily: 'inherit' }}
+                >
+                  ✕
+                </button>
+              )}
             </div>
           ))
         )}
@@ -417,12 +438,14 @@ function PlanTab({ data, patientId, onEditPlan }: { data: OverviewData; patientI
                     </div>
                     {ex.removed_reason && <div style={{ fontSize: 10, color: 'var(--nav-inactive-text)', marginTop: 3 }}>{ex.removed_reason}</div>}
                   </div>
-                  <button
-                    onClick={onEditPlan}
-                    style={{ flex: 'none', background: 'transparent', color: 'var(--gold-deep)', border: '1px solid rgba(140,100,35,0.45)', borderRadius: 'var(--radius-pill)', padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
-                  >
-                    ↩ החזר · Restore
-                  </button>
+                  {!isTablet && (
+                    <button
+                      onClick={onEditPlan}
+                      style={{ flex: 'none', background: 'transparent', color: 'var(--gold-deep)', border: '1px solid rgba(140,100,35,0.45)', borderRadius: 'var(--radius-pill)', padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      ↩ החזר · Restore
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -528,7 +551,7 @@ function trendSparkline(history: JointEntry['history']): { points: string; delta
   return { points, delta: Math.round((values[values.length - 1] - values[0]) * 10) / 10 };
 }
 
-function AssessmentsTab({ patientId, patientName, protocolSlug }: { patientId: string; patientName: string; protocolSlug: string | null }) {
+function AssessmentsTab({ patientId, patientName, protocolSlug, isTablet }: { patientId: string; patientName: string; protocolSlug: string | null; isTablet: boolean }) {
   const supabase = useContext(SupabaseContext);
   const queryClient = useQueryClient();
   const defaultJoint = (protocolSlug && REGION_JOINT[protocolSlug]) || 'knee';
@@ -640,17 +663,19 @@ function AssessmentsTab({ patientId, patientName, protocolSlug }: { patientId: s
               </button>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {visitId ? (
-              <>
-                <span style={{ alignSelf: 'center', fontSize: 11, color: 'var(--nav-inactive-text)', whiteSpace: 'nowrap' }}>{visitCount} מדידות במפגש</span>
-                <button onClick={() => setVisitId(null)} style={ghostRoundBtn}>בטל</button>
-                <Button size="sm" onClick={() => saveVisit.mutate()} disabled={saveVisit.isPending} loading={saveVisit.isPending}>סיים ושמור מפגש</Button>
-              </>
-            ) : (
-              <Button size="sm" onClick={() => startVisit.mutate()} disabled={startVisit.isPending}>מפגש הערכה חדש</Button>
-            )}
-          </div>
+          {!isTablet && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              {visitId ? (
+                <>
+                  <span style={{ alignSelf: 'center', fontSize: 11, color: 'var(--nav-inactive-text)', whiteSpace: 'nowrap' }}>{visitCount} מדידות במפגש</span>
+                  <button onClick={() => setVisitId(null)} style={ghostRoundBtn}>בטל</button>
+                  <Button size="sm" onClick={() => saveVisit.mutate()} disabled={saveVisit.isPending} loading={saveVisit.isPending}>סיים ושמור מפגש</Button>
+                </>
+              ) : (
+                <Button size="sm" onClick={() => startVisit.mutate()} disabled={startVisit.isPending}>מפגש הערכה חדש</Button>
+              )}
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '11px 18px', borderBottom: '1px solid var(--shell-border-soft)' }}>
@@ -707,7 +732,7 @@ function AssessmentsTab({ patientId, patientName, protocolSlug }: { patientId: s
             return (
               <div
                 key={def.code}
-                onClick={() => setSelectedCode(def.code)}
+                {...clickableDivProps(() => setSelectedCode(def.code))}
                 style={{ display: 'grid', gridTemplateColumns: '1.7fr 0.8fr 0.8fr 1fr 1.2fr 0.9fr', padding: '13px 18px', borderTop: '1px solid var(--shell-border-soft)', alignItems: 'center', cursor: 'pointer' }}
               >
                 <div>
@@ -773,6 +798,7 @@ function AssessmentsTab({ patientId, patientName, protocolSlug }: { patientId: s
           patientName={patientName}
           entry={selectedEntry}
           visitId={visitId}
+          readOnly={isTablet}
           onClose={() => setSelectedCode(null)}
           onSaved={() => {
             if (visitId) setVisitCount((c) => c + 1);

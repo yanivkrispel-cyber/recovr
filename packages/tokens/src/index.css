@@ -20,11 +20,11 @@
   --ink: #2A2A2A;
   --ink-soft: #3D3A32;
   --muted: #6E6A5E;
-  --muted-2: #8A8272;
-  --placeholder: #9C9280;
+  --muted-2: #726B5E; /* darkened from #8A8272 for 4.5:1 body-text contrast on cream (T-22) */
+  --placeholder: #9C9280; /* decorative use only (borders, strokes) — never body text */
   --warn-bg: #FBF3E2;
   --warn-line: #D9C39A;
-  --danger: #B4562A;
+  --danger: #AC5228; /* darkened from #B4562A for 4.5:1 body-text contrast on cream (T-22) */
 
   /* Status / flag colors (ROM module) */
   --flag-green: #3F6B4A;

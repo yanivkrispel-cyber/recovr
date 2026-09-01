@@ -2,7 +2,7 @@ import { useContext, useState, type CSSProperties } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { t } from 'shared';
-import { Badge, Button, EmptyState, Skeleton } from 'ui';
+import { Badge, Button, EmptyState, Skeleton, clickableDivProps } from 'ui';
 import type { Alert } from 'shared';
 import { SupabaseContext, AuthContext } from '../App';
 import AppShell from '../components/AppShell';
@@ -152,7 +152,7 @@ export default function Dashboard() {
                   alerts!.slice(0, 6).map((alert) => (
                     <div
                       key={alert.id}
-                      onClick={() => reviewAlert.mutate(alert.id)}
+                      {...clickableDivProps(() => reviewAlert.mutate(alert.id))}
                       style={{ padding: '10px 12px', borderRadius: 8, fontSize: 12, color: 'var(--ink-soft)', cursor: 'pointer', display: 'flex', gap: 9, alignItems: 'flex-start' }}
                     >
                       <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--flag-red)', marginTop: 4, flex: 'none' }} />
@@ -229,7 +229,7 @@ export default function Dashboard() {
             patients?.map((row) => (
               <div
                 key={row.id}
-                onClick={() => navigate({ to: '/patients/$patientId', params: { patientId: row.id } })}
+                {...clickableDivProps(() => navigate({ to: '/patients/$patientId', params: { patientId: row.id } }))}
                 style={{
                   display: 'grid', gridTemplateColumns: '2fr 1.6fr 1fr 1fr 1fr 1.2fr', padding: '14px 18px',
                   borderTop: '1px solid var(--shell-border-soft)', cursor: 'pointer', alignItems: 'center',

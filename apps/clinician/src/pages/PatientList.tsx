@@ -2,7 +2,7 @@ import { useContext, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { t } from 'shared';
-import { Badge, Button, EmptyState, Skeleton } from 'ui';
+import { Badge, Button, EmptyState, Skeleton, clickableDivProps } from 'ui';
 import { AuthContext, SupabaseContext } from '../App';
 import AppShell from '../components/AppShell';
 
@@ -100,7 +100,7 @@ export default function PatientList() {
             {filtered!.map((p) => (
               <div
                 key={p.id}
-                onClick={() => navigate({ to: '/patients/$patientId', params: { patientId: p.id } })}
+                {...clickableDivProps(() => navigate({ to: '/patients/$patientId', params: { patientId: p.id } }))}
                 style={{
                   background: 'var(--shell-sidebar-bg)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-panel)',
                   padding: 18, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 12,

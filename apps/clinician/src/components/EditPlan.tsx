@@ -521,9 +521,9 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
                           <input type="number" value={row.rest_sec ?? ''} onChange={(e) => updateField(i, 'rest_sec', e.target.value)} style={numInputStyle} />
                         </div>
                         <div style={{ display: 'flex', gap: 4 }}>
-                          <button onClick={() => moveExercise(i, -1)} disabled={i === 0} style={iconBtnStyle}>↑</button>
-                          <button onClick={() => moveExercise(i, 1)} disabled={i === draft.length - 1} style={iconBtnStyle}>↓</button>
-                          <button onClick={() => removeExercise(row)} style={{ ...iconBtnStyle, color: 'var(--flag-red)' }}>✕</button>
+                          <button onClick={() => moveExercise(i, -1)} disabled={i === 0} aria-label="הזז למעלה · Move up" style={iconBtnStyle}>↑</button>
+                          <button onClick={() => moveExercise(i, 1)} disabled={i === draft.length - 1} aria-label="הזז למטה · Move down" style={iconBtnStyle}>↓</button>
+                          <button onClick={() => removeExercise(row)} aria-label="הסר תרגיל · Remove exercise" style={{ ...iconBtnStyle, color: 'var(--flag-red)' }}>✕</button>
                         </div>
                       </div>
                     ))}
@@ -680,7 +680,7 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
                         <div style={{ width: 70 }}>
                           <Input placeholder="יחידה" value={c.unit ?? ''} onChange={(e) => updateCriterionText(i, 'unit', e.target.value)} />
                         </div>
-                        <button onClick={() => removeCriterion(i)} style={{ ...iconBtnStyle, color: 'var(--flag-red)' }}>✕</button>
+                        <button onClick={() => removeCriterion(i)} aria-label="הסר קריטריון · Remove criterion" style={{ ...iconBtnStyle, color: 'var(--flag-red)' }}>✕</button>
                       </div>
                     ))
                   )}

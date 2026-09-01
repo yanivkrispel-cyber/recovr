@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Skeleton, QueryError } from 'ui';
+import { Skeleton, QueryError, clickableDivProps } from 'ui';
 import { t } from 'shared';
 import { supabase } from '../App';
 
@@ -87,7 +87,7 @@ export default function Home({ onStartExercise, onOpenProgress, onOpenEducation 
               המטפל עדכן את תכנית השיקום שלך לאחרונה <span style={{ opacity: 0.8 }}>· Your plan was updated</span>
             </div>
           </div>
-          <button onClick={() => setBannerDismissed(true)} style={{ background: 'none', border: 'none', color: 'var(--patient-dim)', fontSize: 15, cursor: 'pointer', padding: 0, lineHeight: 1 }}>✕</button>
+          <button onClick={() => setBannerDismissed(true)} aria-label="סגור · Dismiss" style={{ background: 'none', border: 'none', color: 'var(--patient-dim)', fontSize: 15, cursor: 'pointer', padding: 0, lineHeight: 1 }}>✕</button>
         </div>
       )}
 
@@ -157,7 +157,7 @@ export default function Home({ onStartExercise, onOpenProgress, onOpenEducation 
         {data.items.map((item, idx) => (
           <div
             key={item.id}
-            onClick={() => onStartExercise(idx)}
+            {...clickableDivProps(() => onStartExercise(idx))}
             style={{ background: 'var(--patient-card)', border: '1px solid var(--patient-border)', borderRadius: 12, padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
           >
             {item.done ? (

@@ -45,6 +45,7 @@ export default function AppShell({ activeTab, onTabChange, unreadCount, messages
         </div>
         <button
           onClick={onBellClick}
+          aria-label="התראות"
           style={{ width: 38, height: 38, borderRadius: 12, background: 'var(--patient-card)', border: '1px solid var(--patient-border)', color: 'var(--patient-muted)', fontSize: 15, cursor: 'pointer', position: 'relative', flex: 'none' }}
         >
           🔔

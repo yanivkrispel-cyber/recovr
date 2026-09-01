@@ -17,3 +17,5 @@ export { EmptyState } from './components/EmptyState';
 export { QueryError } from './components/QueryError';
 export { Skeleton } from './components/Skeleton';
 export { useOnlineStatus } from './hooks/useOnlineStatus';
+export { useIsTablet, TABLET_MAX_WIDTH } from './hooks/useIsTablet';
+export { clickableDivProps } from './utils/interactive';

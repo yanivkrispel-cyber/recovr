@@ -143,7 +143,7 @@ export default function AppShell({ user, children }: AppShellProps) {
             </div>
             <button
               onClick={() => supabase.auth.signOut()}
-              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 10, color: 'var(--placeholder)', textDecoration: 'underline' }}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 10, color: 'var(--nav-inactive-text)', textDecoration: 'underline' }}
             >
               {t('auth.logout')}
             </button>

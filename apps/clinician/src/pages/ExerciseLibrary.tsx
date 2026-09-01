@@ -1,7 +1,7 @@
 import { useContext, useState, type CSSProperties } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { t } from 'shared';
-import { Badge, Button, Checkbox, EmptyState, Input, Modal, Select, Skeleton } from 'ui';
+import { Badge, Button, Checkbox, EmptyState, Input, Modal, Select, Skeleton, useIsTablet } from 'ui';
 import { AuthContext, SupabaseContext } from '../App';
 import AppShell from '../components/AppShell';
 import ExerciseDetailDrawer from '../components/ExerciseDetailDrawer';
@@ -60,6 +60,7 @@ export default function ExerciseLibrary() {
   const { user } = useContext(AuthContext);
   const supabase = useContext(SupabaseContext);
   const queryClient = useQueryClient();
+  const isTablet = useIsTablet(); // T-22: tablet is view-only for v1
 
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
@@ -123,7 +124,7 @@ export default function ExerciseLibrary() {
               {exercises?.length ?? 0} תרגילים · {customCount} נוצרו על ידך
             </div>
           </div>
-          <Button onClick={() => setCreateOpen(true)}>+ תרגיל חדש · New Exercise</Button>
+          {!isTablet && <Button onClick={() => setCreateOpen(true)}>+ תרגיל חדש · New Exercise</Button>}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -194,14 +195,16 @@ export default function ExerciseLibrary() {
                   >
                     פרטים · Details
                   </button>
-                  <button
-                    onClick={() => handleDuplicate(ex.id)}
-                    disabled={duplicatingId === ex.id}
-                    style={{ background: 'transparent', color: 'var(--gold-deep)', border: '1px solid rgba(140,100,35,0.5)', borderRadius: 'var(--radius-pill)', padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: duplicatingId === ex.id ? 0.5 : 1 }}
-                  >
-                    שכפל · Duplicate
-                  </button>
-                  {ex.source === 'clinic' && (
+                  {!isTablet && (
+                    <button
+                      onClick={() => handleDuplicate(ex.id)}
+                      disabled={duplicatingId === ex.id}
+                      style={{ background: 'transparent', color: 'var(--gold-deep)', border: '1px solid rgba(140,100,35,0.5)', borderRadius: 'var(--radius-pill)', padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: duplicatingId === ex.id ? 0.5 : 1 }}
+                    >
+                      שכפל · Duplicate
+                    </button>
+                  )}
+                  {!isTablet && ex.source === 'clinic' && (
                     <button
                       onClick={() => handleDelete(ex.id)}
                       disabled={deletingId === ex.id}

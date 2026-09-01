@@ -210,9 +210,11 @@ interface MeasurementPanelProps {
   visitId: string | null;
   onClose: () => void;
   onSaved: (measureCode: string) => void;
+  /** T-22: tablet is view-only for v1 — hides recording controls, keeps the read side. */
+  readOnly?: boolean;
 }
 
-export default function MeasurementPanel({ patientId, patientName, entry, visitId, onClose, onSaved }: MeasurementPanelProps) {
+export default function MeasurementPanel({ patientId, patientName, entry, visitId, onClose, onSaved, readOnly = false }: MeasurementPanelProps) {
   const supabase = useContext(SupabaseContext);
   const queryClient = useQueryClient();
   const { definition: def } = entry;
@@ -233,6 +235,14 @@ export default function MeasurementPanel({ patientId, patientName, entry, visitI
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const currentRow = bilat ? (side === 'involved' ? entry.involved : entry.healthy) : entry.involved;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   useEffect(() => {
     const row = currentRow;
@@ -354,7 +364,13 @@ export default function MeasurementPanel({ patientId, patientName, entry, visitI
   const canSave = def.unit === 'pass_fail' ? pass !== null : liveValue !== null;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(27,33,64,.42)', zIndex: 'var(--z-modal)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, boxSizing: 'border-box' }} onClick={onClose}>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={def.name_he}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(27,33,64,.42)', zIndex: 'var(--z-modal)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, boxSizing: 'border-box' }}
+      onClick={onClose}
+    >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{ width: 780, maxWidth: '100%', maxHeight: '100%', overflow: 'auto', background: 'var(--shell-sidebar-bg)', borderRadius: 18, boxShadow: '0 24px 60px rgba(0,0,0,.24)', display: 'flex', flexDirection: 'column' }}
@@ -392,7 +408,10 @@ export default function MeasurementPanel({ patientId, patientName, entry, visitI
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, padding: '22px 24px' }}>
           {/* Left column */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div
+            aria-disabled={readOnly}
+            style={{ display: 'flex', flexDirection: 'column', gap: 16, pointerEvents: readOnly ? 'none' : 'auto', opacity: readOnly ? 0.55 : 1 }}
+          >
             <div style={{ background: 'var(--shell-content-bg)', border: '1px solid var(--shell-border)', borderRadius: 14, padding: 18, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
               {def.unit === 'pass_fail' ? (
                 <>
@@ -636,14 +655,18 @@ export default function MeasurementPanel({ patientId, patientName, entry, visitI
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: '16px 24px', borderTop: '1px solid var(--shell-border)', background: 'var(--shell-content-bg)', borderRadius: '0 0 18px 18px' }}>
-          <div style={{ fontSize: 11, color: 'var(--nav-inactive-text)' }}>המדידה הקודמת נשמרת בהיסטוריה ולא נמחקת</div>
+          <div style={{ fontSize: 11, color: 'var(--nav-inactive-text)' }}>
+            {readOnly ? 'תצוגה בלבד במסך זה — הקלטת מדידה זמינה במסך רחב יותר' : 'המדידה הקודמת נשמרת בהיסטוריה ולא נמחקת'}
+          </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={onClose} style={{ background: 'transparent', color: 'var(--ink-soft)', border: '1px solid rgba(34,28,20,0.24)', borderRadius: 'var(--radius-pill)', padding: '10px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-              ביטול
+              {readOnly ? 'סגור' : 'ביטול'}
             </button>
-            <Button onClick={() => saveMutation.mutate()} disabled={!canSave || saveMutation.isPending} loading={saveMutation.isPending}>
-              שמור מדידה
-            </Button>
+            {!readOnly && (
+              <Button onClick={() => saveMutation.mutate()} disabled={!canSave || saveMutation.isPending} loading={saveMutation.isPending}>
+                שמור מדידה
+              </Button>
+            )}
           </div>
         </div>
       </div>
