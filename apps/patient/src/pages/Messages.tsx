@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Skeleton } from 'ui';
+import { Skeleton, QueryError } from 'ui';
 import { t } from 'shared';
 import { supabase } from '../App';
 
@@ -21,7 +21,7 @@ export default function Messages({ onBack }: { onBack: () => void }) {
   const [draft, setDraft] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
 
-  const { data, isLoading } = useQuery<{ messages: Message[] }>({
+  const { data, isLoading, error, refetch } = useQuery<{ messages: Message[] }>({
     queryKey: ['me-messages'],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke('me-messages', { method: 'GET' });
@@ -64,6 +64,13 @@ export default function Messages({ onBack }: { onBack: () => void }) {
       <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 4 }}>
         {isLoading ? (
           <Skeleton count={4} height={44} radius={12} />
+        ) : error ? (
+          <QueryError
+            title={t('error.generic.title')}
+            body={t('error.generic.body')}
+            retryLabel={t('error.generic.action')}
+            onRetry={() => refetch()}
+          />
         ) : messages.length === 0 ? (
           <div style={{ padding: '48px 10px', textAlign: 'center', color: 'var(--patient-muted)', fontSize: 13 }}>
             {t('empty.messages.title')}
@@ -98,6 +105,12 @@ export default function Messages({ onBack }: { onBack: () => void }) {
         )}
         <div ref={endRef} />
       </div>
+
+      {send.isError && (
+        <div style={{ fontSize: 12, color: 'var(--patient-danger)', flex: 'none' }}>
+          {t('error.generic.body')}
+        </div>
+      )}
 
       <form
         onSubmit={(e) => {

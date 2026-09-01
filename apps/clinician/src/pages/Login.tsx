@@ -13,8 +13,8 @@ export default function Login() {
     register,
     handleSubmit,
     setError,
-    formState: { errors, isSubmitting },
-  } = useForm<LoginInput>({ resolver: zodResolver(loginSchema) });
+    formState: { errors, isSubmitting, isValid },
+  } = useForm<LoginInput>({ resolver: zodResolver(loginSchema), mode: 'onTouched' });
 
   const [resetSent, setResetSent] = useState(false);
 
@@ -88,6 +88,7 @@ export default function Login() {
           <Button
             type="submit"
             loading={isSubmitting}
+            disabled={!isValid || isSubmitting}
             style={{ width: '100%', justifyContent: 'center' }}
           >
             {t('auth.login.submit')}

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Skeleton } from 'ui';
+import { Skeleton, QueryError } from 'ui';
 import { t } from 'shared';
 import { supabase } from '../App';
 
@@ -44,7 +44,7 @@ function painColor(pain: number): string {
 }
 
 export default function Progress({ onBack }: ProgressProps) {
-  const { data, isLoading } = useQuery<ProgressData>({
+  const { data, isLoading, error, refetch } = useQuery<ProgressData>({
     queryKey: ['progress'],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke(`me-progress?window=${WINDOW_DAYS}`, {
@@ -76,10 +76,13 @@ export default function Progress({ onBack }: ProgressProps) {
         </div>
       )}
 
-      {!isLoading && !data && (
-        <div style={{ padding: '60px 10px', textAlign: 'center', color: 'var(--patient-muted)', fontSize: 13 }}>
-          {t('error.generic.body')}
-        </div>
+      {!isLoading && error && (
+        <QueryError
+          title={t('error.generic.title')}
+          body={t('error.generic.body')}
+          retryLabel={t('error.generic.action')}
+          onRetry={() => refetch()}
+        />
       )}
 
       {data && (

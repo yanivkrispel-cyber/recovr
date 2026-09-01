@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Skeleton } from 'ui';
+import { Skeleton, QueryError } from 'ui';
 import { t } from 'shared';
 import { supabase } from '../App';
 
@@ -22,7 +22,7 @@ interface EducationProps {
 }
 
 export default function Education({ onBack }: EducationProps) {
-  const { data, isLoading } = useQuery<EducationData>({
+  const { data, isLoading, error, refetch } = useQuery<EducationData>({
     queryKey: ['education'],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke('me-education', { method: 'GET' });
@@ -52,10 +52,13 @@ export default function Education({ onBack }: EducationProps) {
         </div>
       )}
 
-      {!isLoading && !data && (
-        <div style={{ padding: '60px 10px', textAlign: 'center', color: 'var(--patient-muted)', fontSize: 13 }}>
-          {t('error.generic.body')}
-        </div>
+      {!isLoading && error && (
+        <QueryError
+          title={t('error.generic.title')}
+          body={t('error.generic.body')}
+          retryLabel={t('error.generic.action')}
+          onRetry={() => refetch()}
+        />
       )}
 
       {data && (

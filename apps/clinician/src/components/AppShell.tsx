@@ -2,6 +2,7 @@ import { useContext, type CSSProperties, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { t } from 'shared';
 import type { User } from 'shared';
+import { useOnlineStatus } from 'ui';
 import { SupabaseContext } from '../App';
 
 interface AppShellProps {
@@ -53,10 +54,23 @@ function NavItem({ to, label, labelEn }: { to: string; label: string; labelEn: s
 
 export default function AppShell({ user, children }: AppShellProps) {
   const supabase = useContext(SupabaseContext);
+  const online = useOnlineStatus();
   const initials = user.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('');
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--shell-content-bg)', fontFamily: 'var(--font-ui)', display: 'flex' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--shell-content-bg)', fontFamily: 'var(--font-ui)', display: 'flex', flexDirection: 'column' }}>
+      {!online && (
+        <div
+          role="status"
+          style={{
+            flex: 'none', background: 'var(--flag-red)', color: 'var(--cream)',
+            fontSize: 12, fontWeight: 700, textAlign: 'center', padding: '6px 12px',
+          }}
+        >
+          {t('offline.banner.clinician')}
+        </div>
+      )}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
       <aside
         style={{
           width: 212,
@@ -137,7 +151,8 @@ export default function AppShell({ user, children }: AppShellProps) {
         </div>
       </aside>
 
-      <main style={{ flex: 1, overflow: 'auto', padding: '26px 30px', boxSizing: 'border-box' }}>{children}</main>
+        <main style={{ flex: 1, overflow: 'auto', padding: '26px 30px', boxSizing: 'border-box' }}>{children}</main>
+      </div>
     </div>
   );
 }

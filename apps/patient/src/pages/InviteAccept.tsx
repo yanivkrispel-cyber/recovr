@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { patientAcceptSchema, t, tZodError, type PatientAcceptInput } from 'shared';
-import { Button, Input, Card, Checkbox, Skeleton, EmptyState } from 'ui';
+import { Button, Input, Card, Checkbox, Skeleton, EmptyState, QueryError } from 'ui';
 import { supabase } from '../App';
 
 interface InviteAcceptProps {
@@ -17,27 +17,39 @@ interface InvitePreview {
 
 export default function InviteAccept({ token, onDone }: InviteAcceptProps) {
   const [invite, setInvite] = useState<InvitePreview | null>(null);
-  const [loadError, setLoadError] = useState<'expired' | 'not_found' | null>(null);
+  const [loadError, setLoadError] = useState<'expired' | 'not_found' | 'network' | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const {
     register,
     handleSubmit,
     watch,
-    formState: { errors, isSubmitting },
-  } = useForm<PatientAcceptInput>({ resolver: zodResolver(patientAcceptSchema) });
+    formState: { errors, isSubmitting, isValid },
+  } = useForm<PatientAcceptInput>({ resolver: zodResolver(patientAcceptSchema), mode: 'onTouched' });
 
   useEffect(() => {
+    let cancelled = false;
+    setInvite(null);
+    setLoadError(null);
     supabase.functions
       .invoke(`patient-accept/patients/invite/${token}`, { method: 'GET' })
       .then(({ data, error }) => {
-        if (error || data?.error) {
-          setLoadError(data?.error === 'token_expired' ? 'expired' : 'not_found');
+        if (cancelled) return;
+        if (error) {
+          setLoadError('network');
+          return;
+        }
+        if (data?.error) {
+          setLoadError(data.error === 'token_expired' ? 'expired' : 'not_found');
           return;
         }
         setInvite(data);
       });
-  }, [token]);
+    return () => {
+      cancelled = true;
+    };
+  }, [token, reloadKey]);
 
   async function onSubmit(input: PatientAcceptInput) {
     setSubmitError(null);
@@ -68,10 +80,19 @@ export default function InviteAccept({ token, onDone }: InviteAcceptProps) {
   if (loadError) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', padding: 24 }}>
-        <EmptyState
-          title={loadError === 'expired' ? t('valid.token.expired') : t('error.notfound.title')}
-          body={loadError === 'expired' ? undefined : t('error.notfound.body')}
-        />
+        {loadError === 'network' ? (
+          <QueryError
+            title={t('error.generic.title')}
+            body={t('error.generic.body')}
+            retryLabel={t('error.generic.action')}
+            onRetry={() => setReloadKey((k) => k + 1)}
+          />
+        ) : (
+          <EmptyState
+            title={loadError === 'expired' ? t('valid.token.expired') : t('error.notfound.title')}
+            body={loadError === 'expired' ? undefined : t('error.notfound.body')}
+          />
+        )}
       </div>
     );
   }
@@ -153,7 +174,7 @@ export default function InviteAccept({ token, onDone }: InviteAcceptProps) {
             <span style={{ fontSize: 13, color: 'var(--danger)' }}>{submitError}</span>
           )}
 
-          <Button type="submit" loading={isSubmitting} style={{ width: '100%', justifyContent: 'center' }}>
+          <Button type="submit" loading={isSubmitting} disabled={!isValid || isSubmitting} style={{ width: '100%', justifyContent: 'center' }}>
             {t('auth.invite.submit')}
           </Button>
         </form>

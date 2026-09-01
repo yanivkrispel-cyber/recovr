@@ -103,7 +103,7 @@ const PRINT_CSS = `
 `;
 
 export default function HomeProgramPrint({ onBack }: { onBack: () => void }) {
-  const { data, isLoading, error } = useQuery<HomeProgram>({
+  const { data, isLoading, error, refetch } = useQuery<HomeProgram>({
     queryKey: ['home-program'],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke('me-plan', { method: 'GET' });
@@ -135,8 +135,11 @@ export default function HomeProgramPrint({ onBack }: { onBack: () => void }) {
       )}
 
       {!isLoading && (error || !data) && (
-        <div style={{ textAlign: 'center', color: 'var(--cream)', fontFamily: 'var(--font-ui)', direction: 'rtl' }}>
-          {t('error.generic.body')}
+        <div style={{ textAlign: 'center', color: 'var(--cream)', fontFamily: 'var(--font-ui)', direction: 'rtl', display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
+          <span>{t('error.generic.body')}</span>
+          <button className="hpp-btn" style={{ background: 'var(--gold)', color: 'var(--navy)' }} onClick={() => refetch()}>
+            {t('error.generic.action')}
+          </button>
         </div>
       )}
 

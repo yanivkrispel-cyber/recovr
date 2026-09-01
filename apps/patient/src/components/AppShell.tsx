@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { t } from 'shared';
+import { useOnlineStatus } from 'ui';
 
 export type PatientTab = 'home' | 'progress' | 'messages' | 'education';
 
@@ -19,8 +21,20 @@ interface AppShellProps {
 }
 
 export default function AppShell({ activeTab, onTabChange, unreadCount, messagesUnread, onBellClick, children }: AppShellProps) {
+  const online = useOnlineStatus();
   return (
     <div style={{ minHeight: '100vh', background: 'var(--patient-bg)', display: 'flex', flexDirection: 'column', fontFamily: 'var(--font-ui)' }}>
+      {!online && (
+        <div
+          role="status"
+          style={{
+            flex: 'none', background: 'var(--patient-dim)', color: 'var(--patient-bg)',
+            fontSize: 11, fontWeight: 700, textAlign: 'center', padding: '5px 10px', letterSpacing: '0.03em',
+          }}
+        >
+          {t('offline.banner')}
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 20px 2px' }}>
         <svg width="22" height="19" viewBox="0 0 26 22" fill="none" aria-hidden="true">
           <path d="M1 21V5l6 6 6-10 6 10 6-6v16H1Z" stroke="var(--patient-gold)" strokeWidth={1.8} strokeLinejoin="round" />

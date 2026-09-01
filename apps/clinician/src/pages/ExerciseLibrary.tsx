@@ -241,9 +241,14 @@ function CreateExerciseModal({ open, onClose, onCreated }: { open: boolean; onCl
   const [isBilateral, setIsBilateral] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [nameTouched, setNameTouched] = useState(false);
+  const nameValid = name.trim().length > 0;
 
   async function handleCreate() {
-    if (!name.trim()) return;
+    if (!nameValid) {
+      setNameTouched(true);
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     const { data, error } = await supabase.functions.invoke('exercises', {
@@ -279,12 +284,18 @@ function CreateExerciseModal({ open, onClose, onCreated }: { open: boolean; onCl
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>{t('clinician.plan.discard')}</Button>
-          <Button loading={saving} onClick={handleCreate}>שמור תרגיל</Button>
+          <Button loading={saving} disabled={!nameValid || saving} onClick={handleCreate}>שמור תרגיל</Button>
         </>
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <Input label="שם התרגיל" value={name} onChange={(e) => setName(e.target.value)} />
+        <Input
+          label="שם התרגיל"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => setNameTouched(true)}
+          error={nameTouched && !nameValid ? t('valid.required') : undefined}
+        />
         <Input label="שם באנגלית" value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
         <Select
           label="קטגוריה"

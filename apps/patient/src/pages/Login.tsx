@@ -9,8 +9,8 @@ export default function Login() {
     register,
     handleSubmit,
     setError,
-    formState: { errors, isSubmitting },
-  } = useForm<LoginInput>({ resolver: zodResolver(loginSchema) });
+    formState: { errors, isSubmitting, isValid },
+  } = useForm<LoginInput>({ resolver: zodResolver(loginSchema), mode: 'onTouched' });
 
   async function onSubmit(data: LoginInput) {
     const { error } = await supabase.auth.signInWithPassword({
@@ -76,7 +76,7 @@ export default function Login() {
             {...register('password')}
             error={tZodError(errors.password?.message)}
           />
-          <Button type="submit" loading={isSubmitting} style={{ width: '100%', justifyContent: 'center' }}>
+          <Button type="submit" loading={isSubmitting} disabled={!isValid || isSubmitting} style={{ width: '100%', justifyContent: 'center' }}>
             {t('auth.login.submit')}
           </Button>
         </form>

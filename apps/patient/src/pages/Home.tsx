@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Skeleton } from 'ui';
+import { Skeleton, QueryError } from 'ui';
+import { t } from 'shared';
 import { supabase } from '../App';
 
 interface TodayItem {
@@ -31,7 +32,7 @@ interface HomeProps {
 export default function Home({ onStartExercise, onOpenProgress, onOpenEducation }: HomeProps) {
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
-  const { data, isLoading } = useQuery<Today>({
+  const { data, isLoading, error, refetch } = useQuery<Today>({
     queryKey: ['today'],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke('me-today', { method: 'GET' });
@@ -48,6 +49,17 @@ export default function Home({ onStartExercise, onOpenProgress, onOpenEducation 
         <Skeleton height={150} radius={16} />
         <Skeleton count={4} height={52} radius={12} />
       </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <QueryError
+        title={t('error.generic.title')}
+        body={t('error.generic.body')}
+        retryLabel={t('error.generic.action')}
+        onRetry={() => refetch()}
+      />
     );
   }
 

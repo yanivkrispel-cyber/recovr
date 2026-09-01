@@ -55,6 +55,7 @@ export const he = {
 
   // Offline / sync
   'offline.banner': 'מצב לא מקוון — האימון ימשיך לעבוד',
+  'offline.banner.clinician': 'אין חיבור לרשת — חלק מהפעולות אינן זמינות',
   'offline.queued': '{count} רשומות ממתינות לסנכרון',
   'offline.synced': 'הכול מסונכרן',
   'offline.sync_failed': 'הסנכרון נכשל. ננסה שוב אוטומטית.',
