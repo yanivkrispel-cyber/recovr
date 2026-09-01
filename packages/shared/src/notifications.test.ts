@@ -91,6 +91,12 @@ describe('rendering', () => {
     expect(r.body).not.toMatch(/\{/);
   });
 
+  it('renders a new_message push from a preview', () => {
+    const r = renderNotification('new_message', { from_name: 'ד״ר יעל', preview: 'איך ההרגשה?' });
+    expect(r.title).toBe('הודעה חדשה מד״ר יעל');
+    expect(r.body).toBe('איך ההרגשה?');
+  });
+
   it('pain_spike renders with an optional empty note', () => {
     const r = renderNotification('pain_spike', {
       patient_name: 'מאיה שלו',
@@ -113,6 +119,8 @@ describe('deep links', () => {
     ['adherence_drop', { patient_id: 'p1' }, '/patients/p1'],
     ['pain_spike', { patient_id: 'p1' }, '/patients/p1'],
     ['weekly_digest', {}, '/dashboard'],
+    ['new_message', { patient_id: 'p1' }, '/patients/p1'],
+    ['new_message', {}, '/messages'],
   ])('%s -> %s', (event, vars, expected) => {
     expect(deepLink(event, vars)).toBe(expected);
   });

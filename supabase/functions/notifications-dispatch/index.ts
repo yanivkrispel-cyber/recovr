@@ -50,6 +50,10 @@ const TEMPLATES: Record<string, { title: string; body: string }> = {
     title: '{patient_name} דיווח/ה כאב {pain_score}/10',
     body: 'בתרגיל "{exercise_name}", שלב {phase_number}. {patient_note}',
   },
+  new_message: {
+    title: 'הודעה חדשה מ{from_name}',
+    body: '{preview}',
+  },
 };
 
 function fill(tpl: string, vars: NotifVars): string {
@@ -69,6 +73,9 @@ function deepLink(event: string, vars: NotifVars): string {
     case 'adherence_drop':
     case 'pain_spike':
       return vars.patient_id ? `/app/patients/${vars.patient_id}` : '/app/';
+    case 'new_message':
+      // patient->clinician carries patient_id; clinician->patient does not
+      return vars.patient_id ? `/app/patients/${vars.patient_id}` : '/m/';
     default:
       return '/app/';
   }

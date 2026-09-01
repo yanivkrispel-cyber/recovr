@@ -13,11 +13,12 @@ interface AppShellProps {
   activeTab: PatientTab;
   onTabChange: (tab: PatientTab) => void;
   unreadCount?: number;
+  messagesUnread?: number;
   onBellClick: () => void;
   children: ReactNode;
 }
 
-export default function AppShell({ activeTab, onTabChange, unreadCount, onBellClick, children }: AppShellProps) {
+export default function AppShell({ activeTab, onTabChange, unreadCount, messagesUnread, onBellClick, children }: AppShellProps) {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--patient-bg)', display: 'flex', flexDirection: 'column', fontFamily: 'var(--font-ui)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 20px 2px' }}>
@@ -54,13 +55,27 @@ export default function AppShell({ activeTab, onTabChange, unreadCount, onBellCl
       <div style={{ flex: 'none', display: 'flex', background: 'var(--patient-tabbar-bg)', borderTop: '1px solid rgba(201,162,75,.28)', padding: '10px 8px calc(env(safe-area-inset-bottom, 0px) + 10px)' }}>
         {TABS.map((tab) => {
           const on = tab.v === activeTab;
+          const badge = tab.v === 'messages' ? messagesUnread : undefined;
           return (
             <button
               key={tab.v}
               onClick={() => onTabChange(tab.v)}
               style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '8px 4px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', color: on ? 'var(--patient-gold)' : 'var(--patient-dim)' }}
             >
-              <span style={{ fontSize: 16, lineHeight: 1 }}>{tab.icon}</span>
+              <span style={{ fontSize: 16, lineHeight: 1, position: 'relative' }}>
+                {tab.icon}
+                {!!badge && (
+                  <span
+                    style={{
+                      position: 'absolute', top: -6, insetInlineEnd: -10, background: 'var(--patient-gold)', color: 'var(--patient-gold-ink)',
+                      fontSize: 9, fontWeight: 700, borderRadius: 'var(--radius-pill)', minWidth: 15, height: 15, padding: '0 3px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+                    }}
+                  >
+                    {badge > 9 ? '9+' : badge}
+                  </span>
+                )}
+              </span>
               <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.04em' }}>{tab.label}</span>
             </button>
           );

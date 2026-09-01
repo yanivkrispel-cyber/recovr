@@ -9,6 +9,8 @@ import Education from './pages/Education';
 import Login from './pages/Login';
 import InviteAccept from './pages/InviteAccept';
 import HomeProgramPrint from './pages/HomeProgramPrint';
+import Messages from './pages/Messages';
+import { useQuery } from '@tanstack/react-query';
 import { enablePush, syncPushSubscription, type EnablePushResult } from './lib/push';
 
 const supabase = createClient(
@@ -65,6 +67,17 @@ export default function App() {
     if (session) void syncPushSubscription();
   }, [session]);
 
+  const { data: unread } = useQuery<{ unread: number }>({
+    queryKey: ['me-messages-unread'],
+    enabled: !!session,
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('me-messages?count=1', { method: 'GET' });
+      if (error) throw error;
+      return data;
+    },
+    refetchInterval: 20_000,
+  });
+
   useEffect(() => {
     try {
       if (view === 'exercise') {
@@ -113,7 +126,7 @@ export default function App() {
 
   return (
     <div style={{ direction: 'rtl' }}>
-      <AppShell activeTab={activeTab} onTabChange={handleTabChange} onBellClick={() => setView('notifications')}>
+      <AppShell activeTab={activeTab} onTabChange={handleTabChange} messagesUnread={unread?.unread} onBellClick={() => setView('notifications')}>
         {view === 'home' && (
           <Home
             onStartExercise={(index) => {
@@ -135,28 +148,10 @@ export default function App() {
         )}
         {view === 'completion' && <CompletionScreen onDone={() => setView('home')} />}
         {view === 'progress' && <Progress onBack={() => setView('home')} />}
-        {view === 'messages' && <PlaceholderView title="הודעות" titleEn="Messages" onBack={() => setView('home')} />}
+        {view === 'messages' && <Messages onBack={() => setView('home')} />}
         {view === 'education' && <Education onBack={() => setView('home')} />}
         {view === 'notifications' && <NotificationsView onBack={() => setView('home')} />}
       </AppShell>
-    </div>
-  );
-}
-
-function PlaceholderView({ title, titleEn, onBack }: { title: string; titleEn: string; onBack: () => void }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--patient-muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', padding: 0, textAlign: 'right' }}>
-        → חזרה · Back
-      </button>
-      <div>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, fontWeight: 700, color: 'var(--patient-text)' }}>
-          {title} <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--patient-muted)' }}>{titleEn}</span>
-        </div>
-      </div>
-      <div style={{ padding: '60px 10px', textAlign: 'center', color: 'var(--patient-muted)', fontSize: 13 }}>
-        בקרוב <span style={{ opacity: 0.8 }}>· Coming soon</span>
-      </div>
     </div>
   );
 }

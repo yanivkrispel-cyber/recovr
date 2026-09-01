@@ -163,6 +163,9 @@ export default function PatientOverview() {
             <Tab value="history" label={t('clinician.history.title')}>
               <HistoryTab data={data} />
             </Tab>
+            <Tab value="messages" label="הודעות · Messages">
+              <MessagesTab patientId={patientId} patientName={data.patient.name} />
+            </Tab>
           </Tabs>
 
           <EditPlan
@@ -787,6 +790,121 @@ function HistoryTab({ data }: { data: OverviewData }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+interface ThreadMessage {
+  id: string;
+  sender_type: 'clinician' | 'patient';
+  body: string;
+  sent_at: string;
+  read_at: string | null;
+}
+
+function MessagesTab({ patientId, patientName }: { patientId: string; patientName: string }) {
+  const supabase = useContext(SupabaseContext);
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState('');
+
+  const { data, isLoading } = useQuery<{ messages: ThreadMessage[] }>({
+    queryKey: ['messages', patientId],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke(`messages?patient_id=${patientId}`, { method: 'GET' });
+      if (error) throw error;
+      return data as { messages: ThreadMessage[] };
+    },
+    refetchInterval: 15_000,
+  });
+
+  const send = useMutation({
+    mutationFn: async (body: string) => {
+      const { data, error } = await supabase.functions.invoke('messages', {
+        method: 'POST',
+        body: { patient_id: patientId, body },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      return data;
+    },
+    onSuccess: () => {
+      setDraft('');
+      queryClient.invalidateQueries({ queryKey: ['messages', patientId] });
+      queryClient.invalidateQueries({ queryKey: ['messages-unread'] });
+    },
+  });
+
+  const messages = data?.messages ?? [];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 620 }}>
+      <div
+        style={{
+          border: '1px solid var(--shell-border)',
+          borderRadius: 'var(--radius-panel)',
+          background: 'var(--shell-sidebar-bg)',
+          padding: 16,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          maxHeight: 460,
+          overflow: 'auto',
+        }}
+      >
+        {isLoading ? (
+          <Skeleton count={4} height={40} />
+        ) : messages.length === 0 ? (
+          <div style={{ padding: '40px 10px', textAlign: 'center', color: 'var(--nav-inactive-text)', fontSize: 13 }}>
+            אין הודעות עם {patientName} עדיין
+          </div>
+        ) : (
+          messages.map((m) => {
+            const mine = m.sender_type === 'clinician';
+            return (
+              <div key={m.id} style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '80%' }}>
+                <div
+                  style={{
+                    background: mine ? 'var(--gold-deep)' : 'var(--sand)',
+                    color: mine ? 'var(--cream)' : 'var(--ink)',
+                    borderRadius: 12,
+                    padding: '8px 12px',
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {m.body}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--nav-inactive-text)', marginTop: 3, textAlign: mine ? 'left' : 'right' }}>
+                  {new Intl.DateTimeFormat('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(m.sent_at))}
+                  {mine && m.read_at ? ' · נקרא' : ''}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const body = draft.trim();
+          if (body) send.mutate(body);
+        }}
+        style={{ display: 'flex', gap: 8 }}
+      >
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="כתוב הודעה למטופל…"
+          maxLength={4000}
+          style={{ flex: 1, padding: '10px 13px', borderRadius: 9, border: '1px solid var(--shell-border)', background: 'var(--cream)', fontFamily: 'inherit', fontSize: 13 }}
+        />
+        <Button type="submit" size="sm" disabled={!draft.trim() || send.isPending}>
+          שלח
+        </Button>
+      </form>
     </div>
   );
 }

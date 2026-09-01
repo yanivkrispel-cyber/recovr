@@ -127,5 +127,11 @@ verify_jwt = true
 [functions.device-tokens]
 verify_jwt = true
 
+[functions.messages]
+verify_jwt = true
+
+[functions.me-messages]
+verify_jwt = true
+
 [functions.notifications-dispatch]
 verify_jwt = false  # cron / DISPATCH_SECRET-gated, not a user session

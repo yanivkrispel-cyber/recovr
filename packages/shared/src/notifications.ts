@@ -23,7 +23,8 @@ export type NotificationEventKey =
   | 'plan_updated'
   | 'phase_approved'
   | 'weekly_digest'
-  | 'pain_spike';
+  | 'pain_spike'
+  | 'new_message';
 
 export type NotificationRecipient = 'patient' | 'clinician';
 export type NotificationChannel = 'push' | 'email' | 'in_app';
@@ -81,6 +82,15 @@ export const NOTIFICATION_EVENTS: Record<NotificationEventKey, NotificationEvent
     category: 'pain',
     disableable: false,
     urgent: true,
+  },
+  // T-19: a chat message. Fires in both directions (patient<->clinician); the
+  // SQL layer passes recipient_type explicitly, so `recipient` here is nominal.
+  new_message: {
+    recipient: 'clinician',
+    channels: ['push'],
+    category: 'messages',
+    disableable: true,
+    urgent: false,
   },
 };
 
@@ -158,6 +168,10 @@ const TEMPLATES: Record<NotificationEventKey, { title: string; body: string }> =
     title: '{patient_name} דיווח/ה כאב {pain_score}/10',
     body: 'בתרגיל "{exercise_name}", שלב {phase_number}. {patient_note}',
   },
+  new_message: {
+    title: 'הודעה חדשה מ{from_name}',
+    body: '{preview}',
+  },
 };
 
 export function renderNotification(
@@ -184,6 +198,9 @@ export function deepLink(event: NotificationEventKey, vars: NotifVars): string {
       return vars.patient_id ? `/patients/${vars.patient_id}` : '/patients';
     case 'weekly_digest':
       return '/dashboard';
+    case 'new_message':
+      // clinician recipient gets the patient's thread; patient recipient the tab
+      return vars.patient_id ? `/patients/${vars.patient_id}` : '/messages';
   }
 }
 
