@@ -56,6 +56,14 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
     }
 
+    // RULES §7: a clinician read of a patient record is audited.
+    await service.schema('app').rpc('audit_read', {
+      p_actor_type: 'clinician',
+      p_actor_id: user.id,
+      p_entity_type: 'plan',
+      p_entity_id: patientId,
+    });
+
     return new Response(JSON.stringify(result), {
       headers: { 'Content-Type': 'application/json' },
     });

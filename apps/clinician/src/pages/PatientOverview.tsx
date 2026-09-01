@@ -110,6 +110,32 @@ export default function PatientOverview() {
     },
   });
 
+  const { data: deletionRequests } = useQuery<{ patient_id: string; requested_at: string; reason: string | null }[]>({
+    queryKey: ['deletion-requests'],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('deletion-requests', { method: 'GET' });
+      if (error) throw error;
+      return (data as { patient_id: string; requested_at: string; reason: string | null }[]) ?? [];
+    },
+  });
+  const pendingDeletion = deletionRequests?.find((r) => r.patient_id === patientId) ?? null;
+
+  const anonymize = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke('deletion-requests', {
+        method: 'POST',
+        body: { patient_id: patientId },
+      });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['deletion-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['patient-overview', patientId] });
+    },
+  });
+
   if (!user) return null;
 
   return (
@@ -125,6 +151,27 @@ export default function PatientOverview() {
         <EmptyState title={t('error.notfound.title')} body={t('error.notfound.body')} />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {pendingDeletion && (
+            <div style={{ border: '1px solid var(--flag-red)', background: 'rgba(158,59,46,0.06)', borderRadius: 'var(--radius-card)', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+              <div style={{ fontSize: 13, color: 'var(--flag-red)' }}>
+                המטופל ביקש מחיקת נתונים ({new Date(pendingDeletion.requested_at).toLocaleDateString('he-IL')})
+                {pendingDeletion.reason ? ` · ${pendingDeletion.reason}` : ''}
+              </div>
+              <Button
+                size="sm"
+                variant="danger"
+                disabled={anonymize.isPending}
+                loading={anonymize.isPending}
+                onClick={() => {
+                  if (window.confirm('לבצע מחיקת נתונים? פרטי הזיהוי יימחקו והגישה תיחסם. הרשומות הקליניות יישמרו עד תום תקופת השמירה.')) {
+                    anonymize.mutate();
+                  }
+                }}
+              >
+                בצע מחיקה
+              </Button>
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
             <div>
               <button

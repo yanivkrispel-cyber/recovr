@@ -136,5 +136,14 @@ verify_jwt = true
 [functions.settings]
 verify_jwt = true
 
+[functions.me-export]
+verify_jwt = true
+
+[functions.me-delete-request]
+verify_jwt = true
+
+[functions.deletion-requests]
+verify_jwt = true
+
 [functions.notifications-dispatch]
 verify_jwt = false  # cron / DISPATCH_SECRET-gated, not a user session

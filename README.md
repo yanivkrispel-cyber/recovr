@@ -58,6 +58,33 @@ pnpm dev
 - **Append-only measurements.** Edits supersede, never mutate.
 - **ROM is type-bound.** Goniometric (3 attempts) and functional (cm/pass-fail) are never interchangeable.
 
+## Security & compliance
+
+Implements RULES.md §7.
+
+- **Encryption at rest / TLS in transit** — platform guarantees. Supabase
+  Postgres data is encrypted on disk (AES-256) and every API/DB connection is
+  TLS-only; production must keep the project on a plan where this holds and
+  never expose the DB port publicly.
+- **Audit log** — every clinician read of a patient record writes an
+  `app.audit_log` row (`app.audit_read` from the API layer;
+  `app.patient_overview`, `write_measurement`, `save_plan_version`,
+  `thread_for_clinician` do it inline).
+- **Consent** — captured at activation: `patient.consent_version` +
+  `consent_at`, set by `app.accept_patient_invite`. The clinical disclaimer
+  shows on the invite-acceptance screen and on the printed home program.
+- **Export my data** — `GET /me-export` returns the patient's full record as
+  one JSON download (`app.export_my_data`).
+- **Delete my data** — `POST /me-delete-request` records a request
+  (`app.data_deletion_request`); the clinic actions it via
+  `POST /deletion-requests` → `app.anonymize_patient`, which pseudonymises
+  PII, scrubs free-text notes/messages, and removes the login. De-identified
+  clinical rows remain until retention expires.
+- **Retention** — `app.retention_purge` runs nightly (pg_cron), dropping
+  audit rows and anonymised patients past the clinic's window
+  (`clinic.settings.retention_years` / `clinic.retention_years`, default 7)
+  and operational notifications older than a year.
+
 ## Roadmap
 
 - [x] M0 — Foundations (monorepo, tokens, UI, schemas, offline, auth shells, clinician dashboard, patient home + exercise flow)
