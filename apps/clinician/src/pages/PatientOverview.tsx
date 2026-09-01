@@ -588,8 +588,38 @@ function AssessmentsTab({ patientId, patientName, protocolSlug }: { patientId: s
     ?.flatMap((e) => [e.involved, e.healthy].filter((r): r is NonNullable<typeof e.involved> => !!r))
     .sort((a, b) => new Date(b.measured_at).getTime() - new Date(a.measured_at).getTime())[0]?.measured_at;
 
+  const { data: status } = useQuery<{ due_at: string; days_overdue: number; overdue: boolean; interval_days: number }>({
+    queryKey: ['assessment-status', patientId],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke(
+        `measurements/patients/${patientId}/assessment-status`,
+        { method: 'GET' },
+      );
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      return data as { due_at: string; days_overdue: number; overdue: boolean; interval_days: number };
+    },
+  });
+
   return (
     <div style={{ paddingTop: 18 }}>
+      {status && (
+        <div
+          style={{
+            marginBottom: 12,
+            borderRadius: 'var(--radius-card)',
+            border: `1px solid ${status.overdue ? 'var(--flag-red)' : 'var(--shell-border)'}`,
+            background: status.overdue ? 'rgba(158,59,46,0.06)' : 'var(--shell-sidebar-bg)',
+            padding: '10px 14px',
+            fontSize: 12,
+            color: status.overdue ? 'var(--flag-red)' : 'var(--nav-inactive-text)',
+          }}
+        >
+          {status.overdue
+            ? `הערכה באיחור של ${status.days_overdue} ימים · מועד יעד ${new Date(status.due_at).toLocaleDateString('he-IL')}`
+            : `הערכה הבאה עד ${new Date(status.due_at).toLocaleDateString('he-IL')} · כל ${status.interval_days} ימים`}
+        </div>
+      )}
       <div style={{ background: 'var(--shell-sidebar-bg)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-panel)', overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, padding: '14px 18px', borderBottom: '1px solid var(--shell-border)' }}>
           <div>

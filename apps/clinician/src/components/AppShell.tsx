@@ -92,6 +92,7 @@ export default function AppShell({ user, children }: AppShellProps) {
         <NavItem to="/dashboard" label={t('clinician.dashboard.title')} labelEn={t('clinician.dashboard.nav_en')} />
         <NavItem to="/patients" label={t('clinician.patients.title')} labelEn={t('clinician.patients.nav_en')} />
         <NavItem to="/exercises" label={t('clinician.exercise.nav')} labelEn={t('clinician.exercise.nav_en')} />
+        <NavItem to="/settings" label="הגדרות" labelEn="Settings" />
 
         <div
           style={{

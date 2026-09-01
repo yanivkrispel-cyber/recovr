@@ -3,6 +3,7 @@ import Dashboard from './pages/Dashboard';
 import PatientList from './pages/PatientList';
 import PatientOverview from './pages/PatientOverview';
 import ExerciseLibrary from './pages/ExerciseLibrary';
+import Settings from './pages/Settings';
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -40,12 +41,19 @@ const exercisesRoute = createRoute({
   component: ExerciseLibrary,
 });
 
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings',
+  component: Settings,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   dashboardRoute,
   patientsRoute,
   patientOverviewRoute,
   exercisesRoute,
+  settingsRoute,
 ]);
 
 export const router = createRouter({ routeTree, basepath: '/app' });

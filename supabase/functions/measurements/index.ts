@@ -66,6 +66,25 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
   }
 
+  if (req.method === 'GET' && url.pathname.endsWith('/assessment-status')) {
+    // .../patients/:id/assessment-status — id is second-to-last (T-20).
+    const patientId = parts[parts.length - 2];
+    if (!patientId) {
+      return new Response(JSON.stringify({ error: 'validation_failed' }), { status: 422 });
+    }
+    const { data: result, error } = await service.schema('app').rpc('assessment_status', {
+      p_clinician_id: user.id,
+      p_patient_id: patientId,
+    });
+    if (error) {
+      return new Response(JSON.stringify({ error: 'internal_error', details: error.message }), { status: 500 });
+    }
+    if (result?.error) {
+      return new Response(JSON.stringify({ error: result.error }), { status: errorStatus(result.error) });
+    }
+    return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+  }
+
   if (req.method === 'GET') {
     // .../patients/:id/measurements — id is second-to-last.
     const patientId = parts[parts.length - 2];

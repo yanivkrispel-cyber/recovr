@@ -8,3 +8,4 @@ export * from './schemas';
 export * from './adherence';
 export * from './alerts';
 export * from './notifications';
+export * from './settings';
