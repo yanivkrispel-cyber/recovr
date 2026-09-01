@@ -49,3 +49,5 @@ yarn-debug.log*
 
 # Deno (scripts/*.ts use inline jsr: specifiers, no deno.json)
 deno.lock
+
+supabase/functions/.env

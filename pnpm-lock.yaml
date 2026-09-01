@@ -133,6 +133,18 @@ importers:
       vitest:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@26.4.0)(happy-dom@20.11.12)(terser@5.50.0)
+      workbox-expiration:
+        specifier: ^7.1.0
+        version: 7.4.1
+      workbox-precaching:
+        specifier: ^7.1.0
+        version: 7.4.1
+      workbox-routing:
+        specifier: ^7.1.0
+        version: 7.4.1
+      workbox-strategies:
+        specifier: ^7.1.0
+        version: 7.4.1
 
   packages/offline:
     dependencies:

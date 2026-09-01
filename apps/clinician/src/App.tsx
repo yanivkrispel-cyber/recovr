@@ -5,8 +5,9 @@ import { t } from 'shared';
 import type { User } from 'shared';
 import Login from './pages/Login';
 import { router } from './router';
+import { syncPushSubscription } from './lib/push';
 
-const supabase = createClient(
+export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY,
 );
@@ -72,6 +73,10 @@ export default function App() {
     );
     return () => subscription.unsubscribe();
   }, []);
+
+  React.useEffect(() => {
+    if (user) void syncPushSubscription();
+  }, [user]);
 
   async function signOut() {
     await supabase.auth.signOut();

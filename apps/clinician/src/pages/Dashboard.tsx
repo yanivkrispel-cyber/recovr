@@ -6,6 +6,7 @@ import { Badge, Button, EmptyState, Skeleton } from 'ui';
 import type { Alert } from 'shared';
 import { SupabaseContext, AuthContext } from '../App';
 import AppShell from '../components/AppShell';
+import { enablePush } from '../lib/push';
 
 type PatientRow = {
   id: string;
@@ -137,6 +138,14 @@ export default function Dashboard() {
                   padding: 8, zIndex: 10, display: 'flex', flexDirection: 'column', gap: 4,
                 }}
               >
+                {typeof Notification !== 'undefined' && Notification.permission !== 'granted' && (
+                  <button
+                    onClick={() => void enablePush()}
+                    style={{ padding: '10px 12px', fontSize: 12, fontWeight: 600, color: 'var(--gold-deep)', background: 'transparent', border: 'none', borderBottom: '1px solid var(--shell-border)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'right' }}
+                  >
+                    הפעל התראות דחיפה · Enable push
+                  </button>
+                )}
                 {(alerts?.length ?? 0) === 0 ? (
                   <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--nav-inactive-text)' }}>{t('empty.alerts.title')}</div>
                 ) : (

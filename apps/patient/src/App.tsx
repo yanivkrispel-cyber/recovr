@@ -9,6 +9,7 @@ import Education from './pages/Education';
 import Login from './pages/Login';
 import InviteAccept from './pages/InviteAccept';
 import HomeProgramPrint from './pages/HomeProgramPrint';
+import { enablePush, syncPushSubscription, type EnablePushResult } from './lib/push';
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -59,6 +60,10 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (session) void syncPushSubscription();
+  }, [session]);
 
   useEffect(() => {
     try {
@@ -132,7 +137,7 @@ export default function App() {
         {view === 'progress' && <Progress onBack={() => setView('home')} />}
         {view === 'messages' && <PlaceholderView title="הודעות" titleEn="Messages" onBack={() => setView('home')} />}
         {view === 'education' && <Education onBack={() => setView('home')} />}
-        {view === 'notifications' && <PlaceholderView title="התראות" titleEn="Notifications" onBack={() => setView('home')} />}
+        {view === 'notifications' && <NotificationsView onBack={() => setView('home')} />}
       </AppShell>
     </div>
   );
@@ -152,6 +157,58 @@ function PlaceholderView({ title, titleEn, onBack }: { title: string; titleEn: s
       <div style={{ padding: '60px 10px', textAlign: 'center', color: 'var(--patient-muted)', fontSize: 13 }}>
         בקרוב <span style={{ opacity: 0.8 }}>· Coming soon</span>
       </div>
+    </div>
+  );
+}
+
+function NotificationsView({ onBack }: { onBack: () => void }) {
+  const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(
+    typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
+  );
+  const [status, setStatus] = useState<EnablePushResult | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function handleEnable() {
+    setBusy(true);
+    const result = await enablePush();
+    setStatus(result);
+    if (typeof Notification !== 'undefined') setPermission(Notification.permission);
+    setBusy(false);
+  }
+
+  const messages: Record<EnablePushResult, string> = {
+    ok: 'התראות הופעלו · Notifications on',
+    denied: 'ההרשאה נדחתה — יש לאשר בהגדרות הדפדפן',
+    unsupported: 'הדפדפן אינו תומך בהתראות',
+    'no-key': 'התראות אינן מוגדרות בשרת',
+    error: 'שגיאה בהפעלת התראות — נסה שוב',
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--patient-muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', padding: 0, textAlign: 'right' }}>
+        → חזרה · Back
+      </button>
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, fontWeight: 700, color: 'var(--patient-text)' }}>
+        התראות <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--patient-muted)' }}>Notifications</span>
+      </div>
+      <p style={{ fontSize: 13, color: 'var(--patient-muted)', lineHeight: 1.6, margin: 0 }}>
+        קבל/י תזכורת יומית לאימון ועדכון כשהמטפל משנה את התוכנית. שעות שקט 21:30–07:30.
+      </p>
+      {permission === 'granted' ? (
+        <div style={{ fontSize: 13, color: 'var(--patient-success)' }}>✓ התראות מופעלות בדפדפן זה</div>
+      ) : (
+        <button
+          onClick={handleEnable}
+          disabled={busy || permission === 'unsupported'}
+          style={{ background: 'var(--patient-gold)', color: 'var(--patient-gold-ink)', border: 'none', borderRadius: 999, padding: 13, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: busy || permission === 'unsupported' ? 0.6 : 1 }}
+        >
+          הפעל התראות · Enable notifications
+        </button>
+      )}
+      {status && status !== 'ok' && (
+        <div style={{ fontSize: 12, color: 'var(--patient-danger)' }}>{messages[status]}</div>
+      )}
     </div>
   );
 }
