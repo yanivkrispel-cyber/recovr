@@ -6,3 +6,4 @@ export * from './i18n';
 export * from './formatters';
 export * from './schemas';
 export * from './adherence';
+export * from './alerts';
