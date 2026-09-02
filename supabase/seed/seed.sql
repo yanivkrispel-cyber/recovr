@@ -294,3 +294,197 @@ INSERT INTO adherence_daily (patient_id, date, planned, completed, completion_ra
 VALUES ('a0000001-0000-0000-0000-000000000100', current_date, true, true, 1)
 ON CONFLICT (patient_id, date) DO UPDATE
   SET planned = EXCLUDED.planned, completed = EXCLUDED.completed, completion_ratio = EXCLUDED.completion_ratio;
+
+
+-- Backfill ~10 days of completed sessions for the demo patient. Without this,
+-- the alerts_sweep() below rematerialises its rolling-7-day window from the
+-- single seeded session and it falsely trips adherence_drop.
+DO $demo$
+DECLARE d DATE; v_sess UUID;
+BEGIN
+  FOR d IN SELECT generate_series(current_date - 9, current_date - 1, interval '1 day')::date
+  LOOP
+    v_sess := gen_random_uuid();
+    INSERT INTO session (id, patient_id, plan_version_id, date, status,
+                         items_planned, items_done, completion_ratio, completed_at)
+    VALUES (v_sess, 'a0000001-0000-0000-0000-000000000100',
+            'a0000001-0000-0000-0000-000000000201', d, 'completed', 3, 3, 1, d + time '12:00');
+    INSERT INTO session_item (id, session_id, plan_exercise_id, skipped, pain_score, logged_at)
+    SELECT gen_random_uuid(), v_sess, pe.id, false, NULL, d + time '12:00'
+    FROM plan_exercise pe
+    WHERE pe.plan_phase_id = 'a0000001-0000-0000-0000-000000000210' AND pe.deleted_at IS NULL;
+  END LOOP;
+END
+$demo$;
+
+-- ============================================================================
+-- QA_PLAN.md — "Seed data for testing"
+-- ----------------------------------------------------------------------------
+-- One real subject for every dashboard / alert / empty state. Alerts are
+-- materialised by alerts_sweep() at the end (which also re-derives the rolling
+-- 7-day adherence_daily window straight from the session_item rows below, so
+-- everything here is driven off real sessions, not hand-written adherence).
+--
+-- Adherence is a rolling 7-day integer, so it quantises to k/7 — QA_PLAN's
+-- "95%" reads as 100%, "40%" as ~43% (3/7, under the 70% threshold → raises
+-- adherence_drop).
+-- ============================================================================
+
+-- Standard patient + active plan on the demo protocol (phase 1), optionally
+-- with the phase's exercises + criteria. p_phase_age controls how long the
+-- patient has been in phase 1 (drives the `time` progression criterion).
+CREATE FUNCTION pg_temp.qa_patient(
+  p_id UUID, p_name TEXT, p_status TEXT,
+  p_phase_age INTERVAL DEFAULT INTERVAL '10 days',
+  p_with_exercises BOOLEAN DEFAULT true,
+  p_with_criteria BOOLEAN DEFAULT true
+) RETURNS void LANGUAGE plpgsql AS $fn$
+DECLARE
+  v_clin  UUID := (SELECT id FROM app."user" WHERE role = 'clinician' LIMIT 1);
+  v_plan  UUID := gen_random_uuid();
+  v_pv    UUID := gen_random_uuid();
+  v_phase UUID := gen_random_uuid();
+BEGIN
+  INSERT INTO patient (id, clinic_id, primary_clinician_id, name, status,
+                       created_at, activated_at, discharged_at)
+  VALUES (p_id, '11111111-1111-1111-1111-111111111111', v_clin, p_name, p_status,
+          now() - p_phase_age - interval '2 days',
+          CASE WHEN p_status IN ('active','paused','discharged')
+               THEN now() - p_phase_age - interval '1 day' END,
+          CASE WHEN p_status = 'discharged' THEN now() - interval '3 days' END)
+  ON CONFLICT (id) DO NOTHING;
+
+  IF p_status = 'invited' THEN
+    RETURN;  -- invited / never activated: no plan at all
+  END IF;
+
+  INSERT INTO plan (id, patient_id, protocol_id, started_at, current_phase_n, status)
+  VALUES (v_plan, p_id, 'a0000001-0000-0000-0000-000000000001',
+          now() - p_phase_age, 1, 'active');
+  INSERT INTO plan_version (id, plan_id, version, created_by, is_current, note)
+  VALUES (v_pv, v_plan, 1, v_clin, true, 'seed');
+  INSERT INTO plan_phase (id, plan_version_id, n, name, duration_days, started_at)
+  VALUES (v_phase, v_pv, 1, 'שלב 1 — הגנה והפעלה', 14, now() - p_phase_age);
+
+  IF p_with_exercises THEN
+    INSERT INTO plan_exercise (id, plan_phase_id, exercise_id, sets, reps, rest_sec,
+                               frequency_days_per_week, "order")
+    SELECT gen_random_uuid(), v_phase, ppe.exercise_id,
+           (ppe.prescription->>'sets')::int, (ppe.prescription->>'reps')::int,
+           (ppe.prescription->>'rest_sec')::int, 7, ppe."order"
+    FROM app.protocol_phase_exercise ppe
+    WHERE ppe.protocol_phase_id = 'a0000001-0000-0000-0000-000000000010';
+  END IF;
+
+  IF p_with_criteria THEN
+    INSERT INTO plan_criterion (id, plan_phase_id, type, label, label_en, operator,
+                                value, unit, "order")
+    SELECT gen_random_uuid(), v_phase, ppc.type, ppc.label, ppc.label_en,
+           ppc.operator, ppc.value, ppc.unit, ppc."order"
+    FROM app.protocol_phase_criterion ppc
+    WHERE ppc.protocol_phase_id = 'a0000001-0000-0000-0000-000000000010';
+  END IF;
+END
+$fn$;
+
+-- p_days of daily sessions ending p_gap_days ago. Completed days are spread
+-- evenly across the run (Bresenham) at ratio p_ratio, so a low ratio does not
+-- also look like an inactivity streak. session_item.pain_score is 2 on every
+-- logged day except the final one, which carries p_last_pain when given.
+-- Also writes the adherence_daily rows for days that fall OUTSIDE the rolling
+-- 7-day window (inside it, alerts_sweep() rematerialises them from sessions).
+CREATE FUNCTION pg_temp.qa_history(
+  p_pid UUID, p_days INT, p_ratio NUMERIC,
+  p_gap_days INT DEFAULT 0, p_last_pain NUMERIC DEFAULT NULL
+) RETURNS void LANGUAGE plpgsql AS $fn$
+DECLARE
+  v_pv    UUID := (SELECT pv.id FROM plan_version pv JOIN plan pl ON pl.id = pv.plan_id
+                   WHERE pl.patient_id = p_pid AND pv.is_current);
+  v_phase UUID := (SELECT pp.id FROM plan_phase pp
+                   JOIN plan_version pv ON pv.id = pp.plan_version_id
+                   JOIN plan pl ON pl.id = pv.plan_id
+                   WHERE pl.patient_id = p_pid AND pv.is_current AND pp.n = 1);
+  v_nex   INT  := (SELECT count(*) FROM plan_exercise
+                   WHERE plan_phase_id = v_phase AND deleted_at IS NULL);
+  v_last  DATE := current_date - p_gap_days;
+  d       DATE;
+  k       INT := 0;
+  v_ts    TIMESTAMPTZ;
+  v_sess  UUID;
+  v_done  BOOLEAN;
+BEGIN
+  FOR d IN SELECT generate_series(v_last - p_days + 1, v_last, interval '1 day')::date
+  LOOP
+    k := k + 1;
+    v_done := floor(k * p_ratio) > floor((k - 1) * p_ratio);
+    v_ts   := CASE WHEN d >= current_date THEN now() - interval '2 hours'
+                   ELSE d + time '12:00' END;
+    v_sess := gen_random_uuid();
+    INSERT INTO session (id, patient_id, plan_version_id, date, status,
+                         items_planned, items_done, completion_ratio, completed_at)
+    VALUES (v_sess, p_pid, v_pv, d,
+            CASE WHEN v_done THEN 'completed' ELSE 'planned' END,
+            v_nex, CASE WHEN v_done THEN v_nex ELSE 0 END,
+            CASE WHEN v_done THEN 1 ELSE 0 END,
+            CASE WHEN v_done THEN v_ts END);
+    IF v_done THEN
+      INSERT INTO session_item (id, session_id, plan_exercise_id, skipped,
+                                pain_score, logged_at)
+      SELECT gen_random_uuid(), v_sess, pe.id, false,
+             CASE WHEN d = v_last THEN COALESCE(p_last_pain, 2) ELSE 2 END,
+             v_ts
+      FROM plan_exercise pe
+      WHERE pe.plan_phase_id = v_phase AND pe.deleted_at IS NULL;
+    END IF;
+    IF d < current_date - 6 THEN
+      INSERT INTO adherence_daily (patient_id, date, planned, completed, completion_ratio)
+      VALUES (p_pid, d, true, v_done, CASE WHEN v_done THEN 1 ELSE 0 END)
+      ON CONFLICT (patient_id, date) DO UPDATE
+        SET planned = true, completed = EXCLUDED.completed,
+            completion_ratio = EXCLUDED.completion_ratio;
+    END IF;
+  END LOOP;
+END
+$fn$;
+
+-- --- the mix ---------------------------------------------------------------
+
+-- ~95% adherence, healthy. Phase too young to advance (no ready_for_advance).
+SELECT pg_temp.qa_patient('a0000001-0000-0000-0000-000000000101', 'מאיה לוי', 'active', interval '9 days');
+SELECT pg_temp.qa_history('a0000001-0000-0000-0000-000000000101', 7, 1.0);
+
+-- ~40% adherence -> adherence_drop alert (spread misses, so NOT inactive).
+SELECT pg_temp.qa_patient('a0000001-0000-0000-0000-000000000102', 'דניאל אבישר', 'active', interval '10 days');
+SELECT pg_temp.qa_history('a0000001-0000-0000-0000-000000000102', 8, 0.4);
+
+-- inactive 6 days -> inactive alert. Active run ends 6 days ago; the sweep
+-- materialises the six trailing planned/not-done days.
+SELECT pg_temp.qa_patient('a0000001-0000-0000-0000-000000000103', 'נועה ברק', 'active', interval '13 days');
+SELECT pg_temp.qa_history('a0000001-0000-0000-0000-000000000103', 7, 1.0, 6);
+
+-- ready to advance -> ready_for_advance alert. Phase old enough (time crit
+-- met) and last logged pain 2 (<= 4, pain crit met).
+SELECT pg_temp.qa_patient('a0000001-0000-0000-0000-000000000104', 'איתי שמש', 'active', interval '30 days');
+SELECT pg_temp.qa_history('a0000001-0000-0000-0000-000000000104', 10, 1.0, 0, 2);
+
+-- pain spike -> pain_spike alert (fresh session_item at pain 8).
+SELECT pg_temp.qa_patient('a0000001-0000-0000-0000-000000000105', 'שירה גל', 'active', interval '20 days');
+SELECT pg_temp.qa_history('a0000001-0000-0000-0000-000000000105', 8, 1.0, 0, 8);
+
+-- invited, never activated -> no plan, shows as "invited" in the list.
+SELECT pg_temp.qa_patient('a0000001-0000-0000-0000-000000000106', 'רון כספי', 'invited');
+
+-- discharged -> excluded from the active roster and from alerts_sweep.
+SELECT pg_temp.qa_patient('a0000001-0000-0000-0000-000000000107', 'אבי דגן', 'discharged', interval '20 days');
+SELECT pg_temp.qa_history('a0000001-0000-0000-0000-000000000107', 8, 1.0, 4);
+
+-- empty plan -> plan + version + phase, zero exercises and zero criteria.
+SELECT pg_temp.qa_patient('a0000001-0000-0000-0000-000000000108', 'תמר יונה', 'active', interval '10 days', false, false);
+
+-- mid-phase, no measurements -> healthy adherence, no measurement rows.
+SELECT pg_temp.qa_patient('a0000001-0000-0000-0000-000000000109', 'עומר לביא', 'active', interval '12 days');
+SELECT pg_temp.qa_history('a0000001-0000-0000-0000-000000000109', 7, 1.0);
+
+-- materialise alerts + queue notifications for the demo.
+SELECT app.alerts_sweep();
+SELECT app.notifications_sweep();

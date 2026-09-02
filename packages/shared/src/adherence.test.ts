@@ -96,6 +96,24 @@ describe('adherence — RULES §1 scenarios', () => {
     // Only Mon/Wed/Fri are planned → 3 planned, 3 completed → 100%, denominator 3 not 7.
     expect(adherence(days)).toEqual({ pct: 100, plannedDays: 3, completedDays: 3 });
   });
+
+  it('a patient who started mid-window: pre-start days are not planned (QA_PLAN Q-04)', () => {
+    // Plan starts on day 4 of the 7-day window. The three days before the plan
+    // existed are not training days — they must be excluded from the
+    // denominator, so trained-every-day-since-start reads 100%, not 4/7.
+    const window = sevenDayWindow('2025-06-22');
+    const planStart = '2025-06-19'; // 4th day of the window
+    const days: WindowDay[] = window.map((date) => ({
+      date,
+      planned: date >= planStart, // caller gates on plan start
+      itemsDone: date >= planStart ? 2 : 0,
+    }));
+    expect(adherence(days)).toEqual({ pct: 100, plannedDays: 4, completedDays: 4 });
+
+    // And a mid-window start with one missed day since: 3/4 → 75%.
+    days[days.length - 1].itemsDone = 0;
+    expect(adherence(days)).toEqual({ pct: 75, plannedDays: 4, completedDays: 3 });
+  });
 });
 
 describe('timezone boundary — day bucketing', () => {
