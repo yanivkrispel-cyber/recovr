@@ -5,6 +5,18 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
   base: '/app/',
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom'],
+          supabase: ['@supabase/supabase-js'],
+          query: ['@tanstack/react-query'],
+          router: ['@tanstack/react-router'],
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       ui: path.resolve(__dirname, '../../packages/ui/src'),

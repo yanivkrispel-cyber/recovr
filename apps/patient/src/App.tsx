@@ -1,17 +1,30 @@
 import { createClient, type Session } from '@supabase/supabase-js';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { t } from 'shared';
+import { Skeleton } from 'ui';
 import AppShell, { type PatientTab } from './components/AppShell';
 import Home from './pages/Home';
-import ExerciseFlow from './pages/ExerciseFlow';
-import Progress from './pages/Progress';
-import Education from './pages/Education';
 import Login from './pages/Login';
-import InviteAccept from './pages/InviteAccept';
-import HomeProgramPrint from './pages/HomeProgramPrint';
-import Messages from './pages/Messages';
 import { useQuery } from '@tanstack/react-query';
 import { enablePush, syncPushSubscription, type EnablePushResult } from './lib/push';
+
+// Home + Login load with the shell; the rest split into their own chunks so
+// first paint doesn't carry the whole app (T-24).
+const ExerciseFlow = lazy(() => import('./pages/ExerciseFlow'));
+const Progress = lazy(() => import('./pages/Progress'));
+const Education = lazy(() => import('./pages/Education'));
+const Messages = lazy(() => import('./pages/Messages'));
+const InviteAccept = lazy(() => import('./pages/InviteAccept'));
+const HomeProgramPrint = lazy(() => import('./pages/HomeProgramPrint'));
+
+function ViewFallback() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 4 }}>
+      <Skeleton width={160} height={19} />
+      <Skeleton count={4} height={48} radius={12} />
+    </div>
+  );
+}
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -92,13 +105,15 @@ export default function App() {
 
   if (inviteToken) {
     return (
-      <InviteAccept
-        token={inviteToken}
-        onDone={() => {
-          window.history.replaceState({}, '', '/m/');
-          setInviteToken(null);
-        }}
-      />
+      <Suspense fallback={<ViewFallback />}>
+        <InviteAccept
+          token={inviteToken}
+          onDone={() => {
+            window.history.replaceState({}, '', '/m/');
+            setInviteToken(null);
+          }}
+        />
+      </Suspense>
     );
   }
 
@@ -115,7 +130,11 @@ export default function App() {
   }
 
   if (isPrintRoute()) {
-    return <HomeProgramPrint onBack={() => window.location.assign('/m/')} />;
+    return (
+      <Suspense fallback={<ViewFallback />}>
+        <HomeProgramPrint onBack={() => window.location.assign('/m/')} />
+      </Suspense>
+    );
   }
 
   const activeTab: PatientTab = view === 'exercise' || view === 'completion' ? 'home' : (view === 'notifications' ? 'home' : (view as PatientTab));
@@ -127,30 +146,32 @@ export default function App() {
   return (
     <div style={{ direction: 'rtl' }}>
       <AppShell activeTab={activeTab} onTabChange={handleTabChange} messagesUnread={unread?.unread} onBellClick={() => setView('notifications')}>
-        {view === 'home' && (
-          <Home
-            onStartExercise={(index) => {
-              setActiveExerciseIndex(index);
-              setView('exercise');
-            }}
-            onOpenProgress={() => setView('progress')}
-            onOpenEducation={() => setView('education')}
-          />
-        )}
-        {view === 'exercise' && (
-          <ExerciseFlow
-            key={activeExerciseIndex}
-            index={activeExerciseIndex}
-            onAdvance={(nextIndex) => setActiveExerciseIndex(nextIndex)}
-            onComplete={() => setView('completion')}
-            onCancel={() => setView('home')}
-          />
-        )}
-        {view === 'completion' && <CompletionScreen onDone={() => setView('home')} />}
-        {view === 'progress' && <Progress onBack={() => setView('home')} />}
-        {view === 'messages' && <Messages onBack={() => setView('home')} />}
-        {view === 'education' && <Education onBack={() => setView('home')} />}
-        {view === 'notifications' && <NotificationsView onBack={() => setView('home')} />}
+        <Suspense fallback={<ViewFallback />}>
+          {view === 'home' && (
+            <Home
+              onStartExercise={(index) => {
+                setActiveExerciseIndex(index);
+                setView('exercise');
+              }}
+              onOpenProgress={() => setView('progress')}
+              onOpenEducation={() => setView('education')}
+            />
+          )}
+          {view === 'exercise' && (
+            <ExerciseFlow
+              key={activeExerciseIndex}
+              index={activeExerciseIndex}
+              onAdvance={(nextIndex) => setActiveExerciseIndex(nextIndex)}
+              onComplete={() => setView('completion')}
+              onCancel={() => setView('home')}
+            />
+          )}
+          {view === 'completion' && <CompletionScreen onDone={() => setView('home')} />}
+          {view === 'progress' && <Progress onBack={() => setView('home')} />}
+          {view === 'messages' && <Messages onBack={() => setView('home')} />}
+          {view === 'education' && <Education onBack={() => setView('home')} />}
+          {view === 'notifications' && <NotificationsView onBack={() => setView('home')} />}
+        </Suspense>
       </AppShell>
     </div>
   );

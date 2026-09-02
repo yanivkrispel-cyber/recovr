@@ -15,6 +15,7 @@ export { ToastProvider, useToast } from './components/Toast';
 export { Tabs, Tab, TabPanel } from './components/Tabs';
 export { EmptyState } from './components/EmptyState';
 export { QueryError } from './components/QueryError';
+export { ErrorBoundary } from './components/ErrorBoundary';
 export { Skeleton } from './components/Skeleton';
 export { useOnlineStatus } from './hooks/useOnlineStatus';
 export { useIsTablet, TABLET_MAX_WIDTH } from './hooks/useIsTablet';

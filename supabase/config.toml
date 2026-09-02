@@ -145,5 +145,8 @@ verify_jwt = true
 [functions.deletion-requests]
 verify_jwt = true
 
+[functions.client-errors]
+verify_jwt = false  # a crash can happen before login; JWT decoded when present
+
 [functions.notifications-dispatch]
 verify_jwt = false  # cron / DISPATCH_SECRET-gated, not a user session
