@@ -193,11 +193,11 @@ function NotificationsView({ onBack }: { onBack: () => void }) {
   }
 
   const messages: Record<EnablePushResult, string> = {
-    ok: 'התראות הופעלו · Notifications on',
-    denied: 'ההרשאה נדחתה — יש לאשר בהגדרות הדפדפן',
-    unsupported: 'הדפדפן אינו תומך בהתראות',
-    'no-key': 'התראות אינן מוגדרות בשרת',
-    error: 'שגיאה בהפעלת התראות — נסה שוב',
+    ok: t('push.result.ok'),
+    denied: t('push.result.denied'),
+    unsupported: t('push.result.unsupported'),
+    'no-key': t('push.result.no_key'),
+    error: t('push.result.error'),
   };
 
   const [privacyBusy, setPrivacyBusy] = useState<'' | 'export' | 'delete'>('');
@@ -209,7 +209,7 @@ function NotificationsView({ onBack }: { onBack: () => void }) {
     const { data, error } = await supabase.functions.invoke('me-export', { method: 'GET' });
     setPrivacyBusy('');
     if (error || (data as { error?: string })?.error) {
-      setPrivacyMsg('הייצוא נכשל — נסה שוב');
+      setPrivacyMsg(t('error.action.retry'));
       return;
     }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -222,15 +222,15 @@ function NotificationsView({ onBack }: { onBack: () => void }) {
   }
 
   async function handleDeleteRequest() {
-    if (!window.confirm('לשלוח בקשה למחיקת החשבון והנתונים שלך? המטפל יאשר את המחיקה.')) return;
+    if (!window.confirm(`${t('confirm.delete_account.title')}\n${t('confirm.delete_account.body')}`)) return;
     setPrivacyBusy('delete');
     setPrivacyMsg(null);
     const { data, error } = await supabase.functions.invoke('me-delete-request', { method: 'POST', body: {} });
     setPrivacyBusy('');
     setPrivacyMsg(
       error || (data as { error?: string })?.error
-        ? 'שליחת הבקשה נכשלה — נסה שוב'
-        : 'הבקשה נשלחה. המטפל יטפל בה.',
+        ? t('error.action.retry')
+        : t('privacy.delete_request.sent'),
     );
   }
 
@@ -240,20 +240,20 @@ function NotificationsView({ onBack }: { onBack: () => void }) {
         → חזרה · Back
       </button>
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, fontWeight: 700, color: 'var(--patient-text)' }}>
-        התראות <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--patient-muted)' }}>Notifications</span>
+        {t('clinician.alerts.title')}
       </div>
       <p style={{ fontSize: 13, color: 'var(--patient-muted)', lineHeight: 1.6, margin: 0 }}>
-        קבל/י תזכורת יומית לאימון ועדכון כשהמטפל משנה את התוכנית. שעות שקט 21:30–07:30.
+        {t('push.hint')}
       </p>
       {permission === 'granted' ? (
-        <div style={{ fontSize: 13, color: 'var(--patient-success)' }}>✓ התראות מופעלות בדפדפן זה</div>
+        <div style={{ fontSize: 13, color: 'var(--patient-success)' }}>✓ {t('push.on')}</div>
       ) : (
         <button
           onClick={handleEnable}
           disabled={busy || permission === 'unsupported'}
           style={{ background: 'var(--patient-gold)', color: 'var(--patient-gold-ink)', border: 'none', borderRadius: 999, padding: 13, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: busy || permission === 'unsupported' ? 0.6 : 1 }}
         >
-          הפעל התראות · Enable notifications
+          {t('push.enable')}
         </button>
       )}
       {status && status !== 'ok' && (
@@ -262,21 +262,21 @@ function NotificationsView({ onBack }: { onBack: () => void }) {
 
       <div style={{ borderTop: '1px solid var(--patient-border)', paddingTop: 16, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, color: 'var(--patient-text)' }}>
-          פרטיות <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--patient-muted)' }}>Privacy</span>
+          {t('privacy.title')}
         </div>
         <button
           onClick={handleExport}
           disabled={privacyBusy !== ''}
           style={{ background: 'transparent', border: '1px solid var(--patient-border)', borderRadius: 12, padding: '11px 14px', color: 'var(--patient-text)', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', textAlign: 'right', opacity: privacyBusy ? 0.6 : 1 }}
         >
-          {privacyBusy === 'export' ? 'מייצא…' : 'ייצוא הנתונים שלי · Export my data'}
+          {privacyBusy === 'export' ? t('privacy.export.busy') : t('privacy.export')}
         </button>
         <button
           onClick={handleDeleteRequest}
           disabled={privacyBusy !== ''}
           style={{ background: 'transparent', border: '1px solid var(--patient-danger)', borderRadius: 12, padding: '11px 14px', color: 'var(--patient-danger)', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', textAlign: 'right', opacity: privacyBusy ? 0.6 : 1 }}
         >
-          {privacyBusy === 'delete' ? 'שולח…' : 'בקשת מחיקת חשבון · Request account deletion'}
+          {privacyBusy === 'delete' ? t('privacy.delete_request.busy') : t('privacy.delete_request')}
         </button>
         {privacyMsg && <div style={{ fontSize: 12, color: 'var(--patient-muted)' }}>{privacyMsg}</div>}
       </div>

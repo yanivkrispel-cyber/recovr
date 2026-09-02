@@ -147,7 +147,7 @@ export default function Settings() {
             </Section>
 
             <div style={{ fontSize: 12, color: save.isError ? 'var(--flag-red)' : 'var(--nav-inactive-text)', minHeight: 16 }}>
-              {save.isPending ? 'שומר…' : save.isError ? 'שמירה נכשלה' : savedAt ? 'נשמר ✓' : ''}
+              {save.isPending ? t('loading.saving') : save.isError ? t('error.save.title') : savedAt ? `${t('status.saved')} ✓` : ''}
             </div>
           </>
         )}

@@ -1,5 +1,12 @@
-// Hebrew i18n layer — single source of every user-facing string.
-// Keys come from COPY.md. No inline JSX text allowed.
+// Hebrew i18n layer — single source of every user-facing string (T-25).
+// Keys come from COPY.md; the canonical state families (loading / empty /
+// error / offline / validation / confirm / toast / auth) are complete and
+// guarded by i18n.test.ts. Component state text goes through t().
+//
+// Still inline in a few places: the decorative bilingual "· English" glosses
+// on page headers / nav / back links, and structural table-column labels —
+// none are in COPY.md (which governs system-state copy) and all are already
+// correct Hebrew. Fold them in here when touched.
 
 export const he = {
   // Loading
@@ -52,6 +59,8 @@ export const he = {
   'error.conflict.primary': 'פתח גרסה מעודכנת',
   'error.conflict.secondary': 'שמור את הטיוטה שלי',
   'error.session.load': 'לא הצלחנו לטעון את האימון. בדוק חיבור ונסה שוב.',
+  'error.action.retry': 'הפעולה נכשלה. נסה שוב.',
+  'status.saved': 'נשמר',
 
   // Offline / sync
   'offline.banner': 'מצב לא מקוון — האימון ימשיך לעבוד',
@@ -63,7 +72,7 @@ export const he = {
   // Validation
   'valid.required': 'שדה חובה',
   'valid.email': 'כתובת אימייל לא תקינה',
-  'valid.phone': 'מספר טלפון לא תקינה',
+  'valid.phone': 'מספר טלפון לא תקין',
   'valid.password.short': 'לפחות 10 תווים',
   'valid.password.weak': 'הסיסמה חייבת לכלול אות, ספרה ותו מיוחד',
   'valid.password.mismatch': 'הסיסמאות אינן זהות',
@@ -91,6 +100,12 @@ export const he = {
   'confirm.discharge.title': 'לשחרר את המטופל?',
   'confirm.discharge.body': 'המטופל יאבד גישה לתוכנית. הנתונים נשמרים.',
   'confirm.discharge.confirm': 'שחרר',
+  'confirm.delete_exercise.title': 'למחוק את התרגיל?',
+  'confirm.delete_exercise.body': 'תרגיל מותאם-קליניקה יימחק לצמיתות. תרגילים בתוכניות קיימות לא יושפעו.',
+  'confirm.delete_account.title': 'לשלוח בקשה למחיקת החשבון?',
+  'confirm.delete_account.body': 'פרטי הזיהוי שלך יימחקו והגישה תיחסם. המטפל יאשר את הבקשה.',
+  'confirm.anonymize.title': 'לבצע מחיקת נתונים?',
+  'confirm.anonymize.body': 'פרטי הזיהוי יימחקו והגישה תיחסם. הרשומות הקליניות יישמרו עד תום תקופת השמירה.',
 
   // Toasts
   'toast.plan_saved': 'התוכנית נשמרה (גרסה {version})',
@@ -113,7 +128,7 @@ export const he = {
   'auth.invite.body': '{clinician} הזמין אותך לעקוב אחרי תוכנית השיקום שלך.',
   'auth.invite.submit': 'הפעלת החשבון',
   'auth.consent.label': 'קראתי ואני מאשר את תנאי השימוש ומדיניות הפרטיות',
-  'auth.logout': 'יציסה',
+  'auth.logout': 'יציאה',
 
   // Patient home
   'patient.home.title': 'היום שלי',
@@ -162,6 +177,24 @@ export const he = {
   'clinician.assessments.title': 'הערכות',
   'clinician.history.title': 'היסטוריה',
 
+  // Notifications opt-in (T-18)
+  'push.enable': 'הפעל התראות',
+  'push.on': 'התראות מופעלות בדפדפן זה',
+  'push.hint': 'קבל/י תזכורת יומית לאימון ועדכון כשהמטפל משנה את התוכנית. שעות שקט 21:30–07:30.',
+  'push.result.ok': 'התראות הופעלו',
+  'push.result.denied': 'ההרשאה נדחתה — יש לאשר בהגדרות הדפדפן',
+  'push.result.unsupported': 'הדפדפן אינו תומך בהתראות',
+  'push.result.no_key': 'התראות אינן מוגדרות בשרת',
+  'push.result.error': 'שגיאה בהפעלת התראות — נסה שוב',
+
+  // Privacy (T-23)
+  'privacy.title': 'פרטיות',
+  'privacy.export': 'ייצוא הנתונים שלי',
+  'privacy.export.busy': 'מייצא…',
+  'privacy.delete_request': 'בקשת מחיקת חשבון',
+  'privacy.delete_request.busy': 'שולח…',
+  'privacy.delete_request.sent': 'הבקשה נשלחה. המטפל יטפל בה.',
+
   // Disclaimer
   'disclaimer.clinical':
     'המערכת היא כלי לתיעוד ומעקב אחר תוכנית השיקום שנקבעה עבורך. היא אינה מספקת אבחון או ייעוץ רפואי ואינה מחליפה את המטפל. בכל כאב חד, נפיחות או החמרה — הפסק את התרגול ופנה למטפל.',
@@ -171,8 +204,20 @@ export type I18nKey = keyof typeof he;
 
 type InterpolationVars = Record<string, string | number>;
 
+const isDev = (() => {
+  try {
+    return Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV);
+  } catch {
+    return false;
+  }
+})();
+
 export function t(key: I18nKey, vars?: InterpolationVars): string {
-  let str: string = he[key] ?? String(key);
+  let str: string | undefined = he[key];
+  if (str === undefined) {
+    if (isDev) console.warn(`[i18n] missing key: ${key}`);
+    str = String(key);
+  }
   if (vars) {
     for (const [k, v] of Object.entries(vars)) {
       str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));

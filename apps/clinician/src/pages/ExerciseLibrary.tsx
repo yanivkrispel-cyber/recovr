@@ -100,7 +100,7 @@ export default function ExerciseLibrary() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm('למחוק את התרגיל? · Delete this exercise?')) return;
+    if (!window.confirm(`${t('confirm.delete_exercise.title')}\n${t('confirm.delete_exercise.body')}`)) return;
     setDeletingId(id);
     await supabase.functions.invoke(`exercises/${id}`, { method: 'DELETE' });
     setDeletingId(null);

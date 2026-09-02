@@ -163,7 +163,7 @@ export default function PatientOverview() {
                 disabled={anonymize.isPending}
                 loading={anonymize.isPending}
                 onClick={() => {
-                  if (window.confirm('לבצע מחיקת נתונים? פרטי הזיהוי יימחקו והגישה תיחסם. הרשומות הקליניות יישמרו עד תום תקופת השמירה.')) {
+                  if (window.confirm(`${t('confirm.anonymize.title')}\n${t('confirm.anonymize.body')}`)) {
                     anonymize.mutate();
                   }
                 }}
