@@ -79,7 +79,7 @@ function arcPath(cx: number, cy: number, r: number, fromDeg: number, toDeg: numb
   const start = polarPoint(cx, cy, r, fromDeg);
   const end = polarPoint(cx, cy, r, toDeg);
   const largeArc = toDeg - fromDeg > 180 ? 1 : 0;
-  return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 0 ${end.x} ${end.y}`;
+  return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`;
 }
 
 // value 0 -> 180deg (left), value scale -> 0deg (right): a left-to-right 180deg sweep.
