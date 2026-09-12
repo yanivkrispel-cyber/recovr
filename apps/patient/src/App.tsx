@@ -1,7 +1,7 @@
 import { createClient, type Session } from '@supabase/supabase-js';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { t } from 'shared';
-import { Skeleton } from 'ui';
+import { Skeleton, FullPageLoader } from 'ui';
 import AppShell, { type PatientTab } from './components/AppShell';
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -118,11 +118,7 @@ export default function App() {
   }
 
   if (session === undefined) {
-    return (
-      <div style={{ minHeight: '100vh', background: 'var(--patient-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--patient-muted)', fontFamily: 'var(--font-ui)', direction: 'rtl' }}>
-        {t('loading.generic')}
-      </div>
-    );
+    return <FullPageLoader tone="light" background="var(--patient-bg)" label={t('loading.generic')} />;
   }
 
   if (!session) {
@@ -216,7 +212,7 @@ function NotificationsView({ onBack }: { onBack: () => void }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'recoveryos-my-data.json';
+    a.download = 'recovr-my-data.json';
     a.click();
     URL.revokeObjectURL(url);
   }

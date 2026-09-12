@@ -2,7 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { OfflineQueue, uuidv7 } from 'offline';
 import { sessionItemSchema, type SessionItemInput } from 'shared';
+import { YouTubeFacade, useOnlineStatus } from 'ui';
 import { supabase } from '../App';
+import { secondaryLabel } from '../lib/label';
 import FeedbackForm from '../components/FeedbackForm';
 
 const queue = new OfflineQueue(
@@ -56,7 +58,13 @@ function ExerciseMediaFrame({
   name: string;
   compact?: boolean;
 }) {
-  const primary = media?.find((m) => m.kind === 'gif') ?? media?.[0] ?? null;
+  // The GIF is the rep-loop visual — tiny, autoplays instantly, no network
+  // cost on every set. A YouTube video (kind='video', url is an id — see
+  // packages/shared/src/youtube.ts) is supplementary instructional content,
+  // surfaced separately below, never as this frame's image src.
+  const primary = media?.find((m) => m.kind !== 'video' && m.kind === 'gif')
+    ?? media?.find((m) => m.kind !== 'video')
+    ?? null;
 
   if (!primary) {
     return (
@@ -96,6 +104,44 @@ function ExerciseMediaFrame({
       />
     </div>
   );
+}
+
+// Supplementary instructional video — shown collapsed as a labeled toggle so
+// it never costs a network request unless the patient actually wants it, and
+// hidden entirely offline since a YouTube embed can't load without a
+// connection (the GIF above already covers the offline case).
+function ExerciseVideoSection({ media, name }: { media?: ExerciseMedia[]; name: string }) {
+  const [open, setOpen] = useState(false);
+  const online = useOnlineStatus();
+  const video = media?.find((m) => m.kind === 'video');
+  if (!video || !online) return null;
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          background: 'transparent',
+          border: '1px solid var(--patient-card-light)',
+          borderRadius: 999,
+          padding: '8px 14px',
+          color: 'var(--patient-text)',
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          alignSelf: 'flex-start',
+        }}
+      >
+        ▶ צפו בסרטון ההדרכה · Watch tutorial video
+      </button>
+    );
+  }
+
+  return <YouTubeFacade youtubeId={video.url} title={name} height={200} />;
 }
 
 interface Today {
@@ -270,10 +316,11 @@ export default function ExerciseFlow({ index, onAdvance, onComplete, onCancel }:
             → חזרה · Back
           </button>
           <div style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.01em', fontSize: 18, fontWeight: 700, color: 'var(--patient-text)' }}>
-            {item.exercise.name} {item.exercise.name_en && <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--patient-muted)' }}>{item.exercise.name_en}</span>}
+            {item.exercise.name} {secondaryLabel(item.exercise.name, item.exercise.name_en) && <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--patient-muted)' }}>{secondaryLabel(item.exercise.name, item.exercise.name_en)}</span>}
           </div>
 
           <ExerciseMediaFrame media={item.exercise.media} name={item.exercise.name} />
+          <ExerciseVideoSection media={item.exercise.media} name={item.exercise.name} />
 
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--patient-text)' }}>
             <bdi>{item.sets} × {item.reps}</bdi>

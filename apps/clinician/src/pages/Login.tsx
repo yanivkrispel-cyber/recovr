@@ -6,6 +6,7 @@ import { SupabaseContext } from '../App';
 import { Button } from 'ui';
 import { Input } from 'ui';
 import { Card } from 'ui';
+import { Logo } from 'ui';
 
 export default function Login() {
   const supabase = useContext(SupabaseContext);
@@ -31,7 +32,7 @@ export default function Login() {
   return (
     <div
       style={{
-        minHeight: '100vh',
+        minHeight: '100dvh',
         background: 'var(--sand)',
         display: 'flex',
         alignItems: 'center',
@@ -45,27 +46,8 @@ export default function Login() {
         style={{ width: '100%', maxWidth: 400 }}
       >
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          {/* Logo mark */}
-          <div
-            style={{
-              width: 48,
-              height: 48,
-              background: 'var(--navy)',
-              borderRadius: 12,
-              margin: '0 auto 16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-              <path d="M14 4L4 8v6c0 5.5 4.3 10.6 10 12 5.7-1.4 10-6.5 10-12V8L14 4z" fill="var(--gold)" />
-            </svg>
-          </div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: 'var(--navy)', fontFamily: 'var(--font-display)' }}>
-            RecoveryOS
-          </h1>
-          <p style={{ margin: '8px 0 0', fontSize: 14, color: 'var(--muted)' }}>
+          <Logo height={88} style={{ display: 'block', margin: '0 auto' }} />
+          <p style={{ margin: '14px 0 0', fontSize: 14, color: 'var(--muted)' }}>
             {t('auth.login.title')}
           </p>
         </div>

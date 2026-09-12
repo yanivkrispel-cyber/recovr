@@ -11,6 +11,8 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
 import webpush from 'npm:web-push@3.6.7';
+import { withCors } from '../_shared/cors.ts';
+import { sendViaGmail } from '../_shared/gmail-smtp.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -19,9 +21,12 @@ const VAPID_PRIVATE = Deno.env.get('VAPID_PRIVATE_KEY') ?? '';
 const VAPID_SUBJECT = Deno.env.get('VAPID_SUBJECT') ?? 'mailto:ops@recoveryos.local';
 const DISPATCH_SECRET = Deno.env.get('DISPATCH_SECRET') ?? '';
 const APP_BASE_URL = Deno.env.get('APP_BASE_URL') ?? 'http://localhost:5173';
+// Prod: Gmail SMTP relay (GMAIL_SMTP_USER/PASSWORD — see _shared/gmail-smtp.ts).
+// Local dev: falls back to the raw SMTP relay (Inbucket) below when unset.
+const GMAIL_CONFIGURED = !!(Deno.env.get('GMAIL_SMTP_USER') && Deno.env.get('GMAIL_SMTP_PASSWORD'));
 const SMTP_HOST = Deno.env.get('SMTP_HOST') ?? '';
 const SMTP_PORT = Number(Deno.env.get('SMTP_PORT') ?? '2500');
-const SMTP_FROM = Deno.env.get('SMTP_FROM') ?? 'RecoveryOS <digest@recoveryos.local>';
+const SMTP_FROM = Deno.env.get('SMTP_FROM') ?? 'ReCOVR <digest@recoveryos.local>';
 
 if (VAPID_PUBLIC && VAPID_PRIVATE) {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
@@ -110,9 +115,15 @@ function digestEmail(v: NotifVars): { subject: string; text: string; html: strin
   return { subject, text, html };
 }
 
-async function sendEmail(to: string, subject: string, text: string, html: string): Promise<void> {
+// Prod path: Gmail's SMTP relay (authenticated, TLS) — see _shared/gmail-smtp.ts.
+async function sendEmailViaGmail(to: string, subject: string, html: string): Promise<void> {
+  await sendViaGmail(to, subject, html);
+}
+
+// Local-dev-only path: minimal plain SMTP over raw TCP against the Inbucket
+// relay — no AUTH / STARTTLS, will not work against a real mail provider.
+async function sendEmailViaSmtp(to: string, subject: string, text: string, html: string): Promise<void> {
   if (!SMTP_HOST) throw new Error('SMTP not configured');
-  // Minimal SMTP over a raw TCP connection (plain, local dev relay only).
   const conn = await Deno.connect({ hostname: SMTP_HOST, port: SMTP_PORT });
   const enc = new TextEncoder();
   const dec = new TextDecoder();
@@ -135,7 +146,12 @@ async function sendEmail(to: string, subject: string, text: string, html: string
   conn.close();
 }
 
-Deno.serve(async (req) => {
+async function sendEmail(to: string, subject: string, text: string, html: string): Promise<void> {
+  if (GMAIL_CONFIGURED) return sendEmailViaGmail(to, subject, html);
+  return sendEmailViaSmtp(to, subject, text, html);
+}
+
+Deno.serve(withCors(async (req) => {
   if (DISPATCH_SECRET && req.headers.get('x-dispatch-secret') !== DISPATCH_SECRET) {
     return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 });
   }
@@ -203,4 +219,4 @@ Deno.serve(async (req) => {
   }
 
   return new Response(JSON.stringify({ sent, failed }), { headers: { 'Content-Type': 'application/json' } });
-});
+}));

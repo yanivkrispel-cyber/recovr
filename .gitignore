@@ -17,8 +17,15 @@ supabase/.env
 .env
 .env.local
 .env.*.local
+.env.production
 apps/clinician/.env
 apps/patient/.env
+apps/clinician/.env.production
+apps/patient/.env.production
+
+# Firebase Hosting
+firebase-public/
+.firebase/
 
 # IDE
 .vscode/

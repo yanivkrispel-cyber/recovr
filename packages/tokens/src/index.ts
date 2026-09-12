@@ -1,4 +1,4 @@
-// RecoveryOS Design Tokens
+// ReCOVR Design Tokens
 // Single source of all style values — no ad-hoc hex in components.
 // Generated from DESIGN_TOKENS.md
 

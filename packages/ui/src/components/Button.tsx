@@ -24,6 +24,15 @@ const sizeStyles: Record<ButtonSize, React.CSSProperties> = {
   lg: { padding: '14px 24px', fontSize: 15, minHeight: 48 },
 };
 
+function Spinner() {
+  return (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" aria-hidden className="spin">
+      <circle cx={12} cy={12} r={10} stroke="currentColor" strokeWidth={3} opacity={0.25} />
+      <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeWidth={3} strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function Button({
   variant = 'primary',
   size = 'md',
@@ -40,6 +49,7 @@ export function Button({
     <button
       {...props}
       disabled={isDisabled}
+      aria-busy={loading || undefined}
       style={{
         ...variantStyles[variant],
         ...sizeStyles[size],
@@ -47,7 +57,7 @@ export function Button({
         fontFamily: 'var(--font-ui)',
         fontWeight: 600,
         cursor: isDisabled ? 'not-allowed' : 'pointer',
-        opacity: isDisabled ? 0.45 : 1,
+        opacity: disabled && !loading ? 0.45 : 1,
         pointerEvents: isDisabled ? 'none' : 'auto',
         display: 'inline-flex',
         alignItems: 'center',
@@ -56,9 +66,9 @@ export function Button({
         ...style,
       }}
     >
-      {iconLeft}
+      {loading ? <Spinner /> : iconLeft}
       <span>{children}</span>
-      {iconRight}
+      {!loading && iconRight}
     </button>
   );
 }

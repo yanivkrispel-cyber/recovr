@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { RouterProvider } from '@tanstack/react-router';
+import { FullPageLoader } from 'ui';
 import { t } from 'shared';
 import type { User } from 'shared';
 import Login from './pages/Login';
@@ -24,50 +25,44 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   React.useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session?.user && import.meta.env.DEV && import.meta.env.VITE_DEV_AUTO_LOGIN === '1') {
-        // Dev-only convenience: skip the login form by signing in with a
-        // seeded account automatically. `import.meta.env.DEV` is a Vite
-        // build-time constant — this whole branch is dead-code-eliminated
-        // from production bundles, so it can never ship live.
-        const { error } = await supabase.auth.signInWithPassword({
+    // Dev-only convenience: skip the login form by signing in with a seeded
+    // account automatically, before the auth-state listener below picks up
+    // whatever session results. `import.meta.env.DEV` is a Vite build-time
+    // constant — this whole branch is dead-code-eliminated from production
+    // bundles, so it can never ship live.
+    if (import.meta.env.DEV && import.meta.env.VITE_DEV_AUTO_LOGIN === '1') {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user) return;
+        supabase.auth.signInWithPassword({
           email: import.meta.env.VITE_DEV_AUTO_LOGIN_EMAIL ?? 'clinician@demo.recoveryos.app',
           password: import.meta.env.VITE_DEV_AUTO_LOGIN_PASSWORD ?? 'demo12345678',
+        }).then(({ error }) => {
+          if (error) console.warn('VITE_DEV_AUTO_LOGIN sign-in failed:', error.message);
         });
-        if (error) console.warn('VITE_DEV_AUTO_LOGIN sign-in failed:', error.message);
-        const { data: { session: newSession } } = await supabase.auth.getSession();
-        session = newSession;
-      }
+      });
+    }
 
-      if (session?.user) {
-        // Load user metadata
-        supabase
-          .schema('app')
-          .from('user')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
-          .then(({ data }) => {
-            setUser(data as User);
-            setLoading(false);
-          });
-      } else {
-        setLoading(false);
-      }
-    });
-
+    // onAuthStateChange fires immediately with the current session on
+    // subscribe (INITIAL_SESSION), in addition to future sign-in/out events —
+    // so this alone drives both the first load and later changes. A separate
+    // getSession()-triggered fetch here would just duplicate the same
+    // request on every mount.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
         if (session?.user) {
-          const { data } = await supabase
+          supabase
             .schema('app')
             .from('user')
             .select('*')
             .eq('id', session.user.id)
-            .single();
-          setUser(data as User);
+            .single()
+            .then(({ data }) => {
+              setUser(data as User);
+              setLoading(false);
+            });
         } else {
           setUser(null);
+          setLoading(false);
         }
       },
     );
@@ -84,20 +79,7 @@ export default function App() {
   }
 
   if (loading) {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100vh',
-          fontFamily: 'var(--font-ui)',
-          color: 'var(--muted)',
-        }}
-      >
-        {t('loading.generic')}
-      </div>
-    );
+    return <FullPageLoader background="var(--sand)" label={t('loading.generic')} />;
   }
 
   return (

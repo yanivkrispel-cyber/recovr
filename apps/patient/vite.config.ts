@@ -19,8 +19,8 @@ export default defineConfig({
       },
       manifest: {
         id: '/m/',
-        name: 'RecoveryOS — מטופל',
-        short_name: 'RecoveryOS',
+        name: 'ReCOVR',
+        short_name: 'ReCOVR',
         description: 'תוכנית השיקום היומית שלי',
         lang: 'he',
         dir: 'rtl',

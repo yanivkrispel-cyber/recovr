@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { patientAcceptSchema, t, tZodError, type PatientAcceptInput } from 'shared';
-import { Button, Input, Card, Checkbox, Skeleton, EmptyState, QueryError } from 'ui';
+import { Button, Input, Card, Checkbox, Skeleton, EmptyState, QueryError, Logo } from 'ui';
 import { supabase } from '../App';
 
 interface InviteAcceptProps {
@@ -79,7 +79,7 @@ export default function InviteAccept({ token, onDone }: InviteAcceptProps) {
 
   if (loadError) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', padding: 24 }}>
+      <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', padding: 24 }}>
         {loadError === 'network' ? (
           <QueryError
             title={t('error.generic.title')}
@@ -111,7 +111,7 @@ export default function InviteAccept({ token, onDone }: InviteAcceptProps) {
   return (
     <div
       style={{
-        minHeight: '100vh',
+        minHeight: '100dvh',
         background: 'var(--cream)',
         display: 'flex',
         alignItems: 'center',
@@ -123,6 +123,7 @@ export default function InviteAccept({ token, onDone }: InviteAcceptProps) {
     >
       <Card padding={28} style={{ width: '100%', maxWidth: 420 }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <Logo height={40} style={{ display: 'block', margin: '0 auto 14px' }} />
           <h1
             style={{
               margin: 0,

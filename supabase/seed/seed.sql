@@ -82,7 +82,7 @@ VALUES (
   '22222222-2222-2222-2222-222222222222',
   '11111111-1111-1111-1111-111111111111',
   'clinician',
-  'ד״ר רונית',
+  'קריספל',
   'clinician@demo.recoveryos.app',
   crypt('demo12345678', gen_salt('bf')),
   'active',

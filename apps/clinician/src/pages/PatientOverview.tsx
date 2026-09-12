@@ -2,7 +2,7 @@ import { useContext, useState, type CSSProperties } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { t } from 'shared';
-import { Badge, Button, Skeleton, EmptyState, Tab, Tabs, clickableDivProps, useIsTablet } from 'ui';
+import { Badge, Button, Skeleton, EmptyState, Tab, Tabs, clickableDivProps, useIsTablet, useToast } from 'ui';
 import { AuthContext, SupabaseContext } from '../App';
 import AppShell from '../components/AppShell';
 import EditPlan from '../components/EditPlan';
@@ -97,6 +97,7 @@ export default function PatientOverview() {
   const { patientId } = useParams({ from: '/patients/$patientId' });
   const [editOpen, setEditOpen] = useState(false);
   const isTablet = useIsTablet(); // T-22: tablet is view-only for v1
+  const toast = useToast();
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['patient-overview', patientId],
@@ -132,6 +133,32 @@ export default function PatientOverview() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deletion-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['patient-overview', patientId] });
+    },
+  });
+
+  const discharge = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke(`patient-overview/patients/${patientId}/discharge`, { method: 'POST' });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      return data;
+    },
+    onSuccess: () => {
+      toast.show(t('toast.patient_discharged'), { tone: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['patient-overview', patientId] });
+    },
+  });
+
+  const reactivate = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke(`patient-overview/patients/${patientId}/reactivate`, { method: 'POST' });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      return data;
+    },
+    onSuccess: () => {
+      toast.show(t('toast.patient_reactivated'), { tone: 'success' });
       queryClient.invalidateQueries({ queryKey: ['patient-overview', patientId] });
     },
   });
@@ -180,8 +207,9 @@ export default function PatientOverview() {
               >
                 → {t('clinician.dashboard.title')} · Back to Dashboard
               </button>
-              <div style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.01em', fontSize: 22, fontWeight: 700, color: 'var(--ink)' }}>
+              <div style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.01em', fontSize: 22, fontWeight: 700, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
                 {data.patient.name} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--nav-inactive-text)' }}>{data.patient.name_en}</span>
+                {data.patient.status === 'discharged' && <Badge tone="neutral">משוחרר · Discharged</Badge>}
               </div>
               {data.plan && (
                 <>
@@ -192,7 +220,36 @@ export default function PatientOverview() {
                 </>
               )}
             </div>
-            {!isTablet && <Button onClick={() => setEditOpen(true)}>{t('clinician.plan.edit')}</Button>}
+            {!isTablet && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                {data.patient.status === 'discharged' ? (
+                  <Button
+                    variant="secondary"
+                    disabled={reactivate.isPending}
+                    loading={reactivate.isPending}
+                    onClick={() => reactivate.mutate()}
+                  >
+                    {t('clinician.patient.reactivate')}
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="secondary" onClick={() => setEditOpen(true)}>{t('clinician.plan.edit')}</Button>
+                    <Button
+                      variant="secondary"
+                      disabled={discharge.isPending}
+                      loading={discharge.isPending}
+                      onClick={() => {
+                        if (window.confirm(`${t('confirm.discharge.title')}\n${t('confirm.discharge.body')}`)) {
+                          discharge.mutate();
+                        }
+                      }}
+                    >
+                      {t('clinician.patient.discharge')}
+                    </Button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           <Tabs defaultValue="overview">

@@ -5,6 +5,7 @@
 // edge (Kong).
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
+import { withCors } from '../_shared/cors.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -15,7 +16,7 @@ function log(level: string, msg: string, ctx: Record<string, unknown> = {}): voi
   console.log(JSON.stringify({ level, fn: 'client-errors', msg, ...ctx }));
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withCors(async (req) => {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 });
   }
@@ -58,4 +59,4 @@ Deno.serve(async (req) => {
 
   log('info', 'client error recorded', { app: String(payload.app ?? ''), kind: String(payload.kind ?? '') });
   return new Response(null, { status: 204 });
-});
+}));

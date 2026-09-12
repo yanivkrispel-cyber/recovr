@@ -43,7 +43,7 @@ self.addEventListener('push', (event) => {
     data = { body: event.data?.text() };
   }
   event.waitUntil(
-    self.registration.showNotification(data.title ?? 'RecoveryOS', {
+    self.registration.showNotification(data.title ?? 'ReCOVR', {
       body: data.body ?? '',
       tag: data.tag,
       dir: 'rtl',

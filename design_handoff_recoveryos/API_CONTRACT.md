@@ -20,10 +20,12 @@ patient's timezone · cursor pagination (`?cursor=&limit=`) · `Idempotency-Key`
 | Method | Path | Returns |
 |---|---|---|
 | GET | `/dashboard` | `{kpis:{active_patients,avg_adherence,attention_count,ready_count}, patients:[PatientRow], alerts:[Alert]}` |
-| GET | `/patients?filter=all\|attention\|ready\|inactive&q=&cursor=` | `[PatientRow]` |
+| GET | `/patients?filter=all\|attention\|ready\|inactive\|discharged&q=&cursor=` | `[PatientRow]` |
 | POST | `/patients` | create + assign protocol + optional exercise exclusions → sends invite |
 | GET | `/patients/:id` | full overview: patient, plan summary, criteria, alerts, today, recent activity |
-| PATCH | `/patients/:id` | demographics, status, primary clinician |
+| PATCH | `/patients/:id` | demographics, primary clinician — not yet implemented |
+| POST | `/patients/:id/discharge` | archive: `status='discharged'`. Non-destructive — data untouched, patient drops out of `filter=all` until reactivated. Idempotent. |
+| POST | `/patients/:id/reactivate` | undo a discharge: `status='active'` |
 | GET | `/patients/:id/plan?version=N` | current or specific `plan_version` |
 | POST | `/patients/:id/plan/versions` | `{changes:[...], note}` → creates a new version atomically |
 | POST | `/patients/:id/phase-transitions` | `{to_phase_n, override_reason?}` → approve/regress |
@@ -34,7 +36,7 @@ patient's timezone · cursor pagination (`?cursor=&limit=`) · `Idempotency-Key`
 | GET | `/patients/:id/home-program.pdf` | server-rendered PDF of the printed program |
 | GET | `/alerts?state=open` · POST `/alerts/:id/review` | alert inbox |
 | GET | `/protocols` · `/protocols/:slug` | library + phases + criteria |
-| GET | `/exercises?q=&category=&region=&protocol=&phase=` | library search (used by Add Exercise) |
+| GET | `/exercises?q=&category=&region=&protocol=&phase=&limit=&offset=` | library search (used by Add Exercise) → `{items:[Exercise], total}`. `limit` defaults to 60, capped at 200. |
 | POST | `/exercises` | clinic-custom exercise |
 | GET/POST/DELETE | `/plan-templates` | saved phase templates |
 | GET | `/measure-definitions` | measurement catalog, clinic overrides over system defaults |

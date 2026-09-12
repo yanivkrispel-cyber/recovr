@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { t } from 'shared';
+import { Logo } from 'ui';
 import { supabase } from '../App';
+import { secondaryLabel } from '../lib/label';
 
 interface Media {
   kind: 'image' | 'gif' | 'video';
@@ -71,7 +73,12 @@ function frequency(e: PlanExercise): string {
 }
 
 function printImage(media: Media[]): Media | null {
-  return media.find((m) => m.kind === 'image') ?? media.find((m) => m.kind === 'gif') ?? media[0] ?? null;
+  // A video's url is a bare YouTube id, not an image src — never printable,
+  // so it's excluded from every fallback tier including the last-resort one.
+  return media.find((m) => m.kind === 'image')
+    ?? media.find((m) => m.kind === 'gif')
+    ?? media.find((m) => m.kind !== 'video')
+    ?? null;
 }
 
 const PRINT_CSS = `
@@ -159,12 +166,8 @@ function PageOne({ data, printedOn }: { data: HomeProgram; printedOn: string }) 
     <section className="hpp-page">
       <div style={{ background: 'var(--navy)', color: 'var(--cream)', padding: '22px 40px 18px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <svg width="26" height="22" viewBox="0 0 26 22" fill="none" aria-hidden="true">
-            <path d="M1 21V5l6 6 6-10 6 10 6-6v16H1Z" stroke="var(--gold)" strokeWidth="1.6" strokeLinejoin="round" />
-            <path d="M5.5 16.5h15" stroke="var(--gold)" strokeWidth="1.6" />
-          </svg>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 13, letterSpacing: '0.14em', textTransform: 'uppercase' }}>RecoveryOS</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <Logo tone="light" height={30} />
             <div style={{ fontFamily: 'var(--font-accent)', fontStyle: 'italic', fontSize: 13, color: 'rgba(201,162,75,.8)' }}>precision rehab, phase by phase</div>
           </div>
         </div>
@@ -198,7 +201,7 @@ function PageOne({ data, printedOn }: { data: HomeProgram; printedOn: string }) 
                 <tr key={i} style={{ background: i % 2 === 0 ? 'var(--paper)' : undefined }}>
                   <td style={{ padding: '8px 10px', borderBottom: '1px solid var(--line-soft)' }}>
                     <div style={{ fontWeight: 700 }}>{e.name}</div>
-                    {e.name_en && <div style={{ fontSize: 9.5, color: 'var(--muted-2)' }}>{e.name_en}</div>}
+                    {secondaryLabel(e.name, e.name_en) && <div style={{ fontSize: 9.5, color: 'var(--muted-2)' }}>{secondaryLabel(e.name, e.name_en)}</div>}
                   </td>
                   <td style={{ padding: 8, borderBottom: '1px solid var(--line-soft)', fontVariantNumeric: 'tabular-nums' }}>{prescription(e)}</td>
                   <td style={{ padding: 8, borderBottom: '1px solid var(--line-soft)' }}>{frequency(e)}</td>
@@ -305,7 +308,7 @@ function PageTwo({ data }: { data: HomeProgram }) {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, flexWrap: 'wrap' }}>
                     <div style={{ fontSize: 15, fontWeight: 700 }}>{e.name}</div>
-                    {e.name_en && <div style={{ fontSize: 10.5, color: 'var(--muted-2)' }}>{e.name_en}</div>}
+                    {secondaryLabel(e.name, e.name_en) && <div style={{ fontSize: 10.5, color: 'var(--muted-2)' }}>{secondaryLabel(e.name, e.name_en)}</div>}
                     <div style={{ marginInlineStart: 'auto', fontSize: 10, background: 'var(--navy)', color: 'var(--cream)', borderRadius: 999, padding: '3px 9px', whiteSpace: 'nowrap' }}>
                       {prescription(e)} · {frequency(e)}
                     </div>

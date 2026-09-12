@@ -1,0 +1,35 @@
+{
+  "hosting": {
+    "site": "recovr-bykrispel",
+    "public": "firebase-public",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "cleanUrls": true,
+    "trailingSlash": false,
+    "rewrites": [
+      { "source": "/app/**", "destination": "/app/index.html" },
+      { "source": "/m/**", "destination": "/m/index.html" }
+    ],
+    "headers": [
+      {
+        "source": "**/*.@(js|css|woff2|svg|png|jpg)",
+        "headers": [{ "key": "Cache-Control", "value": "max-age=31536000,immutable" }]
+      },
+      {
+        "source": "**/*.html",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      },
+      {
+        "source": "/app/sw.js",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      },
+      {
+        "source": "/m/sw.js",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      },
+      {
+        "source": "/m/manifest.webmanifest",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      }
+    ]
+  }
+}

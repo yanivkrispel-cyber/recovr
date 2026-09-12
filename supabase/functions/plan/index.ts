@@ -1,8 +1,10 @@
 // Edge Function: patient plan (T-07).
-//   GET  /patients/:id/plan?version=N   -> app.get_plan (N omitted = current)
-//   POST /patients/:id/plan/versions    -> app.save_plan_version, atomic
+//   GET   /patients/:id/plan?version=N   -> app.get_plan (N omitted = current)
+//   POST  /patients/:id/plan/versions    -> app.save_plan_version, atomic
+//   PATCH /patients/:id/plan             -> app.rename_patient_pathology
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
+import { withCors } from '../_shared/cors.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -16,7 +18,7 @@ interface SaveInput {
   criteria?: unknown[];
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withCors(async (req) => {
   const authHeader = req.headers.get('Authorization')!;
   const token = authHeader.replace('Bearer ', '');
 
@@ -121,5 +123,44 @@ Deno.serve(async (req) => {
     });
   }
 
+  if (req.method === 'PATCH') {
+    // .../patients/:id/plan — id is second-to-last segment.
+    const patientId = parts[parts.length - 2];
+    if (!patientId) {
+      return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
+    }
+
+    const body = await req.json().catch(() => ({})) as { name?: unknown };
+    if (typeof body.name !== 'string' || body.name.trim() === '') {
+      return new Response(JSON.stringify({ error: 'validation_failed' }), { status: 422 });
+    }
+
+    const { data: result, error } = await service.schema('app').rpc('rename_patient_pathology', {
+      p_clinician_id: user.id,
+      p_patient_id: patientId,
+      p_name: body.name,
+    });
+
+    if (error) {
+      return new Response(JSON.stringify({ error: 'internal_error', details: error.message }), { status: 500 });
+    }
+    if (result?.error === 'forbidden') {
+      return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 });
+    }
+    if (result?.error === 'not_found') {
+      return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
+    }
+    if (result?.error === 'not_custom') {
+      return new Response(JSON.stringify({ error: 'not_custom' }), { status: 422 });
+    }
+    if (result?.error === 'validation_failed') {
+      return new Response(JSON.stringify({ error: 'validation_failed' }), { status: 422 });
+    }
+
+    return new Response(JSON.stringify(result), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   return new Response('Method not allowed', { status: 405 });
-});
+}));

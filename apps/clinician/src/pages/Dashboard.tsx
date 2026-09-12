@@ -11,10 +11,10 @@ import { enablePush } from '../lib/push';
 type PatientRow = {
   id: string;
   name: string;
-  status: 'ontrack' | 'attention' | 'ready' | 'inactive';
+  status: 'ontrack' | 'attention' | 'ready' | 'inactive' | 'pending';
   injury: string;
   phaseName: string;
-  adherence: number;
+  adherence: number | null;
   lastActivity: string;
 };
 
@@ -30,6 +30,7 @@ const statusLabel: Record<PatientRow['status'], string> = {
   attention: 'תשומת לב',
   ready: 'מוכן לקידום',
   inactive: 'לא פעיל',
+  pending: 'ממתין/ת להפעלה',
 };
 
 function chipStyle(active: boolean): CSSProperties {
@@ -195,7 +196,7 @@ export default function Dashboard() {
                 </button>
               ))}
             </div>
-            <Button size="sm" onClick={() => navigate({ to: '/patients' })}>
+            <Button size="sm" onClick={() => navigate({ to: '/patients', search: { invite: true } })}>
               + {t('clinician.patient.add')}
             </Button>
           </div>
@@ -237,11 +238,11 @@ export default function Dashboard() {
               >
                 <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>{row.name}</div>
                 <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{row.injury}</div>
-                <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{row.phaseName}</div>
-                <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{row.adherence}%</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{row.status === 'pending' ? '—' : row.phaseName}</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{row.adherence == null ? '—' : `${row.adherence}%`}</div>
                 <div style={{ fontSize: 12, color: 'var(--nav-inactive-text)' }}>{row.lastActivity}</div>
                 <div>
-                  <Badge tone={row.status === 'attention' || row.status === 'inactive' ? 'attention' : 'success'}>
+                  <Badge tone={row.status === 'pending' ? 'neutral' : row.status === 'attention' || row.status === 'inactive' ? 'attention' : 'success'}>
                     {statusLabel[row.status]}
                   </Badge>
                 </div>

@@ -1,7 +1,24 @@
-/* RecoveryOS Design Tokens — CSS Layer */
+/* ReCOVR Design Tokens — CSS Layer */
 /* Generated from DESIGN_TOKENS.md — single source of style values */
 
 @import url('./fonts.css');
+
+/* Base reset. Without this, the browser's default 8px body margin shows as
+   a white frame around the app, and page-level `100vh` wrappers overflow
+   the viewport (body margin + 100vh > viewport height), forcing scroll. */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+#root {
+  min-height: 100%;
+}
 
 :root {
   /* Color tokens */
@@ -116,6 +133,26 @@
 
 .shimmer {
   animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* Full-page loading: brand mark breathing, not a bare spinner */
+@keyframes logo-pulse {
+  0% { opacity: .4; transform: scale(.94); }
+  50% { opacity: 1; transform: scale(1); }
+  100% { opacity: .4; transform: scale(.94); }
+}
+
+.logo-pulse {
+  animation: logo-pulse 1.4s ease-in-out infinite;
+}
+
+/* Inline button/inline spinner (rotating ring) */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 0.7s linear infinite;
 }
 
 /* RTL-aware focus ring */

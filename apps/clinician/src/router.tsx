@@ -3,6 +3,7 @@ import Dashboard from './pages/Dashboard';
 import PatientList from './pages/PatientList';
 import PatientOverview from './pages/PatientOverview';
 import ExerciseLibrary from './pages/ExerciseLibrary';
+import Protocols from './pages/Protocols';
 import Settings from './pages/Settings';
 
 const rootRoute = createRootRoute({
@@ -27,12 +28,21 @@ const patientsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/patients',
   component: PatientList,
+  validateSearch: (search: Record<string, unknown>): { invite?: boolean } => ({
+    invite: search.invite === true || search.invite === '1' ? true : undefined,
+  }),
 });
 
 const patientOverviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/patients/$patientId',
   component: PatientOverview,
+});
+
+const protocolsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/protocols',
+  component: Protocols,
 });
 
 const exercisesRoute = createRoute({
@@ -52,6 +62,7 @@ const routeTree = rootRoute.addChildren([
   dashboardRoute,
   patientsRoute,
   patientOverviewRoute,
+  protocolsRoute,
   exercisesRoute,
   settingsRoute,
 ]);

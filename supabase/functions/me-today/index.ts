@@ -2,11 +2,13 @@
 // Returns the current patient's session for today in their local timezone.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
+import { withCors } from '../_shared/cors.ts';
+import { getSignedMediaUrl } from '../_shared/signed-media-url.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-Deno.serve(async (req) => {
+Deno.serve(withCors(async (req) => {
   if (req.method !== 'GET') {
     return new Response('Method not allowed', { status: 405 });
   }
@@ -65,11 +67,12 @@ Deno.serve(async (req) => {
   for (const it of items) {
     const media = Array.isArray(it?.exercise?.media) ? it.exercise.media : [];
     for (const m of media) {
+      if (m.kind === 'video') continue; // url is a YouTube id, not a Storage path
       for (const field of ['url', 'thumb_url'] as const) {
         const path = m[field];
         if (typeof path === 'string' && path && !path.startsWith('http') && !path.startsWith('/storage/')) {
-          const { data: signed } = await service.storage.from('exercise-media').createSignedUrl(path, 3600);
-          if (signed?.signedUrl) m[field] = signed.signedUrl.replace(/^https?:\/\/[^/]+/, '');
+          const signedUrl = await getSignedMediaUrl(service, path);
+          if (signedUrl) m[field] = signedUrl.replace(/^https?:\/\/[^/]+/, '');
         }
       }
     }
@@ -78,4 +81,4 @@ Deno.serve(async (req) => {
   return new Response(JSON.stringify(result), {
     headers: { 'Content-Type': 'application/json' },
   });
-});
+}));

@@ -2,7 +2,7 @@ import { useContext, type CSSProperties, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { t } from 'shared';
 import type { User } from 'shared';
-import { useOnlineStatus } from 'ui';
+import { Logo, useOnlineStatus } from 'ui';
 import { SupabaseContext } from '../App';
 
 interface AppShellProps {
@@ -58,7 +58,7 @@ export default function AppShell({ user, children }: AppShellProps) {
   const initials = user.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('');
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--shell-content-bg)', fontFamily: 'var(--font-ui)', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100dvh', background: 'var(--shell-content-bg)', fontFamily: 'var(--font-ui)', display: 'flex', flexDirection: 'column' }}>
       {!online && (
         <div
           role="status"
@@ -84,27 +84,13 @@ export default function AppShell({ user, children }: AppShellProps) {
           boxSizing: 'border-box',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '0 10px 20px' }}>
-          <svg width="20" height="17" viewBox="0 0 26 22" fill="none" aria-hidden="true">
-            <path d="M1 21V5l6 6 6-10 6 10 6-6v16H1Z" stroke="var(--gold-deep)" strokeWidth={1.8} strokeLinejoin="round" />
-            <path d="M5.5 16.5h15" stroke="var(--gold-deep)" strokeWidth={1.8} />
-          </svg>
-          <div
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontWeight: 800,
-              fontSize: 13,
-              letterSpacing: '0.13em',
-              textTransform: 'uppercase',
-              color: 'var(--ink)',
-            }}
-          >
-            RecoveryOS
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '0 6px 22px' }}>
+          <Logo height={62} />
         </div>
 
         <NavItem to="/dashboard" label={t('clinician.dashboard.title')} labelEn={t('clinician.dashboard.nav_en')} />
         <NavItem to="/patients" label={t('clinician.patients.title')} labelEn={t('clinician.patients.nav_en')} />
+        <NavItem to="/protocols" label={t('clinician.protocol.nav')} labelEn={t('clinician.protocol.nav_en')} />
         <NavItem to="/exercises" label={t('clinician.exercise.nav')} labelEn={t('clinician.exercise.nav_en')} />
         <NavItem to="/settings" label={t('clinician.settings.nav')} labelEn={t('clinician.settings.nav_en')} />
 

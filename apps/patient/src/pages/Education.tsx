@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Skeleton, QueryError } from 'ui';
 import { t } from 'shared';
 import { supabase } from '../App';
+import { secondaryLabel } from '../lib/label';
 
 interface Goal {
   he: string;
@@ -65,7 +66,7 @@ export default function Education({ onBack }: EducationProps) {
         <>
           <div style={{ background: 'var(--patient-card)', border: '1px solid var(--patient-border)', borderRadius: 12, padding: 16 }}>
             <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--patient-text)' }}>
-              {data.phase_name} {data.phase_name_en && <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--patient-muted)' }}>{data.phase_name_en}</span>}
+              {data.phase_name} {secondaryLabel(data.phase_name, data.phase_name_en) && <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--patient-muted)' }}>{secondaryLabel(data.phase_name, data.phase_name_en)}</span>}
             </div>
           </div>
 

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Skeleton, QueryError, clickableDivProps } from 'ui';
 import { t } from 'shared';
 import { supabase } from '../App';
+import { secondaryLabel } from '../lib/label';
 
 interface TodayItem {
   id: string;
@@ -167,7 +168,12 @@ export default function Home({ onStartExercise, onOpenProgress, onOpenEducation 
             )}
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--patient-text)' }}>
-                {item.exercise.name} <span style={{ fontWeight: 400, color: 'var(--patient-muted)', fontSize: 11 }}>{item.exercise.name_en}</span>
+                {item.exercise.name}
+                {secondaryLabel(item.exercise.name, item.exercise.name_en) && (
+                  <span style={{ fontWeight: 400, color: 'var(--patient-muted)', fontSize: 11 }}>
+                    {' '}{secondaryLabel(item.exercise.name, item.exercise.name_en)}
+                  </span>
+                )}
               </div>
               <div style={{ fontSize: 11, color: 'var(--patient-muted)' }}><bdi>{item.sets} × {item.reps}</bdi></div>
             </div>

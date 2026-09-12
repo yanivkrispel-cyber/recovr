@@ -3,6 +3,7 @@
 // Server dedupes on session_item.id (client-generated UUIDv7).
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
+import { withCors } from '../_shared/cors.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -21,7 +22,7 @@ interface ItemInput {
   logged_at: string;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withCors(async (req) => {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 });
   }
@@ -84,4 +85,4 @@ Deno.serve(async (req) => {
     JSON.stringify({ items, deduped: body.items.length !== items.length }),
     { headers: { 'Content-Type': 'application/json' } },
   );
-});
+}));

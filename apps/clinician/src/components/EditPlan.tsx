@@ -50,6 +50,7 @@ interface PlanPhase {
 interface PlanData {
   version: number;
   current_phase_n: number;
+  pathology: { protocol_id: string; name: string; is_custom: boolean };
   phases: PlanPhase[];
   protocol_phases: ProtocolPhase[];
 }
@@ -125,6 +126,10 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
   const [conflict, setConflict] = useState<{ currentVersion: number } | null>(null);
   const [templateName, setTemplateName] = useState('');
   const [savingTemplate, setSavingTemplate] = useState(false);
+  const [pathologyName, setPathologyName] = useState('');
+  const [pathologySaving, setPathologySaving] = useState(false);
+  const [pathologyError, setPathologyError] = useState<string | null>(null);
+  const [pathologyFlash, setPathologyFlash] = useState(false);
 
   // Reset editor state whenever it's (re)opened or the plan finishes loading.
   useEffect(() => {
@@ -133,6 +138,9 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
     loadPhaseIntoDraft(initialPhase);
     setEditTab('exercises');
     setSavedFlash(false);
+    setPathologyName(plan.pathology?.name ?? '');
+    setPathologyError(null);
+    setPathologyFlash(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, plan]);
 
@@ -156,7 +164,7 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
     if (reg) params.set('region', reg);
     if (phaseN) params.set('phase', String(phaseN));
     const { data } = await supabase.functions.invoke(`exercises?${params.toString()}`, { method: 'GET' });
-    setAddResults((data as ExerciseOption[]) ?? []);
+    setAddResults((data as { items: ExerciseOption[] })?.items ?? []);
   }
 
   function openAddPanel() {
@@ -358,6 +366,25 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
     setTemplateName('');
   }
 
+  async function savePathology() {
+    const name = pathologyName.trim();
+    if (!plan || !name || name === plan.pathology.name) return;
+    setPathologySaving(true);
+    setPathologyError(null);
+    const { data, error } = await supabase.functions.invoke(`plan/patients/${patientId}/plan`, {
+      method: 'PATCH',
+      body: { name },
+    });
+    setPathologySaving(false);
+    if (error || (data as { error?: string })?.error) {
+      setPathologyError(t('error.save.body'));
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ['plan', patientId] });
+    setPathologyFlash(true);
+    onSaved();
+  }
+
   function handleConflictReload() {
     setConflict(null);
     queryClient.invalidateQueries({ queryKey: ['plan', patientId] });
@@ -458,6 +485,43 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
             </div>
 
             <div style={{ flex: 1, overflow: 'auto', padding: '22px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+                <div style={{ flex: 1, maxWidth: 420 }}>
+                  <Input
+                    label="פתולוגיה · Pathology"
+                    value={pathologyName}
+                    disabled={!plan.pathology.is_custom || pathologySaving}
+                    onChange={(e) => {
+                      setPathologyName(e.target.value);
+                      setPathologyFlash(false);
+                    }}
+                    hint={
+                      plan.pathology.is_custom
+                        ? undefined
+                        : 'פתולוגיה מפרוטוקול ספרייה — לא ניתן לשנות מכאן'
+                    }
+                    error={pathologyError ?? undefined}
+                  />
+                </div>
+                {plan.pathology.is_custom && (
+                  <Button
+                    variant="ghost"
+                    loading={pathologySaving}
+                    disabled={
+                      !pathologyName.trim() || pathologyName.trim() === plan.pathology.name
+                    }
+                    onClick={savePathology}
+                  >
+                    עדכן · Update
+                  </Button>
+                )}
+                {pathologyFlash && (
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--flag-green)', paddingBottom: 9 }}>
+                    ✓ עודכן
+                  </span>
+                )}
+              </div>
+
               <div style={{ display: 'flex', gap: 20, borderBottom: '1px solid var(--shell-border)' }}>
                 <button onClick={() => setEditTab('goals')} style={editTabStyle(editTab === 'goals')}>מטרות · Goals</button>
                 <button onClick={() => setEditTab('exercises')} style={editTabStyle(editTab === 'exercises')}>תרגילים · Exercises</button>
@@ -694,7 +758,12 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
         )}
       </div>
 
-      <ExerciseDetailDrawer exerciseId={detailId} open={detailId !== null} onClose={() => setDetailId(null)} />
+      <ExerciseDetailDrawer
+        exerciseId={detailId}
+        open={detailId !== null}
+        onClose={() => setDetailId(null)}
+        onDuplicated={(newId) => setDetailId(newId)}
+      />
     </div>
   );
 }

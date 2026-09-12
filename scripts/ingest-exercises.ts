@@ -37,6 +37,9 @@ const UPLOAD_CONCURRENCY = 8;
 const args = new Set(Deno.args);
 const DRY_RUN = args.has('--dry-run') || Deno.env.get('DRY_RUN') === 'true';
 const VERIFY = args.has('--verify') || Deno.env.get('INGEST_VERIFY') === 'true';
+// Uploads are idempotent (x-upsert) but slow over a bad connection — skip
+// re-uploading media that's already landed in Storage from a prior run.
+const SKIP_UPLOAD = args.has('--skip-upload') || Deno.env.get('INGEST_SKIP_UPLOAD') === 'true';
 const reportPath = (() => {
   const i = Deno.args.indexOf('--report');
   return i >= 0 ? Deno.args[i + 1] : null;
@@ -208,34 +211,50 @@ let withoutMedia: { total: number; by_source: Record<string, number> } = { total
 
 if (!DRY_RUN) {
   // 1. Upload media to Storage via the REST API (bucket comes from migration
-  //    0002). x-upsert makes re-runs overwrite in place.
-  console.log(`Uploading ${mediaToUpload.length} media files to ${BUCKET}/${OBJECT_PREFIX}/ ...`);
-  for (let i = 0; i < mediaToUpload.length; i += UPLOAD_CONCURRENCY) {
-    const batch = mediaToUpload.slice(i, i + UPLOAD_CONCURRENCY);
-    const results = await Promise.all(batch.map(async (m) => {
-      const bytes = await Deno.readFile(m.absPath);
-      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${m.objectPath}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-          'Content-Type': m.contentType,
-          'x-upsert': 'true',
-        },
-        body: bytes,
-      });
-      if (!res.ok) return `${res.status} ${(await res.text()).slice(0, 200)}`;
-      return null;
-    }));
-    for (const err of results) {
-      if (err) {
-        uploadFailed++;
-        if (uploadFailed <= 5) console.error(`  upload failed: ${err}`);
-      } else {
-        uploaded++;
+  //    0002). x-upsert makes re-runs overwrite in place. --skip-upload skips
+  //    this when a prior run already got the files there (uploads are the
+  //    slow part; the DB upsert below still needs to run every time).
+  if (SKIP_UPLOAD) {
+    console.log(`Skipping upload (--skip-upload): assuming ${mediaToUpload.length} media files already in Storage.`);
+  } else {
+    console.log(`Uploading ${mediaToUpload.length} media files to ${BUCKET}/${OBJECT_PREFIX}/ ...`);
+    for (let i = 0; i < mediaToUpload.length; i += UPLOAD_CONCURRENCY) {
+      const batch = mediaToUpload.slice(i, i + UPLOAD_CONCURRENCY);
+      const results = await Promise.all(batch.map(async (m) => {
+        const bytes = await Deno.readFile(m.absPath);
+        try {
+          const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${m.objectPath}`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+              'Content-Type': m.contentType,
+              'x-upsert': 'true',
+            },
+            body: bytes,
+            // A stalled connection otherwise hangs forever (Deno's fetch has
+            // no default timeout), which blocks this whole Promise.all batch.
+            signal: AbortSignal.timeout(30_000),
+          });
+          if (!res.ok) return `${res.status} ${(await res.text()).slice(0, 200)}`;
+          return null;
+        } catch (e) {
+          return e instanceof Error ? e.message : String(e);
+        }
+      }));
+      for (const err of results) {
+        if (err) {
+          uploadFailed++;
+          if (uploadFailed <= 5) console.error(`  upload failed: ${err}`);
+        } else {
+          uploaded++;
+        }
+      }
+      if ((i / UPLOAD_CONCURRENCY) % 10 === 0) {
+        console.log(`  ${Math.min(i + UPLOAD_CONCURRENCY, mediaToUpload.length)}/${mediaToUpload.length} attempted`);
       }
     }
+    if (uploadFailed) console.error(`  ${uploadFailed} upload(s) failed`);
   }
-  if (uploadFailed) console.error(`  ${uploadFailed} upload(s) failed`);
 
   // 2. Upsert rows.
   const db = new Client(DB_URL);

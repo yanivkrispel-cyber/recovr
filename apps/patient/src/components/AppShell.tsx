@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { t } from 'shared';
-import { useOnlineStatus } from 'ui';
+import { Logo, useOnlineStatus } from 'ui';
 
 export type PatientTab = 'home' | 'progress' | 'messages' | 'education';
 
@@ -23,7 +23,7 @@ interface AppShellProps {
 export default function AppShell({ activeTab, onTabChange, unreadCount, messagesUnread, onBellClick, children }: AppShellProps) {
   const online = useOnlineStatus();
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--patient-bg)', display: 'flex', flexDirection: 'column', fontFamily: 'var(--font-ui)' }}>
+    <div style={{ height: '100dvh', background: 'var(--patient-bg)', display: 'flex', flexDirection: 'column', fontFamily: 'var(--font-ui)' }}>
       {!online && (
         <div
           role="status"
@@ -36,12 +36,8 @@ export default function AppShell({ activeTab, onTabChange, unreadCount, messages
         </div>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 20px 2px' }}>
-        <svg width="22" height="19" viewBox="0 0 26 22" fill="none" aria-hidden="true">
-          <path d="M1 21V5l6 6 6-10 6 10 6-6v16H1Z" stroke="var(--patient-gold)" strokeWidth={1.8} strokeLinejoin="round" />
-          <path d="M5.5 16.5h15" stroke="var(--patient-gold)" strokeWidth={1.8} />
-        </svg>
-        <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 14, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--patient-text)', flex: 1 }}>
-          RecoveryOS
+        <div style={{ flex: 1 }}>
+          <Logo tone="light" height={30} />
         </div>
         <button
           onClick={onBellClick}

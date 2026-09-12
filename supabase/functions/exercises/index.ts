@@ -8,6 +8,8 @@
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
+import { withCors } from '../_shared/cors.ts';
+import { getSignedMediaUrl } from '../_shared/signed-media-url.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -22,7 +24,7 @@ interface CreateInput {
   is_bilateral?: boolean;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withCors(async (req) => {
   const authHeader = req.headers.get('Authorization')!;
   const token = authHeader.replace('Bearer ', '');
 
@@ -61,14 +63,15 @@ Deno.serve(async (req) => {
       // media row is untouched — the patient-facing gate lives elsewhere.
       const media = Array.isArray(result.media) ? result.media : [];
       for (const m of media) {
+        if (m.kind === 'video') continue; // url is a YouTube id, not a Storage path
         for (const field of ['url', 'thumb_url'] as const) {
           const path = m[field];
           if (typeof path === 'string' && path && !path.startsWith('http') && !path.startsWith('/storage/')) {
-            const { data: signed } = await service.storage.from('exercise-media').createSignedUrl(path, 3600);
             // Return a path relative to the API origin; the client prefixes its
             // own configured Supabase URL. (Local storage signs URLs with an
             // internal docker host the browser can't resolve.)
-            if (signed?.signedUrl) m[field] = signed.signedUrl.replace(/^https?:\/\/[^/]+/, '');
+            const signedUrl = await getSignedMediaUrl(service, path);
+            if (signedUrl) m[field] = signedUrl.replace(/^https?:\/\/[^/]+/, '');
           }
         }
       }
@@ -103,6 +106,8 @@ Deno.serve(async (req) => {
     const phase = url.searchParams.get('phase');
     const muscle = url.searchParams.get('muscle');
     const protocol = url.searchParams.get('protocol');
+    const limit = url.searchParams.get('limit');
+    const offset = url.searchParams.get('offset');
 
     const { data: result, error } = await service.schema('app').rpc('search_exercises', {
       p_clinician_id: user.id,
@@ -112,6 +117,8 @@ Deno.serve(async (req) => {
       p_phase_n: phase ? Number(phase) : null,
       p_muscle: muscle,
       p_protocol_slug: protocol,
+      p_limit: limit ? Number(limit) : undefined,
+      p_offset: offset ? Number(offset) : undefined,
     });
 
     if (error) {
@@ -150,6 +157,81 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify(result), {
       status: 201,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (req.method === 'PUT' && url.pathname.endsWith('/video')) {
+    const parts = url.pathname.split('/').filter(Boolean);
+    const exerciseId = parts[parts.length - 2];
+    if (!exerciseId || !UUID_RE.test(exerciseId)) {
+      return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
+    }
+
+    const body: { youtube_id?: string | null } = await req.json();
+
+    const { data: result, error } = await service.schema('app').rpc('set_exercise_video', {
+      p_clinician_id: user.id,
+      p_exercise_id: exerciseId,
+      p_youtube_id: body.youtube_id || null,
+    });
+
+    if (error) {
+      return new Response(JSON.stringify({ error: 'internal_error', details: error.message }), { status: 500 });
+    }
+    if (result?.error === 'forbidden') {
+      return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 });
+    }
+    if (result?.error === 'not_found') {
+      return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
+    }
+    if (result?.error === 'validation_failed') {
+      return new Response(JSON.stringify({ error: 'validation_failed', message: result.message }), { status: 422 });
+    }
+
+    return new Response(JSON.stringify(result), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (req.method === 'PUT') {
+    const segs = url.pathname.split('/').filter(Boolean);
+    const tail = segs[segs.length - 1];
+    if (!(segs.length >= 2 && segs[segs.length - 2] === 'exercises' && UUID_RE.test(tail))) {
+      return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
+    }
+
+    const body: CreateInput = await req.json();
+    if (!body.name || !body.category) {
+      return new Response(JSON.stringify({ error: 'validation_failed' }), { status: 422 });
+    }
+
+    const { data: result, error } = await service.schema('app').rpc('update_custom_exercise', {
+      p_clinician_id: user.id,
+      p_exercise_id: tail,
+      p_name: body.name,
+      p_name_en: body.name_en ?? null,
+      p_category: body.category,
+      p_region: body.region ?? null,
+      p_description: body.description ?? null,
+      p_instructions: body.instructions ?? null,
+      p_is_bilateral: body.is_bilateral ?? false,
+    });
+
+    if (error) {
+      return new Response(JSON.stringify({ error: 'internal_error', details: error.message }), { status: 500 });
+    }
+    if (result?.error === 'forbidden') {
+      return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 });
+    }
+    if (result?.error === 'not_found') {
+      return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
+    }
+    if (result?.error === 'validation_failed') {
+      return new Response(JSON.stringify({ error: 'validation_failed', message: result.message }), { status: 422 });
+    }
+
+    return new Response(JSON.stringify(result), {
       headers: { 'Content-Type': 'application/json' },
     });
   }
@@ -215,4 +297,4 @@ Deno.serve(async (req) => {
   }
 
   return new Response('Method not allowed', { status: 405 });
-});
+}));

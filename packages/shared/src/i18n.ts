@@ -102,6 +102,8 @@ export const he = {
   'confirm.discharge.confirm': 'שחרר',
   'confirm.delete_exercise.title': 'למחוק את התרגיל?',
   'confirm.delete_exercise.body': 'תרגיל מותאם-קליניקה יימחק לצמיתות. תרגילים בתוכניות קיימות לא יושפעו.',
+  'confirm.archive_protocol.title': 'להעביר את הפרוטוקול לארכיון?',
+  'confirm.archive_protocol.body': 'הפרוטוקול לא יוצע יותר למטופלים חדשים. מטופלים קיימים שכבר שובצו אליו לא יושפעו, וניתן לשחזר בכל עת.',
   'confirm.delete_account.title': 'לשלוח בקשה למחיקת החשבון?',
   'confirm.delete_account.body': 'פרטי הזיהוי שלך יימחקו והגישה תיחסם. המטפל יאשר את הבקשה.',
   'confirm.anonymize.title': 'לבצע מחיקת נתונים?',
@@ -115,6 +117,8 @@ export const he = {
   'toast.measurement_saved': 'המדידה נשמרה',
   'toast.session_done': 'האימון נרשם',
   'toast.copied': 'הועתק',
+  'toast.patient_discharged': 'המטופל שוחרר',
+  'toast.patient_reactivated': 'המטופל הוחזר לפעילות',
 
   // Auth
   'auth.login.title': 'כניסה למערכת',
@@ -157,6 +161,10 @@ export const he = {
   'clinician.patients.title': 'מטופלים',
   'clinician.patients.nav_en': 'Patients',
   'clinician.patient.add': 'הזמן מטופל',
+  'clinician.patient.discharge': 'שחרר מטופל',
+  'clinician.patient.reactivate': 'החזר לפעילות',
+  'clinician.patients.tab_active': 'פעילים',
+  'clinician.patients.tab_archived': 'בארכיון',
   'clinician.protocol.title': 'ספריית פרוטוקולים',
   'clinician.protocol.nav': 'פרוטוקולים',
   'clinician.protocol.nav_en': 'Protocols',
