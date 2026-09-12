@@ -1,0 +1,11 @@
+-- Fix: 0023 replaced search_exercises's signature by adding p_limit/p_offset,
+-- but CREATE OR REPLACE only replaces a function with the exact same
+-- parameter list — since the new one has two extra params, Postgres kept
+-- both the old 7-arg version (0003) and the new 9-arg version (0023) as
+-- distinct overloads. Any caller omitting p_limit/p_offset (the protocol
+-- editor's "add exercise" search) matches both equally well, so Postgres
+-- can't pick one: "could not choose the best candidate function" (500).
+--
+-- Drop the obsolete 7-arg overload; the 9-arg version from 0023 already
+-- defaults p_limit/p_offset, so it's a drop-in replacement.
+DROP FUNCTION IF EXISTS app.search_exercises(UUID, TEXT, TEXT, TEXT, INT, TEXT, TEXT);
