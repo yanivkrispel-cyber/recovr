@@ -1,13 +1,31 @@
+import { lazy, Suspense } from 'react';
 import { createRootRoute, createRoute, createRouter, redirect, Outlet } from '@tanstack/react-router';
+import { Skeleton } from 'ui';
 import Dashboard from './pages/Dashboard';
-import PatientList from './pages/PatientList';
-import PatientOverview from './pages/PatientOverview';
-import ExerciseLibrary from './pages/ExerciseLibrary';
-import Protocols from './pages/Protocols';
-import Settings from './pages/Settings';
+
+// Dashboard loads with the shell; the rest split into their own chunks so
+// first paint doesn't carry the whole app (mirrors patient app, T-24).
+const PatientList = lazy(() => import('./pages/PatientList'));
+const PatientOverview = lazy(() => import('./pages/PatientOverview'));
+const ExerciseLibrary = lazy(() => import('./pages/ExerciseLibrary'));
+const Protocols = lazy(() => import('./pages/Protocols'));
+const Settings = lazy(() => import('./pages/Settings'));
+
+function ViewFallback() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 24 }}>
+      <Skeleton width={160} height={19} />
+      <Skeleton count={4} height={48} radius={12} />
+    </div>
+  );
+}
 
 const rootRoute = createRootRoute({
-  component: () => <Outlet />,
+  component: () => (
+    <Suspense fallback={<ViewFallback />}>
+      <Outlet />
+    </Suspense>
+  ),
 });
 
 const indexRoute = createRoute({
