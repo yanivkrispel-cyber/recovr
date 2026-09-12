@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { t } from 'shared';
-import { Button, Checkbox, Input, Modal, Select, useToast } from 'ui';
+import { t, parseYouTubeId } from 'shared';
+import { Button, Checkbox, Input, Modal, Select, YouTubeFacade, useToast } from 'ui';
 import { SupabaseContext } from '../App';
 
 interface EditableProtocol {
@@ -25,6 +25,8 @@ export interface ExerciseFormValues {
   description: string | null;
   instructions: string | null;
   is_bilateral: boolean;
+  /** Bare 11-char YouTube id, if a tutorial video is already attached. */
+  video_youtube_id?: string | null;
 }
 
 const CATEGORY_OPTIONS = [
@@ -75,12 +77,15 @@ export default function ExerciseFormModal({
   const [description, setDescription] = useState('');
   const [instructions, setInstructions] = useState('');
   const [isBilateral, setIsBilateral] = useState(false);
+  const [videoInput, setVideoInput] = useState('');
+  const [videoTouched, setVideoTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [nameTouched, setNameTouched] = useState(false);
   const [protocolId, setProtocolId] = useState('');
   const [phaseN, setPhaseN] = useState('');
   const nameValid = name.trim().length > 0;
+  const videoValid = videoInput.trim().length === 0 || parseYouTubeId(videoInput) !== null;
 
   // Re-seed the form whenever a different exercise is opened for editing (or
   // the modal is reopened in create mode after a previous edit).
@@ -93,7 +98,9 @@ export default function ExerciseFormModal({
     setDescription(exercise?.description ?? '');
     setInstructions(exercise?.instructions ?? '');
     setIsBilateral(exercise?.is_bilateral ?? false);
+    setVideoInput(exercise?.video_youtube_id ?? '');
     setNameTouched(false);
+    setVideoTouched(false);
     setSaveError(null);
     setProtocolId('');
     setPhaseN('');
@@ -136,9 +143,20 @@ export default function ExerciseFormModal({
     toast.show('התרגיל שויך לפרוטוקול · Exercise attached to the protocol', { tone: 'success' });
   }
 
+  async function saveVideo(exerciseId: string, youtubeId: string | null) {
+    const { data, error } = await supabase.functions.invoke(`exercises/${exerciseId}/video`, {
+      method: 'PUT',
+      body: { youtube_id: youtubeId },
+    });
+    if (error || (data as { error?: string })?.error) {
+      toast.show('התרגיל נשמר, אך שמירת קישור הסרטון נכשלה · Exercise saved, but the video link failed to save', { tone: 'error', duration: 4000 });
+    }
+  }
+
   async function handleSave() {
-    if (!nameValid) {
+    if (!nameValid || !videoValid) {
       setNameTouched(true);
+      setVideoTouched(true);
       return;
     }
     setSaving(true);
@@ -161,6 +179,10 @@ export default function ExerciseFormModal({
       return;
     }
     const savedId = isEdit ? exercise!.id : (data as { id: string }).id;
+    const nextVideoId = videoInput.trim() ? parseYouTubeId(videoInput) : null;
+    if (nextVideoId !== (exercise?.video_youtube_id ?? null)) {
+      await saveVideo(savedId, nextVideoId);
+    }
     await attachToProtocol(savedId);
     setSaving(false);
     onSaved();
@@ -175,7 +197,7 @@ export default function ExerciseFormModal({
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>{t('clinician.plan.discard')}</Button>
-          <Button loading={saving} disabled={!nameValid || saving} onClick={handleSave}>
+          <Button loading={saving} disabled={!nameValid || !videoValid || saving} onClick={handleSave}>
             {isEdit ? 'שמור שינויים · Save changes' : 'שמור תרגיל'}
           </Button>
         </>
@@ -210,6 +232,21 @@ export default function ExerciseFormModal({
           checked={isBilateral}
           onChange={(e) => setIsBilateral(e.target.checked)}
         />
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <Input
+            label="קישור לסרטון YouTube (אופציונלי) · YouTube video link (optional)"
+            value={videoInput}
+            onChange={(e) => setVideoInput(e.target.value)}
+            onBlur={() => setVideoTouched(true)}
+            placeholder="https://youtube.com/watch?v=…"
+            dir="ltr"
+            error={videoTouched && !videoValid ? 'קישור YouTube לא תקין · Not a recognizable YouTube link' : undefined}
+          />
+          {videoValid && parseYouTubeId(videoInput) && (
+            <YouTubeFacade youtubeId={parseYouTubeId(videoInput)!} title={name || 'תצוגה מקדימה · Preview'} height={160} />
+          )}
+        </div>
 
         {editableProtocols.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingBlockStart: 4, borderBlockStart: '1px solid var(--shell-border-soft)' }}>
