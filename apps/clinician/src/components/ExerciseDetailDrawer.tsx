@@ -96,13 +96,15 @@ export default function ExerciseDetailDrawer({
   exerciseId: string | null;
   open: boolean;
   onClose: () => void;
-  /** Called with the new exercise id after "Duplicate" succeeds, so the caller can re-point this drawer (or a list) at the editable copy. */
+  /** Called with the new exercise id whenever a clone is created — via "Duplicate", or silently when "Edit" forks a system exercise — so the caller can re-point this drawer (or a list) at the copy. */
   onDuplicated?: (newExerciseId: string) => void;
 }) {
   const supabase = useContext(SupabaseContext);
   const queryClient = useQueryClient();
   const [duplicating, setDuplicating] = useState(false);
+  const [launchingEdit, setLaunchingEdit] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [formSeed, setFormSeed] = useState<ExerciseDetail | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['exercise-detail', exerciseId],
@@ -115,9 +117,8 @@ export default function ExerciseDetailDrawer({
     },
   });
 
-  // System exercises can't be edited directly — this clones one into a
-  // clinic-owned copy and re-points the view at it (onDuplicated). Editing
-  // that copy is then a separate step via the Edit button.
+  // Plain clone: creates a similar exercise and switches the view to it,
+  // without opening the edit form. Independent of the Edit button below.
   async function handleDuplicate() {
     if (!exerciseId) return;
     setDuplicating(true);
@@ -128,6 +129,35 @@ export default function ExerciseDetailDrawer({
     queryClient.invalidateQueries({ queryKey: ['exercises'] });
     queryClient.invalidateQueries({ queryKey: ['exercise-filter-options'] });
     onDuplicated?.(newId);
+  }
+
+  // Edit always opens the same full form. A system exercise can't be saved
+  // to directly (update_custom_exercise only allows clinic-owned rows), so
+  // this silently forks it into a private clinic copy first — the clinician
+  // never sees the extra step, and the shared system content is untouched.
+  async function handleEdit() {
+    if (!data) return;
+    if (data.source === 'clinic') {
+      setFormSeed(data);
+      setEditOpen(true);
+      return;
+    }
+    if (!exerciseId) return;
+    setLaunchingEdit(true);
+    const { data: result, error } = await supabase.functions.invoke(`exercises/${exerciseId}/duplicate`, { method: 'POST' });
+    const newId = (result as { id?: string })?.id;
+    if (error || !newId) {
+      setLaunchingEdit(false);
+      return;
+    }
+    const { data: detail, error: detailError } = await supabase.functions.invoke(`exercises/${newId}`, { method: 'GET' });
+    setLaunchingEdit(false);
+    if (detailError || !detail || (detail as { error?: string }).error) return;
+    queryClient.invalidateQueries({ queryKey: ['exercises'] });
+    queryClient.invalidateQueries({ queryKey: ['exercise-filter-options'] });
+    onDuplicated?.(newId);
+    setFormSeed(detail as ExerciseDetail);
+    setEditOpen(true);
   }
 
   const primary = data?.media?.find((m) => m.kind === 'gif') ?? data?.media?.[0] ?? null;
@@ -150,11 +180,9 @@ export default function ExerciseDetailDrawer({
             {data.is_bilateral && <span style={chip}>דו-צדדי</span>}
             {data.source === 'clinic' && <span style={chip}>נוצר על ידך</span>}
             <div style={{ display: 'flex', gap: 6, marginInlineStart: 'auto' }}>
-              {data.source === 'clinic' && (
-                <Button size="sm" variant="ghost" onClick={() => setEditOpen(true)}>
-                  ערוך · Edit
-                </Button>
-              )}
+              <Button size="sm" variant="ghost" onClick={handleEdit} loading={launchingEdit}>
+                ערוך · Edit
+              </Button>
               <Button size="sm" variant="ghost" onClick={handleDuplicate} loading={duplicating}>
                 שכפל · Duplicate
               </Button>
@@ -248,23 +276,23 @@ export default function ExerciseDetailDrawer({
         </>
       )}
     </Drawer>
-    {data && data.source === 'clinic' && (
+    {formSeed && (
       <ExerciseFormModal
         open={editOpen}
         onClose={() => setEditOpen(false)}
         exercise={{
-          id: data.id,
-          name: data.name,
-          name_en: data.name_en,
-          category: data.category,
-          region: data.region,
-          description: data.description,
-          instructions: data.instructions,
-          is_bilateral: data.is_bilateral,
-          video_youtube_id: data.media.find((m) => m.kind === 'video')?.url ?? null,
+          id: formSeed.id,
+          name: formSeed.name,
+          name_en: formSeed.name_en,
+          category: formSeed.category,
+          region: formSeed.region,
+          description: formSeed.description,
+          instructions: formSeed.instructions,
+          is_bilateral: formSeed.is_bilateral,
+          video_youtube_id: formSeed.media.find((m) => m.kind === 'video')?.url ?? null,
         }}
         onSaved={() => {
-          queryClient.invalidateQueries({ queryKey: ['exercise-detail', exerciseId] });
+          queryClient.invalidateQueries({ queryKey: ['exercise-detail', formSeed.id] });
           queryClient.invalidateQueries({ queryKey: ['exercises'] });
         }}
       />
