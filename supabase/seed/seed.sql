@@ -573,3 +573,7 @@ WHERE clinic_id IS NULL AND deleted_at IS NULL AND name_en IN (
 -- found no exercise rows yet (protocols_import.sql/seed.sql run after every
 -- migration) — apply it now that they exist.
 SELECT app._catalog_apply_p0_content_2026_09_13();
+
+-- Step 4 (0039): dataset media links for the 6 confident matches. Same
+-- migration-time-found-nothing reason as above.
+SELECT app._catalog_link_dataset_media_2026_09_13();
