@@ -30,15 +30,18 @@ export default function App() {
     // whatever session results. `import.meta.env.DEV` is a Vite build-time
     // constant — this whole branch is dead-code-eliminated from production
     // bundles, so it can never ship live.
-    if (import.meta.env.DEV && import.meta.env.VITE_DEV_AUTO_LOGIN === '1') {
+    const devAutoLogin = import.meta.env.DEV && import.meta.env.VITE_DEV_AUTO_LOGIN === '1';
+    const autoSignIn = () => {
+      supabase.auth.signInWithPassword({
+        email: import.meta.env.VITE_DEV_AUTO_LOGIN_EMAIL ?? 'clinician@demo.recoveryos.app',
+        password: import.meta.env.VITE_DEV_AUTO_LOGIN_PASSWORD ?? 'demo12345678',
+      }).then(({ error }) => {
+        if (error) console.warn('VITE_DEV_AUTO_LOGIN sign-in failed:', error.message);
+      });
+    };
+    if (devAutoLogin) {
       supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session?.user) return;
-        supabase.auth.signInWithPassword({
-          email: import.meta.env.VITE_DEV_AUTO_LOGIN_EMAIL ?? 'clinician@demo.recoveryos.app',
-          password: import.meta.env.VITE_DEV_AUTO_LOGIN_PASSWORD ?? 'demo12345678',
-        }).then(({ error }) => {
-          if (error) console.warn('VITE_DEV_AUTO_LOGIN sign-in failed:', error.message);
-        });
+        if (!session?.user) autoSignIn();
       });
     }
 
@@ -48,7 +51,24 @@ export default function App() {
     // getSession()-triggered fetch here would just duplicate the same
     // request on every mount.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
+        // A stored session can outlive its server-side record (e.g. a local
+        // `supabase db reset` wipes auth sessions): the token still parses,
+        // so the shell would render while every API call returns 401. Check
+        // the restored session with the auth server once and drop it if dead,
+        // which lands on Login. Deferred — calling auth methods inside this
+        // callback can deadlock supabase-js.
+        if (event === 'INITIAL_SESSION' && session) {
+          setTimeout(() => {
+            supabase.auth.getUser().then(({ error }) => {
+              if (error && (error.status === 401 || error.status === 403)) {
+                void supabase.auth.signOut({ scope: 'local' }).then(() => {
+                  if (devAutoLogin) autoSignIn();
+                });
+              }
+            });
+          }, 0);
+        }
         if (session?.user) {
           supabase
             .schema('app')

@@ -42,7 +42,26 @@ Clinical rows are **soft-deleted** (`deleted_at`) — never hard delete.
   `exercises-dataset-main` body_part value — a bodybuilding muscle-group taxonomy, a different
   concept from body_region, not used for clinical filtering), muscles text[], equipment text[],
   description, instructions, common_mistakes, safety_notes, default_prescription jsonb,
-  is_bilateral, source, external_ref (key from `exercises-dataset-main`), is_active
+  is_bilateral, source, external_ref (key from `exercises-dataset-main`), is_active.
+  Catalog governance (T-30): status (`draft`|`in_review`|`approved`|`archived`; only `approved`
+  is offered by the picker — existing protocol/plan references are never affected),
+  reviewed_by, reviewed_at, aliases text[] (search), key_cues text[], start_position
+  (`standing`|`sitting`|`supine`|`prone`|`side_lying`|`quadruped`|`kneeling`|`other`),
+  difficulty 1–3, contraindications, revision (optimistic concurrency), curated_at (set on
+  master-catalog edits; dataset re-ingest never overwrites a curated or revised row).
+- **catalog_curator** (T-30) — user_id PK, granted_at, note. Platform-level grant (not a clinic
+  role): curators edit system (master) exercises directly, for every clinic.
+- **exercise_override** (T-30) — clinic_id, exercise_id, fields jsonb, revision, updated_by,
+  updated_at; PK (clinic_id, exercise_id). A clinic's own version of a system exercise's
+  patient-facing content (description, instructions, key_cues, common_mistakes, safety_notes,
+  contraindications); keys equal to the master value are dropped. Merged by
+  `app.exercise_effective(clinic_id)` — the clinician editor, picker detail and the patient
+  app all read through it.
+- **exercise_revision** (T-30) — id, exercise_id, clinic_id (null = master change), scope
+  (`master`|`clinic`|`override`), action (`create`|`update`|`status`|`revert`|`restore`|
+  `duplicate`), changes jsonb `{field: {from, to}}`, changed_by, changed_at. Append-only;
+  restore writes a new revision. Master changes by another clinic's curator show as
+  "catalog team", never by name.
 - **exercise_media** — id, exercise_id, kind (`image`|`gif`|`video`), url, thumb_url, width,
   height, duration_ms, order, source_file (original filename from the dataset), verified_by,
   verified_at

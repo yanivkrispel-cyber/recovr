@@ -105,6 +105,27 @@ browser-print PDF · minimal (undesigned) auth screens · dataset media dev-only
 - Migration 0031; endpoints in `API_CONTRACT.md`. Later phases: clinical metadata enrichment
   (reviewed, never auto-applied), semantic search + LLM rerank, progression graph, learned weights.
 
+**T-30 Exercise catalog governance & library workspace (foundation)**
+- Hybrid ownership (product owner, 2026-09-13): system exercises are a master catalog edited
+  directly by platform catalog curators (`app.catalog_curator`); a clinic keeps its own version
+  of a system exercise's patient-facing content (`app.exercise_override`), everything else keeps
+  following the master. Replaces the silent "Edit forks a private copy" flow.
+- Lifecycle status draft → in review → approved → archived; the picker (search / recommend /
+  recent) offers approved exercises only. Grandfathering: exercises already in a protocol or plan
+  start approved; a protocol exercise used by one body region only inherits it.
+- New fields: aliases, key cues, start position, difficulty, contraindications. Append-only
+  change history with restore; optimistic-concurrency revisions; completeness score (11 checks,
+  mirrored in `packages/shared/src/exerciseCatalog.ts`).
+- Library page rebuilt as a workspace: typo-tolerant search, facet filters with counts, preset +
+  saved views, keyboard navigation, list with GIF thumbs / status / completeness, full editor with
+  autosave, undo, per-field clinic-version badges + revert, patient preview, duplicate warnings,
+  usage + attach-to-protocol, history. Bulk grid mode: inline cells + bulk region / category /
+  position / difficulty / status.
+- Dataset re-ingest never overwrites a curated or revised row; new dataset rows land as drafts.
+- Not in this task: media upload / verification queue (next), AI-assisted content and bulk
+  enrichment (after), semantic search.
+- Migration 0032; endpoints in `API_CONTRACT.md`.
+
 ## M2 — Patient app (P0)
 **T-10 Today / Home**
 - Today's session, progress ring, exercise list with done state, start-first-incomplete CTA.

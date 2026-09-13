@@ -283,6 +283,10 @@ if (!DRY_RUN) {
           muscle_group = EXCLUDED.muscle_group, muscles = EXCLUDED.muscles, equipment = EXCLUDED.equipment,
           instructions = EXCLUDED.instructions, external_ref = EXCLUDED.external_ref,
           is_active = EXCLUDED.is_active
+        -- T-30: never clobber a row someone has edited in the catalog
+        -- (curated master content, or any saved revision). New rows land as
+        -- status 'draft' (column default) and wait for review.
+        WHERE app.exercise.curated_at IS NULL AND app.exercise.revision = 0
         RETURNING 1
       )
       SELECT count(*) AS n FROM up

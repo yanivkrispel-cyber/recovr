@@ -488,3 +488,13 @@ SELECT pg_temp.qa_history('a0000001-0000-0000-0000-000000000109', 7, 1.0);
 -- materialise alerts + queue notifications for the demo.
 SELECT app.alerts_sweep();
 SELECT app.notifications_sweep();
+
+-- T-30 catalog governance. Seeds run after migrations, so 0032's grandfathering
+-- backfill found no protocol/plan exercises yet — run it again now: exercises
+-- used by a protocol or plan start approved, and single-region protocol
+-- exercises inherit that region. The demo clinician is a catalog curator so
+-- the master-catalog editing path can be exercised locally.
+SELECT app.catalog_backfill_governance();
+INSERT INTO app.catalog_curator (user_id, note)
+VALUES ('22222222-2222-2222-2222-222222222222', 'demo curator (seed)')
+ON CONFLICT (user_id) DO NOTHING;

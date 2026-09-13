@@ -1,84 +1,113 @@
-import { useContext, useState, type CSSProperties } from 'react';
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { t, type BodyRegion } from 'shared';
-import { Badge, Button, EmptyState, Skeleton, useIsTablet } from 'ui';
+// T-30 exercise library workspace: search + faceted filters + saved views on
+// top; a two-pane list/editor (or the bulk grid) below.
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
+import { useNavigate, useSearch } from '@tanstack/react-router';
+import {
+  COMPLETENESS_KEYS, EXERCISE_STATUSES, completenessKeyLabel, equipmentLabel, exerciseCategoryLabel, exerciseStatusLabel,
+  startPositionLabel, t, type BodyRegion,
+} from 'shared';
+import { Button, EmptyState, Skeleton, useIsTablet } from 'ui';
 import { AuthContext, SupabaseContext } from '../App';
 import AppShell from '../components/AppShell';
-import ExerciseDetailDrawer from '../components/ExerciseDetailDrawer';
-import ExerciseFormModal from '../components/ExerciseFormModal';
-
-interface Prescription {
-  sets?: number;
-  reps?: number;
-  load?: number;
-  tempo?: string;
-  hold_sec?: number;
-  side?: string;
-}
-
-interface ExerciseRow {
-  id: string;
-  name: string;
-  name_en: string | null;
-  category: string;
-  body_region: BodyRegion | null;
-  is_bilateral: boolean;
-  source: 'system' | 'clinic';
-  protocol_labels: string[];
-  prescription: Prescription | null;
-}
-
-interface FilterOptions {
-  categories: string[];
-  body_regions: BodyRegion[];
-  phases: number[];
-  protocols: { slug: string; name: string }[];
-  custom_count: number;
-}
+import CatalogBulkGrid from '../components/catalog/CatalogBulkGrid';
+import ExerciseEditor from '../components/catalog/ExerciseEditor';
+import NewExerciseModal from '../components/catalog/NewExerciseModal';
+import {
+  FACET_KEYS, catalogSearch, mediaSrc, type CatalogFacets, type CatalogFilters, type CatalogItem, type CatalogPage,
+  type FacetKey,
+} from '../components/catalog/catalogApi';
+import { CompletenessRing, FacetDropdown, StatusBadge, smallButtonStyle } from '../components/catalog/catalogUi';
 
 const PAGE_SIZE = 60;
+const VIEW_KEY = 'catalog.view';
+const SAVED_VIEWS_KEY = 'catalog.savedViews';
 
-// Single source of truth for the table's column widths — used by both the
-// header and every row so they can never drift out of alignment. minmax(0, …)
-// (rather than a bare fr) keeps a long unbroken name/label from blowing a
-// track wider than its share instead of wrapping inside it.
-const EXERCISE_ROW_GRID = 'minmax(0, 2.2fr) minmax(0, 1.6fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 1.1fr)';
-
-const categoryLabel: Record<string, string> = {
-  Mobility: 'ניידות',
-  Strength: 'כוח',
-  Balance: 'שיווי משקל',
-  Control: 'בקרה',
-  Cardio: 'אירובי',
-};
-
-function formatPrescription(rx: Prescription | null): string {
-  if (!rx) return '—';
-  if (rx.sets != null && rx.reps != null) return `${rx.sets} × ${rx.reps}`;
-  if (rx.hold_sec != null) return `${rx.hold_sec} שנ׳`;
-  if (rx.reps != null) return `${rx.reps} חזרות`;
-  return '—';
+interface FilterOptions {
+  body_regions: BodyRegion[];
+  protocols: { slug: string; name: string }[];
 }
 
-function chipStyle(active: boolean): CSSProperties {
-  return active
-    ? { padding: '6px 15px', borderRadius: 'var(--radius-pill)', background: 'var(--gold-deep)', color: 'var(--cream)', fontSize: 12, fontWeight: 600, letterSpacing: '0.03em', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }
-    : { padding: '6px 15px', borderRadius: 'var(--radius-pill)', background: 'transparent', border: '1px solid rgba(34,28,20,0.2)', color: 'var(--nav-inactive-text)', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' };
+interface SavedView {
+  name: string;
+  filters: CatalogFilters;
+}
+
+const PRESETS: { key: Parameters<typeof t>[0]; filters: CatalogFilters }[] = [
+  { key: 'catalog.views.all', filters: {} },
+  { key: 'catalog.views.drafts', filters: { status: 'draft' } },
+  { key: 'catalog.views.in_review', filters: { status: 'in_review' } },
+  { key: 'catalog.views.missing_he', filters: { missing: 'name_he' } },
+  { key: 'catalog.views.no_region', filters: { missing: 'body_region' } },
+  { key: 'catalog.views.no_media', filters: { media: 'without' } },
+  { key: 'catalog.views.override', filters: { source: 'override' } },
+  { key: 'catalog.views.clinic', filters: { source: 'clinic' } },
+];
+
+function facetPart(f: CatalogFilters): CatalogFilters {
+  const out: CatalogFilters = {};
+  for (const k of [...FACET_KEYS, 'protocol'] as const) if (f[k]) out[k] = f[k];
+  return out;
+}
+
+function sameFacets(a: CatalogFilters, b: CatalogFilters) {
+  const x = facetPart(a);
+  const y = facetPart(b);
+  const keys = new Set([...Object.keys(x), ...Object.keys(y)]) as Set<keyof CatalogFilters>;
+  return [...keys].every((k) => x[k] === y[k]);
+}
+
+function readLocal<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function isTypingTarget(el: EventTarget | null) {
+  const tag = (el as HTMLElement | null)?.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (el as HTMLElement | null)?.isContentEditable;
 }
 
 export default function ExerciseLibrary() {
   const { user } = useContext(AuthContext);
   const supabase = useContext(SupabaseContext);
   const queryClient = useQueryClient();
-  const isTablet = useIsTablet(); // T-22: tablet is view-only for v1
+  const navigate = useNavigate();
+  const search = useSearch({ strict: false }) as { id?: string };
+  const isTablet = useIsTablet(); // T-22: tablet is view-only
 
-  const [query, setQuery] = useState('');
-  const [category, setCategory] = useState('');
-  const [protocol, setProtocol] = useState('');
+  const [view, setView] = useState<'workspace' | 'bulk'>(() => readLocal(VIEW_KEY, 'workspace'));
+  const [qInput, setQInput] = useState('');
+  const [filters, setFilters] = useState<CatalogFilters>({});
+  const [selectedId, setSelectedId] = useState<string | null>(search.id ?? null);
+  const [savedViews, setSavedViews] = useState<SavedView[]>(() => readLocal(SAVED_VIEWS_KEY, []));
+  const [namingView, setNamingView] = useState(false);
+  const [viewName, setViewName] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
-  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [detailId, setDetailId] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  const effectiveView = isTablet ? 'workspace' : view;
+
+  useEffect(() => {
+    try { localStorage.setItem(VIEW_KEY, JSON.stringify(view)); } catch { /* storage unavailable */ }
+  }, [view]);
+
+  // debounce the search box into the query
+  useEffect(() => {
+    const h = setTimeout(() => setFilters((f) => (f.q ?? '') === qInput.trim() ? f : { ...f, q: qInput.trim() || undefined }), 250);
+    return () => clearTimeout(h);
+  }, [qInput]);
+
+  // keep ?id= in the URL so a selection can be linked / survives reload
+  useEffect(() => {
+    if ((search.id ?? null) === selectedId) return;
+    navigate({ to: '/exercises', search: selectedId ? { id: selectedId } : {}, replace: true });
+  }, [selectedId, search.id, navigate]);
 
   const { data: options } = useQuery({
     queryKey: ['exercise-filter-options'],
@@ -88,195 +117,415 @@ export default function ExerciseLibrary() {
       return data as FilterOptions;
     },
   });
+  const regions = options?.body_regions ?? [];
 
-  const {
-    data,
-    isLoading,
-    error,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useInfiniteQuery({
-    queryKey: ['exercises', query, category, protocol],
+  const searchKey = ['catalog-search', filters] as const;
+  const { data, isLoading, isFetching, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
+    queryKey: searchKey,
     initialPageParam: 0,
-    queryFn: async ({ pageParam }) => {
-      const params = new URLSearchParams();
-      if (query) params.set('q', query);
-      if (category) params.set('category', category);
-      if (protocol) params.set('protocol', protocol);
-      params.set('limit', String(PAGE_SIZE));
-      params.set('offset', String(pageParam));
-      const { data, error } = await supabase.functions.invoke(`exercises?${params.toString()}`, { method: 'GET' });
-      if (error) throw error;
-      return data as { items: ExerciseRow[]; total: number };
+    queryFn: ({ pageParam }) => catalogSearch(supabase, filters, PAGE_SIZE, pageParam),
+    getNextPageParam: (last, all) => {
+      const loaded = all.reduce((n, p) => n + p.items.length, 0);
+      return loaded < last.total ? loaded : undefined;
     },
-    getNextPageParam: (lastPage, allPages) => {
-      const loaded = allPages.reduce((n, p) => n + p.items.length, 0);
-      return loaded < lastPage.total ? loaded : undefined;
-    },
+    placeholderData: (prev) => prev,
   });
 
-  const exercises = data?.pages.flatMap((p) => p.items);
-  const matchingCount = data?.pages[0]?.total ?? 0;
+  const items = useMemo(() => data?.pages.flatMap((p) => p.items) ?? [], [data]);
+  const total = data?.pages[0]?.total ?? 0;
+  const facets: CatalogFacets | undefined = data?.pages[0]?.facets;
+  const isCurator = data?.pages[0]?.viewer.is_curator ?? false;
 
-  async function handleDuplicate(id: string) {
-    setDuplicatingId(id);
-    await supabase.functions.invoke(`exercises/${id}/duplicate`, { method: 'POST' });
-    setDuplicatingId(null);
-    queryClient.invalidateQueries({ queryKey: ['exercises'] });
+  // first load: select the first result
+  useEffect(() => {
+    if (effectiveView === 'workspace' && !selectedId && items.length > 0) setSelectedId(items[0].id);
+  }, [effectiveView, selectedId, items]);
+
+  // infinite scroll
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasNextPage) return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting) && !isFetchingNextPage) void fetchNextPage();
+    }, { root: effectiveView === 'workspace' ? listRef.current : null, rootMargin: '300px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, effectiveView, items.length]);
+
+  const moveSelection = useCallback((delta: number) => {
+    if (items.length === 0) return;
+    const idx = items.findIndex((i) => i.id === selectedId);
+    const next = items[Math.min(items.length - 1, Math.max(0, idx + delta))];
+    if (next && next.id !== selectedId) {
+      setSelectedId(next.id);
+      document.getElementById(`row-${next.id}`)?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [items, selectedId]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key === '/' && !isTypingTarget(e.target)) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) {
+        e.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+        return;
+      }
+      if (effectiveView !== 'workspace' || isTypingTarget(e.target) || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        moveSelection(e.key === 'ArrowDown' ? 1 : -1);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [effectiveView, moveSelection]);
+
+  const onItemChanged = useCallback((id: string, patch: Partial<CatalogItem>) => {
+    queryClient.setQueriesData<InfiniteData<CatalogPage>>({ queryKey: ['catalog-search'] }, (old) => old && {
+      ...old,
+      pages: old.pages.map((p) => ({ ...p, items: p.items.map((i) => (i.id === id ? { ...i, ...patch } : i)) })),
+    });
+  }, [queryClient]);
+
+  const invalidateList = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['catalog-search'] });
+  }, [queryClient]);
+
+  function setFacet(key: FacetKey | 'protocol', value: string | null) {
+    setFilters((f) => ({ ...f, [key]: value ?? undefined }));
   }
 
-  async function handleDelete(id: string) {
-    if (!window.confirm(`${t('confirm.delete_exercise.title')}\n${t('confirm.delete_exercise.body')}`)) return;
-    setDeletingId(id);
-    await supabase.functions.invoke(`exercises/${id}`, { method: 'DELETE' });
-    setDeletingId(null);
-    queryClient.invalidateQueries({ queryKey: ['exercises'] });
-    queryClient.invalidateQueries({ queryKey: ['exercise-filter-options'] });
+  function applyView(viewFilters: CatalogFilters) {
+    setFilters((f) => ({ q: f.q, sort: f.sort, ...viewFilters }));
+  }
+
+  function persistViews(next: SavedView[]) {
+    setSavedViews(next);
+    try { localStorage.setItem(SAVED_VIEWS_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
   }
 
   if (!user) return null;
 
-  const customCount = options?.custom_count ?? 0;
-  const hasFilters = query.trim().length > 0 || category.length > 0 || protocol.length > 0;
+  const facetCount = (name: keyof CatalogFacets, value: string) => facets?.[name]?.find((v) => v.value === value)?.count ?? 0;
+  const regionName = (id: string) => regions.find((r) => r.id === id)?.name ?? id;
+  const hasFacetFilters = Object.keys(facetPart(filters)).length > 0;
+
+  const facetDefs: { key: FacetKey | 'protocol'; label: string; options: { value: string; label: string; count?: number }[] }[] = [
+    {
+      key: 'body_region_id', label: t('catalog.filter.region'),
+      options: regions.map((r) => ({ value: r.id, label: r.name, count: facetCount('body_region', r.id) })),
+    },
+    {
+      key: 'category', label: t('catalog.filter.category'),
+      options: ['Strength', 'Mobility', 'Balance', 'Control', 'Cardio'].map((c) => ({ value: c, label: exerciseCategoryLabel(c), count: facetCount('category', c) })),
+    },
+    {
+      key: 'status', label: t('catalog.filter.status'),
+      options: EXERCISE_STATUSES.map((s) => ({ value: s as string, label: exerciseStatusLabel(s), count: facetCount('status', s) })),
+    },
+    {
+      key: 'missing', label: t('catalog.filter.missing'),
+      options: COMPLETENESS_KEYS.map((k) => ({ value: k as string, label: completenessKeyLabel(k), count: facetCount('missing', k) })),
+    },
+    {
+      key: 'start_position', label: t('catalog.filter.position'),
+      options: (facets?.start_position ?? []).map((v) => ({ value: v.value, label: startPositionLabel(v.value), count: v.count })),
+    },
+    {
+      key: 'equipment', label: t('catalog.filter.equipment'),
+      options: (facets?.equipment ?? []).map((v) => ({ value: v.value, label: equipmentLabel(v.value), count: v.count })),
+    },
+    {
+      key: 'media', label: t('catalog.filter.media'),
+      options: [
+        { value: 'with', label: t('catalog.media.with'), count: facetCount('media', 'with') },
+        { value: 'without', label: t('catalog.media.without'), count: facetCount('media', 'without') },
+      ],
+    },
+    {
+      key: 'source', label: t('catalog.filter.source'),
+      options: (['system', 'clinic', 'override'] as const).map((s) => ({ value: s as string, label: t(`catalog.source.${s}`), count: facetCount('source', s) })),
+    },
+    {
+      key: 'protocol', label: t('catalog.filter.protocol'),
+      options: (options?.protocols ?? []).map((p) => ({ value: p.slug, label: p.name })),
+    },
+  ];
+
+  const listFooter = hasNextPage ? (
+    <div ref={sentinelRef} style={{ padding: 14, textAlign: 'center' }}>
+      <Button variant="secondary" size="sm" loading={isFetchingNextPage} onClick={() => fetchNextPage()}>
+        {t('catalog.load_more', { shown: items.length, total })}
+      </Button>
+    </div>
+  ) : null;
 
   return (
     <AppShell user={user}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
-          <div>
-            <div style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.01em', fontSize: 21, fontWeight: 700, color: 'var(--ink)' }}>
-              {t('clinician.exercise.title')} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--nav-inactive-text)' }}>Exercise Library</span>
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--nav-inactive-text)', marginTop: 4 }}>
-              {hasFilters
-                ? `${matchingCount} תוצאות תואמות`
-                : `${matchingCount} תרגילים בספרייה`} · {customCount} נוצרו על ידך
-              {(exercises?.length ?? 0) < matchingCount && ` · מוצגים ${exercises?.length ?? 0}`}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: 'calc(100vh - 52px)', minHeight: 560 }}>
+        {/* Title row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <div style={{ flex: '0 0 auto' }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 21, fontWeight: 700, color: 'var(--ink)' }}>{t('catalog.title')}</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBlockStart: 2 }}>
+              {t('catalog.subtitle', { total })}{isFetching && !isFetchingNextPage ? ' · …' : ''}
             </div>
           </div>
-          {!isTablet && <Button onClick={() => setCreateOpen(true)}>+ תרגיל חדש · New Exercise</Button>}
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <select
-              value={protocol}
-              onChange={(e) => setProtocol(e.target.value)}
-              style={{ padding: '9px 12px', border: '1px solid var(--shell-border)', borderRadius: 9, fontFamily: 'inherit', fontSize: 13, maxWidth: 320, background: 'var(--white)' }}
-            >
-              <option value="">כל הפתולוגיות · All pathologies</option>
-              {(options?.protocols ?? []).map((p) => (
-                <option key={p.slug} value={p.slug}>{p.name}</option>
-              ))}
-            </select>
+          <div style={{ flex: '1 1 320px', position: 'relative' }}>
             <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="חפש תרגילים... · Search exercises..."
-              style={{ flex: 1, padding: '9px 12px', border: '1px solid var(--shell-border)', borderRadius: 9, fontFamily: 'inherit', fontSize: 13 }}
+              ref={searchRef}
+              type="search"
+              value={qInput}
+              onChange={(e) => setQInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setQInput('');
+                if (e.key === 'ArrowDown' && effectiveView === 'workspace') {
+                  e.preventDefault();
+                  listRef.current?.focus();
+                  moveSelection(selectedId ? 1 : 0);
+                }
+              }}
+              placeholder={t('catalog.search.placeholder')}
+              aria-label={t('catalog.search.placeholder')}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: 'var(--radius-pill)', border: '1px solid var(--shell-border)', background: 'var(--white)', fontFamily: 'inherit', fontSize: 14 }}
             />
           </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <button onClick={() => setCategory('')} style={chipStyle(category === '')}>הכל</button>
-            {(options?.categories ?? []).map((c) => (
-              <button key={c} onClick={() => setCategory(c)} style={chipStyle(category === c)}>
-                {categoryLabel[c] ?? c}
-              </button>
+          <select
+            aria-label={t('catalog.sort.label')}
+            value={filters.sort ?? (filters.q ? 'relevance' : 'name')}
+            onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value }))}
+            style={{ padding: '9px 10px', borderRadius: 'var(--radius-pill)', border: '1px solid var(--shell-border)', background: 'var(--white)', fontFamily: 'inherit', fontSize: 13, color: 'var(--ink-soft)' }}
+          >
+            {(['relevance', 'name', 'updated', 'completeness'] as const).map((s) => (
+              <option key={s} value={s}>{t('catalog.sort.label')}: {t(`catalog.sort.${s}`)}</option>
             ))}
+          </select>
+          {!isTablet && (
+            <div role="tablist" style={{ display: 'inline-flex', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-pill)', padding: 3, background: 'var(--white)' }}>
+              {(['workspace', 'bulk'] as const).map((v) => (
+                <button
+                  key={v}
+                  role="tab"
+                  type="button"
+                  aria-selected={view === v}
+                  onClick={() => setView(v)}
+                  style={{ border: 'none', borderRadius: 'var(--radius-pill)', padding: '6px 13px', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', background: view === v ? 'var(--navy)' : 'transparent', color: view === v ? 'var(--cream)' : 'var(--ink-soft)' }}
+                >
+                  {t(v === 'workspace' ? 'catalog.view.workspace' : 'catalog.view.bulk')}
+                </button>
+              ))}
+            </div>
+          )}
+          {!isTablet && <Button onClick={() => setCreateOpen(true)}>+ {t('catalog.new')}</Button>}
+        </div>
+
+        {/* Views + facets */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--muted)', marginInlineEnd: 2 }}>{t('catalog.views.title')}</span>
+            {PRESETS.map((p) => (
+              <ViewChip key={p.key} label={t(p.key)} active={sameFacets(filters, p.filters)} onClick={() => applyView(p.filters)} />
+            ))}
+            {savedViews.map((v) => (
+              <ViewChip
+                key={v.name}
+                label={v.name}
+                active={sameFacets(filters, v.filters)}
+                onClick={() => applyView(v.filters)}
+                onRemove={() => persistViews(savedViews.filter((x) => x.name !== v.name))}
+              />
+            ))}
+            {hasFacetFilters && !namingView && !PRESETS.some((p) => sameFacets(filters, p.filters)) && !savedViews.some((v) => sameFacets(filters, v.filters)) && (
+              <button type="button" style={{ ...smallButtonStyle, borderStyle: 'dashed' }} onClick={() => setNamingView(true)}>{t('catalog.views.save')}</button>
+            )}
+            {namingView && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const name = viewName.trim();
+                  if (name) persistViews([...savedViews.filter((v) => v.name !== name), { name, filters: facetPart(filters) }]);
+                  setNamingView(false);
+                  setViewName('');
+                }}
+              >
+                <input
+                  autoFocus
+                  value={viewName}
+                  onChange={(e) => setViewName(e.target.value)}
+                  onBlur={() => setNamingView(false)}
+                  onKeyDown={(e) => e.key === 'Escape' && setNamingView(false)}
+                  placeholder={t('catalog.views.save.placeholder')}
+                  style={{ padding: '5px 10px', borderRadius: 'var(--radius-pill)', border: '1px solid var(--gold-deep)', fontFamily: 'inherit', fontSize: 12.5, width: 140 }}
+                />
+              </form>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {facetDefs.map((f) => {
+              const value = filters[f.key];
+              const valueLabel = value
+                ? (f.options.find((o) => o.value === value)?.label ?? (f.key === 'body_region_id' ? regionName(value) : value))
+                : null;
+              return (
+                <FacetDropdown key={f.key} label={f.label} valueLabel={valueLabel} options={f.options} active={!!value} onSelect={(v) => setFacet(f.key, v)} />
+              );
+            })}
+            {hasFacetFilters && (
+              <button type="button" style={{ ...smallButtonStyle, border: 'none', textDecoration: 'underline' }} onClick={() => applyView({})}>
+                {t('catalog.filter.clear')}
+              </button>
+            )}
+            <span style={{ marginInlineStart: 'auto', fontSize: 11, color: 'var(--muted)' }}>{effectiveView === 'workspace' && t('catalog.keys.hint')}</span>
           </div>
         </div>
 
-        <div style={{ background: 'var(--shell-sidebar-bg)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-panel)', overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: EXERCISE_ROW_GRID, padding: '12px 18px', fontSize: 12, color: 'var(--nav-inactive-text)', fontWeight: 600 }}>
-            <div>תרגיל · Exercise</div><div>פתולוגיות · Pathologies</div><div>קטגוריה</div><div>מרשם</div><div />
-          </div>
+        {isTablet && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('catalog.tablet.readonly')}</div>}
 
-          {isLoading ? (
-            <div style={{ padding: 20 }}><Skeleton count={6} height={18} /></div>
-          ) : error ? (
-            <div style={{ padding: 20 }}><EmptyState title={t('error.generic.title')} body={t('error.generic.body')} /></div>
-          ) : exercises?.length === 0 ? (
-            <div style={{ padding: 44, textAlign: 'center', color: 'var(--nav-inactive-text)', fontSize: 13, borderTop: '1px solid var(--shell-border-soft)' }}>
-              לא נמצאו תרגילים · No exercises found
-            </div>
+        {/* Body */}
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', background: 'var(--white)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-panel)', overflow: 'hidden' }}>
+          {error ? (
+            <div style={{ padding: 24, flex: 1 }}><EmptyState title={t('error.generic.title')} body={t('error.generic.body')} /></div>
+          ) : effectiveView === 'bulk' ? (
+            isLoading ? <div style={{ padding: 20, flex: 1 }}><Skeleton count={10} height={30} /></div> : (
+              <CatalogBulkGrid
+                items={items}
+                regions={regions}
+                isCurator={isCurator}
+                readOnly={isTablet}
+                onApplied={invalidateList}
+                onOpen={(id) => { setSelectedId(id); setView('workspace'); }}
+                footer={listFooter}
+              />
+            )
           ) : (
-            exercises?.map((ex) => (
+            <>
               <div
-                key={ex.id}
-                onDoubleClick={() => setDetailId(ex.id)}
-                style={{ display: 'grid', gridTemplateColumns: EXERCISE_ROW_GRID, padding: '13px 18px', borderTop: '1px solid var(--shell-border-soft)', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+                ref={listRef}
+                tabIndex={0}
+                role="listbox"
+                aria-label={t('catalog.title')}
+                aria-activedescendant={selectedId ? `row-${selectedId}` : undefined}
+                style={{ width: 'clamp(300px, 34%, 420px)', flex: 'none', overflowY: 'auto', borderInlineEnd: '1px solid var(--shell-border)', background: 'var(--shell-sidebar-bg)', outline: 'none' }}
               >
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 7, overflowWrap: 'anywhere' }}>
-                    {ex.name}
-                    {ex.source === 'clinic' && (
-                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', background: 'var(--nav-active-bg)', border: '1px solid rgba(140,100,35,0.4)', color: 'var(--gold-deep)', padding: '2px 7px', borderRadius: 5, whiteSpace: 'nowrap' }}>
-                        נוצר על ידך
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--nav-inactive-text)', marginTop: 2, overflowWrap: 'anywhere' }}>{ex.name_en}</div>
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.5, minWidth: 0, overflowWrap: 'anywhere' }}>
-                  {ex.protocol_labels.length > 0 ? ex.protocol_labels.join(', ') : '—'}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--nav-inactive-text)', minWidth: 0 }}>{categoryLabel[ex.category] ?? ex.category}</div>
-                <div style={{ fontSize: 13, color: 'var(--ink-soft)', minWidth: 0 }}>{formatPrescription(ex.prescription)}</div>
-                <div onDoubleClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: 7, justifyContent: 'flex-start' }}>
-                  <button
-                    onClick={() => setDetailId(ex.id)}
-                    style={{ background: 'transparent', color: 'var(--ink-soft)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-pill)', padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
-                  >
-                    פרטים · Details
-                  </button>
-                  {!isTablet && (
-                    <button
-                      onClick={() => handleDuplicate(ex.id)}
-                      disabled={duplicatingId === ex.id}
-                      style={{ background: 'transparent', color: 'var(--gold-deep)', border: '1px solid rgba(140,100,35,0.5)', borderRadius: 'var(--radius-pill)', padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: duplicatingId === ex.id ? 0.5 : 1 }}
-                    >
-                      שכפל · Duplicate
-                    </button>
-                  )}
-                  {!isTablet && ex.source === 'clinic' && (
-                    <button
-                      onClick={() => handleDelete(ex.id)}
-                      disabled={deletingId === ex.id}
-                      style={{ background: 'transparent', color: 'var(--flag-red)', border: '1px solid var(--flag-red)', borderRadius: 'var(--radius-pill)', padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: deletingId === ex.id ? 0.5 : 1 }}
-                    >
-                      מחק · Delete
-                    </button>
-                  )}
-                </div>
+                {isLoading ? (
+                  <div style={{ padding: 16 }}><Skeleton count={10} height={44} radius={10} /></div>
+                ) : items.length === 0 ? (
+                  <div style={{ padding: 20 }}><EmptyState title={t('catalog.empty.title')} body={t('catalog.empty.body')} /></div>
+                ) : (
+                  items.map((i) => (
+                    <ListRow key={i.id} item={i} selected={i.id === selectedId} onClick={() => setSelectedId(i.id)} />
+                  ))
+                )}
+                {listFooter}
               </div>
-            ))
-          )}
-          {hasNextPage && (
-            <div style={{ padding: 16, textAlign: 'center', borderTop: '1px solid var(--shell-border-soft)' }}>
-              <Button variant="secondary" size="sm" loading={isFetchingNextPage} onClick={() => fetchNextPage()}>
-                טען עוד · Load more ({(exercises?.length ?? 0)} / {matchingCount})
-              </Button>
-            </div>
+              <div style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
+                {selectedId ? (
+                  <ExerciseEditor
+                    key={selectedId}
+                    exerciseId={selectedId}
+                    regions={regions}
+                    equipmentSuggestions={(facets?.equipment ?? []).map((e) => e.value)}
+                    readOnly={isTablet}
+                    onItemChanged={onItemChanged}
+                    onSelect={(id) => setSelectedId(id)}
+                    onListInvalidate={invalidateList}
+                    onDeleted={() => {
+                      setSelectedId(null);
+                      invalidateList();
+                    }}
+                  />
+                ) : (
+                  <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontSize: 14 }}>{t('catalog.empty.select')}</div>
+                )}
+              </div>
+            </>
           )}
         </div>
       </div>
 
-      <ExerciseDetailDrawer
-        exerciseId={detailId}
-        open={detailId !== null}
-        onClose={() => setDetailId(null)}
-        onDuplicated={(newId) => setDetailId(newId)}
-      />
-
-      <ExerciseFormModal
+      <NewExerciseModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onSaved={() => {
-          queryClient.invalidateQueries({ queryKey: ['exercises'] });
-          queryClient.invalidateQueries({ queryKey: ['exercise-filter-options'] });
+        regions={regions}
+        isCurator={isCurator}
+        onCreated={(id) => {
+          setQInput('');
+          applyView({});
+          setView('workspace');
+          setSelectedId(id);
+          invalidateList();
+        }}
+        onOpenExisting={(id) => {
+          setView('workspace');
+          setSelectedId(id);
         }}
       />
     </AppShell>
+  );
+}
+
+function ViewChip({ label, active, onClick, onRemove }: { label: string; active: boolean; onClick: () => void; onRemove?: () => void }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex', alignItems: 'center', borderRadius: 'var(--radius-pill)',
+        background: active ? 'var(--gold-deep)' : 'transparent', border: active ? '1px solid var(--gold-deep)' : '1px solid var(--shell-border)',
+      }}
+    >
+      <button
+        type="button"
+        aria-pressed={active}
+        onClick={onClick}
+        style={{ background: 'none', border: 'none', padding: '5px 12px', fontFamily: 'inherit', fontSize: 12, fontWeight: active ? 700 : 500, color: active ? 'var(--cream)' : 'var(--ink-soft)', cursor: 'pointer' }}
+      >
+        {label}
+      </button>
+      {onRemove && (
+        <button
+          type="button"
+          aria-label={`${t('catalog.views.remove')} ${label}`}
+          onClick={onRemove}
+          style={{ background: 'none', border: 'none', paddingInline: '0 9px', fontSize: 13, color: active ? 'var(--cream)' : 'var(--muted)', cursor: 'pointer' }}
+        >
+          ×
+        </button>
+      )}
+    </span>
+  );
+}
+
+function ListRow({ item, selected, onClick }: { item: CatalogItem; selected: boolean; onClick: () => void }) {
+  const [hover, setHover] = useState(false);
+  const img = hover && item.gif_url ? item.gif_url : item.thumb_url;
+  return (
+    <div
+      id={`row-${item.id}`}
+      role="option"
+      aria-selected={selected}
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', cursor: 'pointer',
+        borderBlockEnd: '1px solid var(--shell-border-soft)',
+        background: selected ? 'var(--white)' : hover ? 'var(--nav-active-bg)' : 'transparent',
+        boxShadow: selected ? 'inset -3px 0 0 var(--gold-deep)' : undefined,
+      }}
+    >
+      <span style={{ width: 42, height: 42, flex: 'none', borderRadius: 9, overflow: 'hidden', background: 'var(--white)', border: '1px solid var(--line-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+        {img ? <img src={mediaSrc(img)} alt="" width={42} height={42} loading="lazy" style={{ objectFit: 'cover' }} /> : <span aria-hidden style={{ color: 'var(--muted-2)' }}>◌</span>}
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span dir="auto" style={{ display: 'block', textAlign: 'start', fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginBlockStart: 2, fontSize: 11.5, color: 'var(--muted)', minWidth: 0 }}>
+          <StatusBadge status={item.status} compact />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {item.body_region?.name ?? '—'} · {exerciseCategoryLabel(item.category)}
+            {item.has_override && ` · ${t('catalog.override.badge')}`}
+          </span>
+        </span>
+      </span>
+      <CompletenessRing score={item.completeness} size={32} />
+    </div>
   );
 }

@@ -67,6 +67,9 @@ const exercisesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/exercises',
   component: ExerciseLibrary,
+  validateSearch: (search: Record<string, unknown>): { id?: string } => ({
+    id: typeof search.id === 'string' && /^[0-9a-f-]{36}$/i.test(search.id) ? search.id : undefined,
+  }),
 });
 
 const settingsRoute = createRoute({

@@ -669,7 +669,6 @@ export default function ExercisePicker({ open, onClose, context, existingIds, do
         exerciseId={detailId}
         open={detailId !== null}
         onClose={() => setDetailId(null)}
-        onDuplicated={(newId) => setDetailId(newId)}
       />
     </div>
   );

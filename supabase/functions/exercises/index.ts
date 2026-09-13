@@ -9,6 +9,7 @@
 //   GET  /exercises/recent?limit=
 //   PUT|DELETE /exercises/:id/favorite
 //   POST /exercises/picker-events
+// Exercise catalog workspace (T-30): see handleCatalog below.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -56,6 +57,138 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
+// RPC error object -> HTTP status (tenant isolation: another clinic's id is
+// already reported as not_found by the SQL layer).
+// deno-lint-ignore no-explicit-any
+function rpcResult(result: any, error: { message: string } | null, okStatus = 200) {
+  if (error) return json({ error: 'internal_error', details: error.message }, 500);
+  switch (result?.error) {
+    case undefined: return json(result, okStatus);
+    case 'forbidden': return json(result, 403);
+    case 'not_found': return json({ error: 'not_found' }, 404);
+    case 'conflict': return json(result, 409);
+    case 'validation_failed': return json(result, 422);
+    default: return json(result, 400);
+  }
+}
+
+// T-30 exercise catalog (library workspace):
+//   GET    /exercises/catalog?q=&body_region_id=&category=&status=&equipment=&start_position=
+//                            &source=&media=&missing=&protocol=&sort=&limit=&offset=
+//   GET    /exercises/catalog/:id                 -> editor payload
+//   POST   /exercises/catalog                     -> create {patch, scope?: 'clinic'|'master'}
+//   PATCH  /exercises/:id                         -> save {patch, expected_revision?}
+//   POST   /exercises/bulk                        -> {ids, patch}
+//   POST   /exercises/status                      -> {ids, status}
+//   DELETE /exercises/:id/override?fields=a,b     -> back to the catalog version
+//   GET    /exercises/:id/history
+//   POST   /exercises/revisions/:revisionId/restore
+//   GET    /exercises/similar?name=&name_en=&exclude_id=
+// deno-lint-ignore no-explicit-any
+async function handleCatalog(req: Request, url: URL, service: any, userId: string): Promise<Response | null> {
+  const segs = url.pathname.split('/').filter(Boolean);
+  const i = segs.lastIndexOf('exercises');
+  const rest = i >= 0 ? segs.slice(i + 1) : [];
+  const rpc = (fn: string, args: Record<string, unknown>) => service.schema('app').rpc(fn, { p_clinician_id: userId, ...args });
+
+  if (req.method === 'GET' && rest.length === 1 && rest[0] === 'catalog') {
+    const p = url.searchParams;
+    const filters: Record<string, string> = {};
+    for (const key of ['q', 'body_region_id', 'category', 'status', 'equipment', 'start_position', 'source', 'media', 'missing', 'protocol', 'sort']) {
+      const v = p.get(key);
+      if (v) filters[key] = v;
+    }
+    const { data, error } = await rpc('catalog_search', {
+      p_filters: filters,
+      p_limit: p.get('limit') ? Number(p.get('limit')) : undefined,
+      p_offset: p.get('offset') ? Number(p.get('offset')) : undefined,
+    });
+    if (!error && !data?.error) await withCardMedia(service, data.items ?? []);
+    return rpcResult(data, error);
+  }
+
+  if (req.method === 'GET' && rest.length === 2 && rest[0] === 'catalog' && UUID_RE.test(rest[1])) {
+    const { data, error } = await rpc('catalog_get_exercise', { p_exercise_id: rest[1] });
+    if (!error && !data?.error) {
+      for (const m of data.media ?? []) {
+        if (m.kind === 'video') continue; // url is a YouTube id
+        for (const field of ['url', 'thumb_url'] as const) {
+          const path = m[field];
+          if (typeof path === 'string' && path && !path.startsWith('http')) {
+            const signed = await getSignedMediaUrl(service, path);
+            m[field] = signed ? signed.replace(/^https?:\/\/[^/]+/, '') : null;
+          }
+        }
+      }
+    }
+    return rpcResult(data, error);
+  }
+
+  if (req.method === 'POST' && rest.length === 1 && rest[0] === 'catalog') {
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body.patch !== 'object') return json({ error: 'validation_failed' }, 422);
+    const { data, error } = await rpc('catalog_save_exercise', {
+      p_exercise_id: null, p_patch: body.patch, p_expected_revision: null,
+      p_scope: body.scope === 'master' ? 'master' : 'clinic',
+    });
+    return rpcResult(data, error, 201);
+  }
+
+  if (req.method === 'PATCH' && rest.length === 1 && UUID_RE.test(rest[0])) {
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body.patch !== 'object') return json({ error: 'validation_failed' }, 422);
+    const expected = Number.isInteger(body.expected_revision) ? body.expected_revision : null;
+    const { data, error } = await rpc('catalog_save_exercise', {
+      p_exercise_id: rest[0], p_patch: body.patch, p_expected_revision: expected,
+    });
+    return rpcResult(data, error);
+  }
+
+  if (req.method === 'POST' && rest.length === 1 && (rest[0] === 'bulk' || rest[0] === 'status')) {
+    const body = await req.json().catch(() => null);
+    const ids = Array.isArray(body?.ids) ? body.ids : null;
+    if (!ids || ids.length === 0 || ids.length > 500 || ids.some((id: unknown) => typeof id !== 'string' || !UUID_RE.test(id))) {
+      return json({ error: 'validation_failed', message: 'invalid_ids' }, 422);
+    }
+    const { data, error } = rest[0] === 'bulk'
+      ? await rpc('catalog_bulk_update', { p_ids: ids, p_patch: body.patch })
+      : await rpc('catalog_set_status', { p_ids: ids, p_status: body.status });
+    return rpcResult(data, error);
+  }
+
+  if (req.method === 'DELETE' && rest.length === 2 && UUID_RE.test(rest[0]) && rest[1] === 'override') {
+    const fields = url.searchParams.get('fields');
+    const { data, error } = await rpc('catalog_revert_override', {
+      p_exercise_id: rest[0],
+      p_fields: fields ? fields.split(',').map((f) => f.trim()).filter(Boolean) : null,
+    });
+    return rpcResult(data, error);
+  }
+
+  if (req.method === 'GET' && rest.length === 2 && UUID_RE.test(rest[0]) && rest[1] === 'history') {
+    const { data, error } = await rpc('catalog_history', { p_exercise_id: rest[0] });
+    return rpcResult(data, error);
+  }
+
+  if (req.method === 'POST' && rest.length === 3 && rest[0] === 'revisions' && UUID_RE.test(rest[1]) && rest[2] === 'restore') {
+    const { data, error } = await rpc('catalog_restore_revision', { p_revision_id: rest[1] });
+    return rpcResult(data, error);
+  }
+
+  if (req.method === 'GET' && rest.length === 1 && rest[0] === 'similar') {
+    const excludeId = url.searchParams.get('exclude_id');
+    if (excludeId && !UUID_RE.test(excludeId)) return json({ error: 'validation_failed' }, 422);
+    const { data, error } = await rpc('catalog_find_similar', {
+      p_name: url.searchParams.get('name'),
+      p_name_en: url.searchParams.get('name_en'),
+      p_exclude_id: excludeId,
+    });
+    return rpcResult(data, error);
+  }
+
+  return null;
+}
+
 interface CreateInput {
   name: string;
   name_en?: string;
@@ -80,6 +213,9 @@ Deno.serve(withCors(async (req) => {
 
   const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   const url = new URL(req.url);
+
+  const catalogResponse = await handleCatalog(req, url, service, user.id);
+  if (catalogResponse) return catalogResponse;
 
   if (req.method === 'GET') {
     const segs = url.pathname.split('/').filter(Boolean);
@@ -412,19 +548,8 @@ Deno.serve(withCors(async (req) => {
       p_exercise_id: tail,
     });
 
-    if (error) {
-      return new Response(JSON.stringify({ error: 'internal_error', details: error.message }), { status: 500 });
-    }
-    if (result?.error === 'forbidden') {
-      return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 });
-    }
-    if (result?.error === 'not_found') {
-      return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
-    }
-
-    return new Response(JSON.stringify(result), {
-      headers: { 'Content-Type': 'application/json' },
-    });
+    // T-30: 422 {message: 'in_use'} when a protocol or current plan still uses it
+    return rpcResult(result, error);
   }
 
   return new Response('Method not allowed', { status: 405 });

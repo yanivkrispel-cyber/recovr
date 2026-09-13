@@ -11,3 +11,4 @@ export * from './notifications';
 export * from './settings';
 export * from './youtube';
 export * from './exerciseRecommend';
+export * from './exerciseCatalog';

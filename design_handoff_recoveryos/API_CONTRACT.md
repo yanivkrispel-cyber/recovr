@@ -41,7 +41,17 @@ patient's timezone · cursor pagination (`?cursor=&limit=`) · `Idempotency-Key`
 | GET | `/exercises/recent` | exercises this clinician added through the picker, newest first (T-29) |
 | PUT/DELETE | `/exercises/:id/favorite` | star / unstar for the current clinician (T-29) |
 | POST | `/exercises/picker-events` | best-effort picker log `{picker_session_id, entry, protocol_id?, body_region_id?, phase_n?, events:[{exercise_id, event: shown\|added, source?, rank?, score?}]}` (T-29) |
-| POST | `/exercises` | clinic-custom exercise |
+| POST | `/exercises` | clinic-custom exercise (legacy form; the library workspace uses `POST /exercises/catalog`) |
+| GET | `/exercises/catalog?q=&body_region_id=&category=&status=&equipment=&start_position=&source=&media=&missing=&protocol=&sort=&limit=&offset=` | library workspace search (T-30) → `{items:[CatalogItem], total, facets:{body_region, category, status, equipment, start_position, source, media, missing}, viewer:{is_curator}}`. Typo-tolerant Hebrew/English/alias search; a facet's counts apply every *other* active filter; archived excluded unless `status=archived`. `source` = `system`\|`clinic`\|`override`; `missing` = a completeness key; `sort` = `relevance`\|`name`\|`updated`\|`completeness`. |
+| GET | `/exercises/catalog/:id` | editor payload: effective fields, status, revision/override_revision, overridden_fields, master content values, completeness + missing, permissions, usage (protocols, active plan count), media (T-30) |
+| POST | `/exercises/catalog` | create `{patch, scope?: clinic\|master}` — `master` for curators only; starts as `draft` (T-30) |
+| PATCH | `/exercises/:id` | save `{patch, expected_revision?}` → `{revision, override_revision?, completeness, missing, changed}`. Target follows the row and caller: clinic exercise → the row; system exercise + curator → master; otherwise the clinic override (content fields only, else 403 `master_field`). 409 `conflict` on a stale revision (T-30) |
+| POST | `/exercises/bulk` | `{ids (≤500), patch}` → `{updated, skipped:[{id, reason}]}` (T-30) |
+| POST | `/exercises/status` | `{ids (≤500), status}` → `{updated, skipped}`; approval needs a body region; master rows curators only (T-30) |
+| DELETE | `/exercises/:id/override?fields=a,b` | back to the catalog version for those (or all) fields (T-30) |
+| GET | `/exercises/:id/history` · POST `/exercises/revisions/:id/restore` | change history; restore re-applies a revision's `from` values as a new change (T-30) |
+| GET | `/exercises/similar?name=&name_en=&exclude_id=` | duplicate check while creating/renaming (T-30) |
+| DELETE | `/exercises/:id` | soft-delete a clinic exercise; 422 `in_use` when a protocol or current plan still uses it (archive instead) |
 | GET/POST/DELETE | `/plan-templates` | saved phase templates |
 | GET | `/measure-definitions` | measurement catalog, clinic overrides over system defaults |
 | GET | `/patients/:id/measurements?joint=ankle` | rows + definitions + previous values |
