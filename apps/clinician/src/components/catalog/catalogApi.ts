@@ -1,6 +1,9 @@
 // T-30 exercise catalog — API types and calls for the library workspace.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { BodyRegion, CompletenessKey, ContentField, ExerciseStatus, MediaKind, MediaRights } from 'shared';
+import type {
+  BodyRegion, CompletenessKey, ContentField, ContractionType, Dosage, ExerciseStatus, ItemKind, Laterality,
+  MediaKind, MediaRights, WeightBearing,
+} from 'shared';
 
 export interface CatalogFilters {
   q?: string;
@@ -113,6 +116,13 @@ export interface CatalogExercise {
   start_position: string | null;
   difficulty: number | null;
   is_bilateral: boolean;
+  item_kind: ItemKind;
+  weight_bearing: WeightBearing | null;
+  contraction_type: ContractionType | null;
+  laterality: Laterality | null;
+  instruction_steps: string[];
+  default_prescription: Dosage;
+  secondary_region_ids: string[];
   source: 'system' | 'clinic';
   external_ref: string | null;
   is_clinic_owned: boolean;
@@ -152,6 +162,12 @@ export interface EditableFields {
   start_position: string | null;
   difficulty: number | null;
   is_bilateral: boolean;
+  item_kind: ItemKind;
+  weight_bearing: WeightBearing | null;
+  contraction_type: ContractionType | null;
+  laterality: Laterality | null;
+  instruction_steps: string[];
+  default_prescription: Dosage;
   muscles: string[];
   equipment: string[];
   description: string | null;
@@ -165,14 +181,18 @@ export type EditableKey = keyof EditableFields;
 export type Patch = Partial<EditableFields>;
 
 export const MASTER_ONLY_FIELDS: EditableKey[] = [
-  'name', 'name_en', 'aliases', 'body_region_id', 'category', 'start_position', 'difficulty', 'is_bilateral', 'muscles', 'equipment',
+  'name', 'name_en', 'aliases', 'body_region_id', 'category', 'start_position', 'difficulty', 'is_bilateral',
+  'item_kind', 'weight_bearing', 'contraction_type', 'laterality', 'default_prescription', 'muscles', 'equipment',
 ];
 
 export function editableFrom(ex: CatalogExercise): EditableFields {
   return {
     name: ex.name, name_en: ex.name_en, aliases: ex.aliases, body_region_id: ex.body_region_id,
     category: ex.category, start_position: ex.start_position, difficulty: ex.difficulty,
-    is_bilateral: ex.is_bilateral, muscles: ex.muscles, equipment: ex.equipment,
+    is_bilateral: ex.is_bilateral, item_kind: ex.item_kind, weight_bearing: ex.weight_bearing,
+    contraction_type: ex.contraction_type, laterality: ex.laterality,
+    instruction_steps: ex.instruction_steps, default_prescription: ex.default_prescription,
+    muscles: ex.muscles, equipment: ex.equipment,
     description: ex.description, instructions: ex.instructions, key_cues: ex.key_cues,
     common_mistakes: ex.common_mistakes, safety_notes: ex.safety_notes, contraindications: ex.contraindications,
   };
@@ -255,6 +275,9 @@ export const bulkUpdate = (supabase: SupabaseClient, ids: string[], patch: Patch
 
 export const setStatus = (supabase: SupabaseClient, ids: string[], status: ExerciseStatus) =>
   call<BulkResult>(supabase, 'exercises/status', { method: 'POST', body: { ids, status } });
+
+export const setSecondaryRegions = (supabase: SupabaseClient, id: string, regionIds: string[]) =>
+  call<{ ok: true; secondary_region_ids: string[] }>(supabase, `exercises/${id}/secondary-regions`, { method: 'PUT', body: { region_ids: regionIds } });
 
 export const revertOverride = (supabase: SupabaseClient, id: string, fields: string[]) =>
   call<SaveResult>(supabase, `exercises/${id}/override?fields=${encodeURIComponent(fields.join(','))}`, { method: 'DELETE' });

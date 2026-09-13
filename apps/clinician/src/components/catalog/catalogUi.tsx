@@ -1,6 +1,9 @@
 // T-30 small building blocks shared by the catalog workspace and bulk grid.
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
-import { completenessKeyLabel, completenessTone, exerciseStatusLabel, t, type ExerciseStatus } from 'shared';
+import {
+  completenessKeyLabel, completenessTone, DOSAGE_MODES, dosageModeLabel, exerciseStatusLabel, t,
+  type Dosage, type ExerciseStatus,
+} from 'shared';
 
 export const fieldLabelStyle: CSSProperties = {
   fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 700, color: 'var(--ink-soft)', letterSpacing: '0.02em',
@@ -181,7 +184,7 @@ export function TagInput({
 
 /** Ordered list of short texts (key cues). */
 export function CueListEditor({
-  id, value, onChange, onCommit, disabled,
+  id, value, onChange, onCommit, disabled, placeholder, addLabel,
 }: {
   id?: string;
   value: string[];
@@ -190,6 +193,8 @@ export function CueListEditor({
   /** structural changes and blur — save now */
   onCommit: (next: string[]) => void;
   disabled?: boolean;
+  placeholder?: string;
+  addLabel?: string;
 }) {
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const [focusIndex, setFocusIndex] = useState<number | null>(null);
@@ -222,7 +227,7 @@ export function CueListEditor({
             value={cue}
             dir="rtl"
             disabled={disabled}
-            placeholder={t('catalog.field.key_cues.placeholder')}
+            placeholder={placeholder ?? t('catalog.field.key_cues.placeholder')}
             onChange={(e) => onChange(value.map((c, k) => (k === i ? e.target.value : c)))}
             onBlur={() => onCommit(clean(value))}
             onKeyDown={(e) => {
@@ -264,9 +269,99 @@ export function CueListEditor({
           }}
           style={{ ...linkButtonStyle, alignSelf: 'flex-start', textDecoration: 'none' }}
         >
-          {t('catalog.field.key_cues.add')}
+          {addLabel ?? t('catalog.field.key_cues.add')}
         </button>
       )}
+    </div>
+  );
+}
+
+/** Small numeric input for the dosage grid below — no spinners, RTL label above. */
+function numberField(label: string, value: number | null | undefined, disabled: boolean | undefined, onCommit: (n: number | null) => void) {
+  const [local, setLocal] = useState(value == null ? '' : String(value));
+  useEffect(() => setLocal(value == null ? '' : String(value)), [value]);
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 88 }}>
+      <span style={{ fontSize: 11, color: 'var(--muted)' }}>{label}</span>
+      <input
+        type="number"
+        min={0}
+        inputMode="numeric"
+        dir="ltr"
+        disabled={disabled}
+        value={local}
+        onChange={(e) => setLocal(e.target.value)}
+        onBlur={() => {
+          const n = local.trim() === '' ? null : Number(local);
+          onCommit(Number.isFinite(n) ? n : null);
+        }}
+        style={{ ...textInputStyle, direction: 'ltr', textAlign: 'left', padding: '7px 10px' }}
+      />
+    </label>
+  );
+}
+
+/** Typed default-dosage editor: a mode segmented control plus the 2-3 numeric
+ * fields that mode actually uses, so a stretch can't accidentally carry
+ * "reps" and a cardio program can't carry "sets". */
+export function DosageEditor({ id, value, onCommit, disabled }: { id?: string; value: Dosage; onCommit: (next: Dosage) => void; disabled?: boolean }) {
+  const set = <K extends keyof Dosage>(k: K, v: Dosage[K]) => onCommit({ ...value, [k]: v });
+  return (
+    <div id={id} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <Segmented
+        options={DOSAGE_MODES.map((m) => ({ value: m as string, label: dosageModeLabel(m) }))}
+        value={value.mode ?? null}
+        allowClear
+        disabled={disabled}
+        onChange={(v) => onCommit(v ? { mode: v as Dosage['mode'] } : {})}
+      />
+      {value.mode && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+          {value.mode === 'reps' && <>
+            {numberField(t('catalog.dosage.field.sets'), value.sets, disabled, (n) => set('sets', n))}
+            {numberField(t('catalog.dosage.field.reps'), value.reps, disabled, (n) => set('reps', n))}
+          </>}
+          {value.mode === 'hold' && <>
+            {numberField(t('catalog.dosage.field.sets'), value.sets, disabled, (n) => set('sets', n))}
+            {numberField(t('catalog.dosage.field.hold_sec'), value.hold_sec, disabled, (n) => set('hold_sec', n))}
+          </>}
+          {value.mode === 'duration' && numberField(t('catalog.dosage.field.duration_min'), value.duration_min, disabled, (n) => set('duration_min', n))}
+          {value.mode === 'distance' && numberField(t('catalog.dosage.field.distance_m'), value.distance_m, disabled, (n) => set('distance_m', n))}
+          {numberField(t('catalog.dosage.field.rest_sec'), value.rest_sec, disabled, (n) => set('rest_sec', n))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Checkbox list for an exercise's secondary body regions (in addition to
+ * its primary region). Commits on every toggle — there's no debounce state
+ * worth batching for a handful of checkboxes. */
+export function RegionCheckList({
+  id, options, value, onChange, disabled,
+}: {
+  id?: string;
+  options: { value: string; label: string }[];
+  value: string[];
+  onChange: (next: string[]) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div id={id} style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px' }}>
+      {options.map((o) => {
+        const checked = value.includes(o.value);
+        return (
+          <label key={o.value} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--ink-soft)', cursor: disabled ? 'default' : 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={checked}
+              disabled={disabled}
+              onChange={() => onChange(checked ? value.filter((v) => v !== o.value) : [...value, o.value])}
+            />
+            {o.label}
+          </label>
+        );
+      })}
     </div>
   );
 }

@@ -554,3 +554,17 @@ FROM (VALUES
   ('Lateral Hops', 'Control')
 ) AS c(name_en, category)
 WHERE app.exercise.clinic_id IS NULL AND app.exercise.name_en = c.name_en AND app.exercise.deleted_at IS NULL;
+
+-- item_kind (0036, T01/T03): rows that aren't sets-and-reps exercises.
+UPDATE app.exercise SET item_kind = 'education', updated_at = now()
+WHERE clinic_id IS NULL AND deleted_at IS NULL AND name_en IN (
+  'Night Splint Education', 'Patellar Tendon Strap Education', 'Wrist Neutral Splint Education',
+  'Ice/Activity Modification', 'Ergonomic Posture Drills'
+);
+
+UPDATE app.exercise SET item_kind = 'program', updated_at = now()
+WHERE clinic_id IS NULL AND deleted_at IS NULL AND name_en IN (
+  'Return to Run Program', 'Gradual Return to Sport', 'Walking Program', 'Sprint Progression',
+  'Bone-Loading Progression', 'Gradual Weight-Bearing Progression', 'Overhead Throwing Progression',
+  'Return to Racquet Drills', 'Gradual Return to Lifting', 'Gait Retraining'
+);

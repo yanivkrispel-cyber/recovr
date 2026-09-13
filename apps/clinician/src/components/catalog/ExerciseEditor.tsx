@@ -8,19 +8,20 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  DIFFICULTY_LEVELS, EXERCISE_CATEGORIES, START_POSITIONS, difficultyLabel, exerciseCategoryLabel,
-  startPositionLabel, t, type BodyRegion, type ContentField, type ExerciseStatus,
+  CONTRACTION_TYPES, DIFFICULTY_LEVELS, EXERCISE_CATEGORIES, ITEM_KINDS, LATERALITY_OPTIONS, START_POSITIONS,
+  WEIGHT_BEARING_OPTIONS, contractionTypeLabel, difficultyLabel, exerciseCategoryLabel, itemKindLabel,
+  lateralityLabel, startPositionLabel, t, weightBearingLabel, type BodyRegion, type ContentField, type ExerciseStatus,
 } from 'shared';
 import { Button, EmptyState, Skeleton, Toggle, useToast } from 'ui';
 import { SupabaseContext } from '../../App';
 import {
   CatalogApiError, MASTER_ONLY_FIELDS, deleteExercise, duplicateExercise, editableFrom, findSimilar,
-  getCatalogExercise, mediaSrc, revertOverride, saveExercise, setStatus,
+  getCatalogExercise, mediaSrc, revertOverride, saveExercise, setSecondaryRegions, setStatus,
   type CatalogExercise, type CatalogItem, type EditableFields, type EditableKey, type Patch,
 } from './catalogApi';
 import {
-  CompletenessMeter, CueListEditor, Section, Segmented, StatusBadge, TagInput, fieldLabelStyle, linkButtonStyle,
-  smallButtonStyle, textInputStyle, textareaStyle,
+  CompletenessMeter, CueListEditor, DosageEditor, RegionCheckList, Section, Segmented, StatusBadge, TagInput,
+  fieldLabelStyle, linkButtonStyle, smallButtonStyle, textInputStyle, textareaStyle,
 } from './catalogUi';
 import ExerciseHistory from './ExerciseHistory';
 import MediaManager from './MediaManager';
@@ -97,6 +98,7 @@ function EditorBody({
   const [busy, setBusy] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [showMaster, setShowMaster] = useState<Record<string, boolean>>({});
+  const [secondaryRegions, setSecondaryRegionsState] = useState<string[]>(ex.secondary_region_ids);
 
   const overrideTarget = !ex.is_clinic_owned && !ex.permissions.can_edit_master;
   const revision = useRef({ row: ex.revision, override: ex.override_revision });
@@ -258,7 +260,10 @@ function EditorBody({
       const res = await setStatus(supabase, [ex.id], status);
       if (res.skipped.length > 0) {
         const reason = res.skipped[0].reason;
-        toast.show(reason === 'missing_body_region' ? t('catalog.status.approve_needs_region') : t('error.save.body'), { tone: 'error', duration: 4000 });
+        const msg = reason === 'missing_body_region' ? t('catalog.status.approve_needs_region')
+          : reason === 'missing_required_fields' ? t('catalog.status.approve_needs_fields')
+          : t('error.save.body');
+        toast.show(msg, { tone: 'error', duration: 4000 });
       } else {
         onItemChanged(ex.id, { status });
         reload();
@@ -309,6 +314,18 @@ function EditorBody({
       onItemChanged(ex.id, { completeness: res.completeness, missing: res.missing, has_override: overridden.length > 1 });
       queryClient.invalidateQueries({ queryKey: ['catalog-history', ex.id] });
     } catch {
+      toast.show(t('error.save.body'), { tone: 'error' });
+    }
+  }
+
+  async function handleSecondaryRegions(next: string[]) {
+    const before = secondaryRegions;
+    setSecondaryRegionsState(next);
+    try {
+      const res = await setSecondaryRegions(supabase, ex.id, next);
+      setSecondaryRegionsState(res.secondary_region_ids);
+    } catch {
+      setSecondaryRegionsState(before);
       toast.show(t('error.save.body'), { tone: 'error' });
     }
   }
@@ -535,6 +552,14 @@ function EditorBody({
         </Section>
 
         <Section id="sec-classification" title={t('catalog.section.classification')}>
+          {field({ k: "item_kind", label: t('catalog.field.item_kind'), children: (
+            <Segmented
+              options={ITEM_KINDS.map((k) => ({ value: k as string, label: itemKindLabel(k) }))}
+              value={draft.item_kind}
+              disabled={!canEdit('item_kind')}
+              onChange={(v) => v && setField('item_kind', v as EditableFields['item_kind'])}
+            />
+          ) })}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
             {field({ k: "body_region_id", label: t('catalog.field.body_region'), wide: false, children: (
               <select
@@ -560,7 +585,30 @@ function EditorBody({
                 {START_POSITIONS.map((p) => <option key={p} value={p}>{startPositionLabel(p)}</option>)}
               </select>
             ) })}
+            {field({ k: "contraction_type", label: t('catalog.field.contraction_type'), wide: false, children: (
+              <select
+                id="f-contraction_type"
+                value={draft.contraction_type ?? ''}
+                disabled={!canEdit('contraction_type')}
+                onChange={(e) => setField('contraction_type', (e.target.value || null) as EditableFields['contraction_type'])}
+                style={textInputStyle}
+              >
+                <option value="">{t('catalog.field.none')}</option>
+                {CONTRACTION_TYPES.map((c) => <option key={c} value={c}>{contractionTypeLabel(c)}</option>)}
+              </select>
+            ) })}
           </div>
+          {regionOptions.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <label style={fieldLabelStyle}>{t('catalog.field.secondary_regions')} <span style={{ fontWeight: 400, color: 'var(--muted)' }}>({t('catalog.field.secondary_regions.hint')})</span></label>
+              <RegionCheckList
+                options={regionOptions.filter((o) => o.value !== draft.body_region_id)}
+                value={secondaryRegions}
+                disabled={!canEdit('body_region_id')}
+                onChange={handleSecondaryRegions}
+              />
+            </div>
+          )}
           {field({ k: "category", label: t('catalog.field.category'), children: (
             <Segmented
               options={EXERCISE_CATEGORIES.map((c) => ({ value: c as string, label: exerciseCategoryLabel(c) }))}
@@ -581,6 +629,24 @@ function EditorBody({
                 />
               ) })}
             </div>
+            {field({ k: "weight_bearing", label: t('catalog.field.weight_bearing'), wide: false, children: (
+              <Segmented
+                options={WEIGHT_BEARING_OPTIONS.map((w) => ({ value: w as string, label: weightBearingLabel(w) }))}
+                value={draft.weight_bearing}
+                allowClear
+                disabled={!canEdit('weight_bearing')}
+                onChange={(v) => setField('weight_bearing', v as EditableFields['weight_bearing'])}
+              />
+            ) })}
+            {field({ k: "laterality", label: t('catalog.field.laterality'), wide: false, children: (
+              <Segmented
+                options={LATERALITY_OPTIONS.map((l) => ({ value: l as string, label: lateralityLabel(l) }))}
+                value={draft.laterality}
+                allowClear
+                disabled={!canEdit('laterality')}
+                onChange={(v) => setField('laterality', v as EditableFields['laterality'])}
+              />
+            ) })}
             <div style={{ paddingBlockEnd: 4 }}>
               <Toggle
                 label={t('catalog.field.is_bilateral')}
@@ -590,6 +656,14 @@ function EditorBody({
               />
             </div>
           </div>
+          {field({ k: "default_prescription", label: t('catalog.field.dosage'), children: (
+            <DosageEditor
+              id="f-default_prescription"
+              value={draft.default_prescription}
+              disabled={!canEdit('default_prescription')}
+              onCommit={(v) => setField('default_prescription', v)}
+            />
+          ) })}
           {field({ k: "muscles", label: t('catalog.field.muscles'), hint: ex.muscle_group ? t('catalog.field.muscle_group', { value: ex.muscle_group }) : undefined, children: (
             <TagInput id="f-muscles" dir="rtl" value={draft.muscles} disabled={!canEdit('muscles')} onChange={(v) => setField('muscles', v)} />
           ) })}
@@ -600,7 +674,20 @@ function EditorBody({
 
         <Section id="sec-content" title={t('catalog.section.content')}>
           {field({ k: "description", label: t('catalog.field.description'), children: textArea('description', 2) })}
-          {field({ k: "instructions", label: t('catalog.field.instructions'), hint: t('catalog.field.instructions.hint'), children: textArea('instructions', 6) })}
+          {field({ k: "instruction_steps", label: t('catalog.field.instruction_steps'), children: (
+            <CueListEditor
+              id="f-instruction_steps"
+              value={draft.instruction_steps}
+              disabled={!canEdit('instruction_steps')}
+              placeholder={t('catalog.field.instruction_steps.placeholder')}
+              addLabel={t('catalog.field.instruction_steps.add')}
+              onChange={(v) => setField('instruction_steps', v, 'local')}
+              onCommit={(v) => {
+                if (JSON.stringify(v) !== JSON.stringify(lastSaved.current.instruction_steps)) setField('instruction_steps', v);
+              }}
+            />
+          ) })}
+          {field({ k: "instructions", label: t('catalog.field.instructions'), hint: t('catalog.field.instructions.hint'), children: textArea('instructions', 4) })}
           {field({ k: "key_cues", label: t('catalog.field.key_cues'), children: (
             <CueListEditor
               id="f-key_cues"

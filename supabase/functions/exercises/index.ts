@@ -146,6 +146,16 @@ async function handleCatalog(req: Request, url: URL, service: any, userId: strin
     return rpcResult(data, error);
   }
 
+  if (req.method === 'PUT' && rest.length === 2 && UUID_RE.test(rest[0]) && rest[1] === 'secondary-regions') {
+    const body = await req.json().catch(() => null);
+    const ids = Array.isArray(body?.region_ids) ? body.region_ids : null;
+    if (!ids || ids.some((id: unknown) => typeof id !== 'string' || !UUID_RE.test(id))) {
+      return json({ error: 'validation_failed', message: 'invalid_region_ids' }, 422);
+    }
+    const { data, error } = await rpc('catalog_set_secondary_regions', { p_exercise_id: rest[0], p_region_ids: ids });
+    return rpcResult(data, error);
+  }
+
   if (req.method === 'DELETE' && rest.length === 2 && UUID_RE.test(rest[0]) && rest[1] === 'override') {
     const fields = url.searchParams.get('fields');
     const { data, error } = await rpc('catalog_revert_override', {
