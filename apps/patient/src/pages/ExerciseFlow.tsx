@@ -38,7 +38,10 @@ interface TodayItem {
   id: string;
   sets: number;
   reps: number;
-  exercise: { name: string; name_en?: string; instructions?: string; media?: ExerciseMedia[] };
+  exercise: {
+    name: string; name_en?: string; instructions?: string; instruction_steps?: string[]; key_cues?: string[];
+    media?: ExerciseMedia[];
+  };
   done: boolean;
 }
 
@@ -360,10 +363,24 @@ export default function ExerciseFlow({ index, onAdvance, onComplete, onCancel }:
             <bdi>{item.sets} × {item.reps}</bdi>
           </div>
 
-          {item.exercise.instructions && (
+          {item.exercise.instruction_steps && item.exercise.instruction_steps.length > 0 ? (
+            <ol style={{ fontSize: 13, color: 'var(--patient-muted)', lineHeight: 1.6, margin: 0, paddingInlineStart: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {item.exercise.instruction_steps.map((step, i) => <li key={i}>{step}</li>)}
+            </ol>
+          ) : item.exercise.instructions && (
             <p style={{ fontSize: 13, color: 'var(--patient-muted)', lineHeight: 1.6, margin: 0 }}>
               {item.exercise.instructions}
             </p>
+          )}
+
+          {item.exercise.key_cues && item.exercise.key_cues.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {item.exercise.key_cues.map((cue, i) => (
+                <span key={i} style={{ fontSize: 12, color: 'var(--patient-text)', background: 'var(--patient-card-light)', borderRadius: 999, padding: '4px 10px' }}>
+                  {cue}
+                </span>
+              ))}
+            </div>
           )}
 
           <button

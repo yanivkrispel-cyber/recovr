@@ -21,6 +21,8 @@ interface PlanExercise {
   frequency_days_per_week: number | null;
   clinician_note: string | null;
   instructions: string | null;
+  instruction_steps: string[] | null;
+  key_cues: string[] | null;
   common_mistakes: string | null;
   media: Media[];
 }
@@ -280,7 +282,7 @@ function PageOne({ data, printedOn }: { data: HomeProgram; printedOn: string }) 
 
 function PageTwo({ data }: { data: HomeProgram }) {
   const { patient, phase } = data;
-  const detailed = data.exercises.filter((e) => e.instructions || e.common_mistakes || e.media.length > 0);
+  const detailed = data.exercises.filter((e) => e.instructions || (e.instruction_steps?.length ?? 0) > 0 || e.common_mistakes || e.media.length > 0);
   return (
     <section className="hpp-page">
       <div style={{ padding: '32px 40px 0', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
@@ -316,7 +318,16 @@ function PageTwo({ data }: { data: HomeProgram }) {
                   <div style={{ marginTop: 9, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div>
                       <div style={{ fontSize: 9.5, letterSpacing: '0.1em', color: 'var(--muted-2)', fontWeight: 600, marginBottom: 5 }}>ביצוע</div>
-                      <div style={{ fontSize: 11, lineHeight: 1.55, color: 'var(--ink-soft)' }}>{e.instructions ?? '—'}</div>
+                      {e.instruction_steps && e.instruction_steps.length > 0 ? (
+                        <ol style={{ fontSize: 11, lineHeight: 1.55, color: 'var(--ink-soft)', margin: 0, paddingInlineStart: 16 }}>
+                          {e.instruction_steps.map((step, si) => <li key={si}>{step}</li>)}
+                        </ol>
+                      ) : (
+                        <div style={{ fontSize: 11, lineHeight: 1.55, color: 'var(--ink-soft)' }}>{e.instructions ?? '—'}</div>
+                      )}
+                      {e.key_cues && e.key_cues.length > 0 && (
+                        <div style={{ fontSize: 10.5, lineHeight: 1.5, color: 'var(--muted-2)', marginTop: 5 }}>{e.key_cues.join(' · ')}</div>
+                      )}
                     </div>
                     <div>
                       <div style={{ fontSize: 9.5, letterSpacing: '0.1em', color: 'var(--muted-2)', fontWeight: 600, marginBottom: 5 }}>טעויות נפוצות</div>

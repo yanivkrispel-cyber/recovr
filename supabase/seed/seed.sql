@@ -568,3 +568,8 @@ WHERE clinic_id IS NULL AND deleted_at IS NULL AND name_en IN (
   'Bone-Loading Progression', 'Gradual Weight-Bearing Progression', 'Overhead Throwing Progression',
   'Return to Racquet Drills', 'Gradual Return to Lifting', 'Gait Retraining'
 );
+
+-- Step 3 (0037): P0 content for the 107 core exercises. Migration-time call
+-- found no exercise rows yet (protocols_import.sql/seed.sql run after every
+-- migration) — apply it now that they exist.
+SELECT app._catalog_apply_p0_content_2026_09_13();
