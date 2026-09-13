@@ -577,3 +577,8 @@ SELECT app._catalog_apply_p0_content_2026_09_13();
 -- Step 4 (0039): dataset media links for the 6 confident matches. Same
 -- migration-time-found-nothing reason as above.
 SELECT app._catalog_link_dataset_media_2026_09_13();
+
+-- Step 6a (0041): 13 core exercises whose region is ambiguous across
+-- protocols (used in >=2 differently-tagged protocols) got skipped by the
+-- 0029 backfill. Same migration-time-found-nothing reason as above.
+SELECT app._catalog_fix_core_region_gaps_2026_09_13();
