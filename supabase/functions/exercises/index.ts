@@ -1,5 +1,5 @@
 // Edge Function: exercise library (T-08, T-14).
-//   GET  /exercises?q=&category=&region=&phase=&muscle=&protocol=  -> search
+//   GET  /exercises?q=&category=&region_id=&phase=&muscle=&protocol=  -> search
 //   GET  /exercises/:id                                   -> full detail + media
 //   POST /exercises                                       -> create clinic-custom exercise
 //   POST /exercises/:id/duplicate                         -> clone into a clinic-owned copy
@@ -18,7 +18,7 @@ interface CreateInput {
   name: string;
   name_en?: string;
   category: string;
-  region?: string;
+  body_region_id?: string;
   description?: string;
   instructions?: string;
   is_bilateral?: boolean;
@@ -102,18 +102,22 @@ Deno.serve(withCors(async (req) => {
   if (req.method === 'GET') {
     const q = url.searchParams.get('q');
     const category = url.searchParams.get('category');
-    const region = url.searchParams.get('region');
+    const regionId = url.searchParams.get('region_id');
     const phase = url.searchParams.get('phase');
     const muscle = url.searchParams.get('muscle');
     const protocol = url.searchParams.get('protocol');
     const limit = url.searchParams.get('limit');
     const offset = url.searchParams.get('offset');
 
+    if (regionId && !UUID_RE.test(regionId)) {
+      return new Response(JSON.stringify({ error: 'validation_failed', message: 'invalid_region_id' }), { status: 422 });
+    }
+
     const { data: result, error } = await service.schema('app').rpc('search_exercises', {
       p_clinician_id: user.id,
       p_query: q,
       p_category: category,
-      p_region: region,
+      p_body_region_id: regionId,
       p_phase_n: phase ? Number(phase) : null,
       p_muscle: muscle,
       p_protocol_slug: protocol,
@@ -212,7 +216,7 @@ Deno.serve(withCors(async (req) => {
       p_name: body.name,
       p_name_en: body.name_en ?? null,
       p_category: body.category,
-      p_region: body.region ?? null,
+      p_body_region_id: body.body_region_id ?? null,
       p_description: body.description ?? null,
       p_instructions: body.instructions ?? null,
       p_is_bilateral: body.is_bilateral ?? false,
@@ -247,7 +251,7 @@ Deno.serve(withCors(async (req) => {
       p_name: body.name,
       p_name_en: body.name_en ?? null,
       p_category: body.category,
-      p_region: body.region ?? null,
+      p_body_region_id: body.body_region_id ?? null,
       p_description: body.description ?? null,
       p_instructions: body.instructions ?? null,
       p_is_bilateral: body.is_bilateral ?? false,

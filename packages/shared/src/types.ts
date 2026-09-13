@@ -15,6 +15,15 @@ export type AlertType =
 export type CriterionType = 'time' | 'pain' | 'rom' | 'strength' | 'assessment' | 'manual';
 export type CriterionOperator = 'gte' | 'lte' | 'eq';
 
+// Canonical clinical body-region taxonomy (T-28) — replaces the free-text
+// region/region_en that used to live directly on exercise/protocol.
+export interface BodyRegion {
+  id: UUID;
+  slug: string;
+  name: string;
+  name_en: string;
+}
+
 export interface Clinic {
   id: UUID;
   name: string;

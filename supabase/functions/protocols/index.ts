@@ -20,8 +20,9 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 interface ProtocolPayload {
   name: string;
   name_en?: string;
-  region?: string;
-  region_en?: string;
+  body_region_id?: string;
+  region_detail?: string;
+  region_detail_en?: string;
   phases: unknown[];
 }
 
@@ -124,8 +125,9 @@ Deno.serve(withCors(async (req) => {
       p_clinician_id: user.id,
       p_name: body.name,
       p_name_en: body.name_en ?? null,
-      p_region: body.region ?? null,
-      p_region_en: body.region_en ?? null,
+      p_body_region_id: body.body_region_id ?? null,
+      p_region_detail: body.region_detail ?? null,
+      p_region_detail_en: body.region_detail_en ?? null,
       p_phases: body.phases,
     });
     if (error) return new Response(JSON.stringify({ error: 'internal_error', details: error.message }), { status: 500 });
@@ -143,8 +145,9 @@ Deno.serve(withCors(async (req) => {
       p_protocol_id: rest[0],
       p_name: body.name,
       p_name_en: body.name_en ?? null,
-      p_region: body.region ?? null,
-      p_region_en: body.region_en ?? null,
+      p_body_region_id: body.body_region_id ?? null,
+      p_region_detail: body.region_detail ?? null,
+      p_region_detail_en: body.region_detail_en ?? null,
       p_phases: body.phases,
     });
     if (error) return new Response(JSON.stringify({ error: 'internal_error', details: error.message }), { status: 500 });

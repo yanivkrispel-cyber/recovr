@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState, type CSSProperties } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { t } from 'shared';
+import { t, type BodyRegion } from 'shared';
 import { Button, Input, Select, Skeleton } from 'ui';
 import { SupabaseContext } from '../App';
 import ExerciseDetailDrawer from './ExerciseDetailDrawer';
@@ -44,8 +44,9 @@ interface ProtocolDetail {
   id: string;
   name: string;
   name_en: string | null;
-  region: string | null;
-  region_en: string | null;
+  body_region: BodyRegion | null;
+  region_detail: string | null;
+  region_detail_en: string | null;
   source: 'system' | 'clinic';
   version: string;
   is_editable: boolean;
@@ -64,12 +65,12 @@ interface ExerciseOption {
   name: string;
   name_en: string | null;
   category: string;
-  region: string | null;
+  body_region: BodyRegion | null;
 }
 
 interface FilterOptions {
   categories: string[];
-  regions: string[];
+  body_regions: BodyRegion[];
 }
 
 interface EditProtocolProps {
@@ -109,8 +110,9 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
 
   const [name, setName] = useState('');
   const [nameEn, setNameEn] = useState('');
-  const [region, setRegion] = useState('');
-  const [regionEn, setRegionEn] = useState('');
+  const [bodyRegionId, setBodyRegionId] = useState('');
+  const [regionDetail, setRegionDetail] = useState('');
+  const [regionDetailEn, setRegionDetailEn] = useState('');
   const [phases, setPhases] = useState<PhaseDraft[]>([emptyPhase(1)]);
   const [activePhase, setActivePhase] = useState(0);
   const [readOnly, setReadOnly] = useState(false);
@@ -121,7 +123,7 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
   const [addOpen, setAddOpen] = useState(false);
   const [addQuery, setAddQuery] = useState('');
   const [addCategory, setAddCategory] = useState('');
-  const [addRegion, setAddRegion] = useState('');
+  const [addRegionId, setAddRegionId] = useState('');
   const [addResults, setAddResults] = useState<ExerciseOption[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -133,8 +135,9 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
     if (protocolId === null) {
       setName('');
       setNameEn('');
-      setRegion('');
-      setRegionEn('');
+      setBodyRegionId('');
+      setRegionDetail('');
+      setRegionDetailEn('');
       setPhases([emptyPhase(1)]);
       setActivePhase(0);
       setReadOnly(false);
@@ -145,8 +148,9 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
     if (!detail) return;
     setName(detail.name);
     setNameEn(detail.name_en ?? '');
-    setRegion(detail.region ?? '');
-    setRegionEn(detail.region_en ?? '');
+    setBodyRegionId(detail.body_region?.id ?? '');
+    setRegionDetail(detail.region_detail ?? '');
+    setRegionDetailEn(detail.region_detail_en ?? '');
     setPhases(
       detail.phases.map((p) => ({
         name: p.name,
@@ -204,14 +208,14 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
   const phase = phases[activePhase];
   const draftExerciseIds = new Set(phase?.exercises.map((e) => e.exercise_id) ?? []);
 
-  async function runAddSearch(overrides?: { q?: string; category?: string; region?: string }) {
+  async function runAddSearch(overrides?: { q?: string; category?: string; regionId?: string }) {
     const q = overrides?.q ?? addQuery;
     const cat = overrides?.category ?? addCategory;
-    const reg = overrides?.region ?? addRegion;
+    const regionId = overrides?.regionId ?? addRegionId;
     const params = new URLSearchParams();
     if (q) params.set('q', q);
     if (cat) params.set('category', cat);
-    if (reg) params.set('region', reg);
+    if (regionId) params.set('region_id', regionId);
     const { data } = await supabase.functions.invoke(`exercises?${params.toString()}`, { method: 'GET' });
     setAddResults((data as { items: ExerciseOption[] })?.items ?? []);
   }
@@ -246,7 +250,7 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
     setAddOpen(false);
     setAddQuery('');
     setAddCategory('');
-    setAddRegion('');
+    setAddRegionId('');
     setAddResults([]);
     setSelectedIds(new Set());
   }
@@ -324,8 +328,9 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
     const payload = {
       name: name.trim(),
       name_en: nameEn.trim() || undefined,
-      region: region.trim() || undefined,
-      region_en: regionEn.trim() || undefined,
+      body_region_id: bodyRegionId || undefined,
+      region_detail: regionDetail.trim() || undefined,
+      region_detail_en: regionDetailEn.trim() || undefined,
       phases: phases.map((p) => ({
         name: p.name.trim(),
         name_en: p.name_en.trim() || undefined,
@@ -426,10 +431,22 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
                   <Input label="שם באנגלית" value={nameEn} disabled={readOnly} onChange={(e) => setNameEn(e.target.value)} />
                 </div>
                 <div style={{ flex: 1, minWidth: 160 }}>
-                  <Input label="אזור" value={region} disabled={readOnly} onChange={(e) => setRegion(e.target.value)} />
+                  <Select
+                    label="אזור בגוף"
+                    value={bodyRegionId}
+                    disabled={readOnly}
+                    onChange={(e) => setBodyRegionId(e.target.value)}
+                    options={[
+                      { value: '', label: 'ללא · None' },
+                      ...(filterOptions?.body_regions ?? []).map((r) => ({ value: r.id, label: r.name })),
+                    ]}
+                  />
                 </div>
                 <div style={{ flex: 1, minWidth: 160 }}>
-                  <Input label="אזור באנגלית" value={regionEn} disabled={readOnly} onChange={(e) => setRegionEn(e.target.value)} />
+                  <Input label="פירוט (אופציונלי) · Detail" value={regionDetail} disabled={readOnly} onChange={(e) => setRegionDetail(e.target.value)} />
+                </div>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <Input label="פירוט באנגלית · Detail (EN)" value={regionDetailEn} disabled={readOnly} onChange={(e) => setRegionDetailEn(e.target.value)} />
                 </div>
               </div>
 
@@ -531,14 +548,14 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
                         </div>
                         <div style={{ minWidth: 150 }}>
                           <Select
-                            value={addRegion}
+                            value={addRegionId}
                             onChange={(e) => {
-                              setAddRegion(e.target.value);
-                              runAddSearch({ region: e.target.value });
+                              setAddRegionId(e.target.value);
+                              runAddSearch({ regionId: e.target.value });
                             }}
                             options={[
                               { value: '', label: 'כל האזורים' },
-                              ...(filterOptions?.regions ?? []).map((r) => ({ value: r, label: r })),
+                              ...(filterOptions?.body_regions ?? []).map((r) => ({ value: r.id, label: r.name })),
                             ]}
                           />
                         </div>

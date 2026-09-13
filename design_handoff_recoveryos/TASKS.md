@@ -76,6 +76,20 @@ browser-print PDF · minimal (undesigned) auth screens · dataset media dev-only
 - Editing a measurement supersedes rather than mutates; history stays complete.
 - Acceptance criteria list in `ROM_MEASUREMENT.md` §6 all pass.
 
+**T-28 Canonical body-region taxonomy**
+- Fix: exercise/protocol `region` was free text with no shared vocabulary — 27 protocols had
+  20 distinct `region` strings for what's clinically ~9 regions (e.g. "Knee", "Knee (Medial)",
+  "Lateral Knee/Hip" were three separate strings for "knee"), so the exercise-library region
+  filter in `search_exercises` silently missed related protocols.
+- Adds `app.body_region` (9-value canonical list, see `DATA_MODEL.md`), backfills
+  exercise/protocol onto it via FK, keeps the original free text as an optional
+  `region_detail`/`region_detail_en` qualifier on protocol.
+- Separates the exercise dataset's unrelated bodybuilding "muscle group" values (previously
+  misusing the same `region` column) into their own `muscle_group` column — a different
+  concept, not used for clinical region filtering.
+- Migrations 0028-0030; `region=` query param on `GET /exercises` renamed to `region_id=`
+  (see `API_CONTRACT.md`).
+
 ## M2 — Patient app (P0)
 **T-10 Today / Home**
 - Today's session, progress ring, exercise list with done state, start-first-incomplete CTA.

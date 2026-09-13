@@ -1,6 +1,6 @@
 import { useContext, useState, type CSSProperties, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { t } from 'shared';
+import { t, type BodyRegion } from 'shared';
 import { Drawer, EmptyState, Skeleton, Button, YouTubeFacade } from 'ui';
 import { SupabaseContext } from '../App';
 import ExerciseFormModal from './ExerciseFormModal';
@@ -23,7 +23,7 @@ interface ExerciseDetail {
   name: string;
   name_en: string | null;
   category: string;
-  region: string | null;
+  body_region: BodyRegion | null;
   muscles: string[];
   equipment: string[];
   description: string | null;
@@ -176,7 +176,7 @@ export default function ExerciseDetailDrawer({
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={chip}>{categoryLabel[data.category] ?? data.category}</span>
-            {data.region && <span style={chip}>{data.region}</span>}
+            {data.body_region && <span style={chip}>{data.body_region.name}</span>}
             {data.is_bilateral && <span style={chip}>דו-צדדי</span>}
             {data.source === 'clinic' && <span style={chip}>נוצר על ידך</span>}
             <div style={{ display: 'flex', gap: 6, marginInlineStart: 'auto' }}>
@@ -285,7 +285,7 @@ export default function ExerciseDetailDrawer({
           name: formSeed.name,
           name_en: formSeed.name_en,
           category: formSeed.category,
-          region: formSeed.region,
+          body_region: formSeed.body_region,
           description: formSeed.description,
           instructions: formSeed.instructions,
           is_bilateral: formSeed.is_bilateral,

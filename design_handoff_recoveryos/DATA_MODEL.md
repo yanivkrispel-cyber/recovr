@@ -13,9 +13,20 @@ Clinical rows are **soft-deleted** (`deleted_at`) — never hard delete.
 - **patient_auth** — id, patient_id, invite_token, invite_expires_at, password_hash, status
 - **device_token** — id, owner_type (`user`|`patient`), owner_id, endpoint, keys jsonb, platform, last_seen_at
 
+## Body region taxonomy (T-28)
+- **body_region** — id, slug (unique), name, name_en, sort_order. Global reference data
+  (no clinic_id), 9 canonical clinical regions (shoulder, elbow, wrist_hand, spine, hip_thigh,
+  knee, lower_leg, ankle_foot, other). Replaces what used to be free-text `region`/`region_en`
+  directly on `protocol` and `exercise` — those were unconstrained text with no shared
+  vocabulary (27 protocols had 20 distinct region strings for ~9 clinical regions), so a
+  region filter on the exercise library could silently miss related protocols. See
+  migrations 0028-0030.
+
 ## Protocol library (clinic-scoped, seedable)
-- **protocol** — id, clinic_id (null = system), slug, name, name_en, region, region_en,
-  source (`system`|`clinic`), version, is_active
+- **protocol** — id, clinic_id (null = system), slug, name, name_en, body_region_id → body_region,
+  region_detail, region_detail_en (optional free-text qualifier, e.g. "Medial", "Tibial
+  Tuberosity" — kept verbatim from the old region/region_en text, no longer the only region
+  signal), source (`system`|`clinic`), version, is_active
 - **protocol_phase** — id, protocol_id, n, name, name_en, duration_days, goals jsonb
   (`[{he,en}]`), order
 - **protocol_phase_exercise** — id, protocol_phase_id, exercise_id, prescription
@@ -25,7 +36,11 @@ Clinical rows are **soft-deleted** (`deleted_at`) — never hard delete.
 
 ## Exercise library
 - **exercise** — id, clinic_id (null = system), name, name_en, category
-  (`Mobility`|`Strength`|`Balance`|`Control`|`Cardio`), region, muscles text[], equipment text[],
+  (`Mobility`|`Strength`|`Balance`|`Control`|`Cardio`), body_region_id → body_region (nullable;
+  set directly only for clinic-custom exercises — a system/dataset exercise's clinical region
+  comes from the protocols it's used in, see search_exercises), muscle_group (raw
+  `exercises-dataset-main` body_part value — a bodybuilding muscle-group taxonomy, a different
+  concept from body_region, not used for clinical filtering), muscles text[], equipment text[],
   description, instructions, common_mistakes, safety_notes, default_prescription jsonb,
   is_bilateral, source, external_ref (key from `exercises-dataset-main`), is_active
 - **exercise_media** — id, exercise_id, kind (`image`|`gif`|`video`), url, thumb_url, width,

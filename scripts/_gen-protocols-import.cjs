@@ -33,9 +33,36 @@ const sql = `-- ================================================================
 DO $$
 DECLARE
   v_data JSONB := $protocols_json$${json}$protocols_json$::jsonb;
+  -- region (Hebrew) -> app.body_region.slug, collapsing the source data's 19
+  -- distinct region/regionEn pairs onto the 9 canonical clinical regions
+  -- (T-28). The original region/regionEn text is kept verbatim in
+  -- region_detail/region_detail_en — it's not lost, just no longer the only
+  -- region signal used for filtering/grouping.
+  v_region_map JSONB := '{
+    "מרפק": "elbow",
+    "ברך": "knee",
+    "ירך אחורית": "hip_thigh",
+    "עמוד שדרה מותני": "spine",
+    "כתף": "shoulder",
+    "קרסול": "ankle_foot",
+    "ברך/ירך לטרלי": "knee",
+    "עמוד שדרה צווארי": "spine",
+    "שורש כף היד": "wrist_hand",
+    "שוק": "lower_leg",
+    "קרסול/עקב": "ankle_foot",
+    "כף רגל/עקב": "ankle_foot",
+    "ברך (פקעת השוקה)": "knee",
+    "שוק תחתונה": "lower_leg",
+    "ברך (מדיאלי)": "knee",
+    "ירך": "hip_thigh",
+    "ירך קדמית": "hip_thigh",
+    "מפשעה/ירך": "hip_thigh",
+    "שוק תחתונה/כף רגל": "lower_leg"
+  }'::jsonb;
   v_protocol_slug TEXT;
   v_protocol JSONB;
   v_protocol_id UUID;
+  v_body_region_slug TEXT;
   v_phase JSONB;
   v_phase_id UUID;
   v_exercise JSONB;
@@ -55,11 +82,13 @@ DECLARE
 BEGIN
   FOR v_protocol_slug, v_protocol IN SELECT * FROM jsonb_each(v_data) LOOP
     v_protocol_id := uuid_generate_v5(uuid_ns_url(), 'recoveryos:protocol:' || v_protocol_slug);
+    v_body_region_slug := v_region_map->>(v_protocol->>'region');
 
-    INSERT INTO app.protocol (id, clinic_id, slug, name, name_en, region, region_en, source, version, is_active)
+    INSERT INTO app.protocol (id, clinic_id, slug, name, name_en, body_region_id, region_detail, region_detail_en, source, version, is_active)
     VALUES (
       v_protocol_id, NULL, v_protocol->>'slug',
       v_protocol->>'name', v_protocol->>'nameEn',
+      (SELECT id FROM app.body_region WHERE slug = v_body_region_slug),
       v_protocol->>'region', v_protocol->>'regionEn',
       'system', '1.0', true
     )

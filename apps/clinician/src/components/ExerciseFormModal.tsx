@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { t, parseYouTubeId } from 'shared';
+import { t, parseYouTubeId, type BodyRegion } from 'shared';
 import { Button, Checkbox, Input, Modal, Select, YouTubeFacade, useToast } from 'ui';
 import { SupabaseContext } from '../App';
 
@@ -16,12 +16,16 @@ interface ProtocolPhase {
   name: string;
 }
 
+interface FilterOptions {
+  body_regions: BodyRegion[];
+}
+
 export interface ExerciseFormValues {
   id: string;
   name: string;
   name_en: string | null;
   category: string;
-  region: string | null;
+  body_region: BodyRegion | null;
   description: string | null;
   instructions: string | null;
   is_bilateral: boolean;
@@ -73,7 +77,7 @@ export default function ExerciseFormModal({
   const [name, setName] = useState('');
   const [nameEn, setNameEn] = useState('');
   const [category, setCategory] = useState('Strength');
-  const [region, setRegion] = useState('');
+  const [bodyRegionId, setBodyRegionId] = useState('');
   const [description, setDescription] = useState('');
   const [instructions, setInstructions] = useState('');
   const [isBilateral, setIsBilateral] = useState(false);
@@ -94,7 +98,7 @@ export default function ExerciseFormModal({
     setName(exercise?.name ?? '');
     setNameEn(exercise?.name_en ?? '');
     setCategory(exercise?.category ?? 'Strength');
-    setRegion(exercise?.region ?? '');
+    setBodyRegionId(exercise?.body_region?.id ?? '');
     setDescription(exercise?.description ?? '');
     setInstructions(exercise?.instructions ?? '');
     setIsBilateral(exercise?.is_bilateral ?? false);
@@ -105,6 +109,22 @@ export default function ExerciseFormModal({
     setProtocolId('');
     setPhaseN('');
   }, [open, exercise]);
+
+  // Shares its query key with ExerciseLibrary's filter-options fetch so
+  // react-query dedupes the request when both are mounted.
+  const { data: filterOptions } = useQuery({
+    queryKey: ['exercise-filter-options'],
+    enabled: open,
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('exercises/filter-options', { method: 'GET' });
+      if (error) throw error;
+      return data as FilterOptions;
+    },
+  });
+  const bodyRegionOptions = [
+    { value: '', label: 'ללא · None' },
+    ...(filterOptions?.body_regions ?? []).map((r) => ({ value: r.id, label: r.name })),
+  ];
 
   // Quick-attach (optional): only the clinic's own protocols can be targeted —
   // system protocols aren't editable, same rule as everything else here.
@@ -165,7 +185,7 @@ export default function ExerciseFormModal({
       name: name.trim(),
       name_en: nameEn.trim() || undefined,
       category,
-      region: region.trim() || undefined,
+      body_region_id: bodyRegionId || undefined,
       description: description.trim() || undefined,
       instructions: instructions.trim() || undefined,
       is_bilateral: isBilateral,
@@ -218,7 +238,12 @@ export default function ExerciseFormModal({
           onChange={(e) => setCategory(e.target.value)}
           options={CATEGORY_OPTIONS}
         />
-        <Input label="אזור" value={region} onChange={(e) => setRegion(e.target.value)} />
+        <Select
+          label="אזור בגוף"
+          value={bodyRegionId}
+          onChange={(e) => setBodyRegionId(e.target.value)}
+          options={bodyRegionOptions}
+        />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>תיאור</label>
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} style={textareaStyle} />

@@ -1,6 +1,6 @@
 import { useContext, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { t } from 'shared';
+import { t, type BodyRegion } from 'shared';
 import { Badge, Button, EmptyState, Skeleton, useIsTablet } from 'ui';
 import { AuthContext, SupabaseContext } from '../App';
 import AppShell from '../components/AppShell';
@@ -11,7 +11,7 @@ interface ProtocolRow {
   slug: string;
   name: string;
   name_en: string | null;
-  region: string | null;
+  body_region: BodyRegion | null;
   source: 'system' | 'clinic';
   version: string;
   is_active: boolean;
@@ -118,7 +118,7 @@ export default function Protocols() {
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--nav-inactive-text)', marginTop: 2 }}>{p.name_en}</div>
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{p.region ?? '—'}</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{p.body_region?.name ?? '—'}</div>
                 <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{p.phase_count}</div>
                 <div style={{ fontSize: 12, color: 'var(--nav-inactive-text)' }}>{p.version}</div>
                 <div style={{ display: 'flex', gap: 7, justifyContent: 'flex-start', flexWrap: 'wrap' }}>

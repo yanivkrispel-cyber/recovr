@@ -92,27 +92,27 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- 7. A few seed exercises (system-level, clinic_id NULL).
-INSERT INTO app.exercise (id, clinic_id, name, name_en, category, region, instructions) VALUES
+INSERT INTO app.exercise (id, clinic_id, name, name_en, category, body_region_id, instructions) VALUES
   ('e0000001-0000-0000-0000-000000000001', NULL,
-   'כיווץ ירך-ארבע ראשי', 'Quad set', 'Strength', 'Knee',
+   'כיווץ ירך-ארבע ראשי', 'Quad set', 'Strength', (SELECT id FROM app.body_region WHERE slug = 'knee'),
    'שכב על הגב עם רגליים ישרות. כווץ את שריר הירך הקדמי ולחץ את הברך כלפי המזרן. החזק 5 שניות.'),
   ('e0000001-0000-0000-0000-000000000002', NULL,
-   'החלקת עקב', 'Heel slide', 'Mobility', 'Knee',
+   'החלקת עקב', 'Heel slide', 'Mobility', (SELECT id FROM app.body_region WHERE slug = 'knee'),
    'שכב על הגב. החלק את העקב לכיוון הישבן תוך כדי הרפיית הברך. חזור למצב התחלתי.'),
   ('e0000001-0000-0000-0000-000000000003', NULL,
-   'הרמת רגל ישרה', 'Straight leg raise', 'Strength', 'Knee',
+   'הרמת רגל ישרה', 'Straight leg raise', 'Strength', (SELECT id FROM app.body_region WHERE slug = 'knee'),
    'שכב על הגב, רגל אחת כפופה והשנייה ישרה. הרים את הרגל הישרה לגובה הברך הכפופה, החזק 3 שניות, הורד לאט.')
 ON CONFLICT (id) DO NOTHING;
 
 -- 8. A demo protocol owned by the demo clinic.
-INSERT INTO app.protocol (id, clinic_id, slug, name, name_en, region, source, version, is_active, created_at, updated_at)
+INSERT INTO app.protocol (id, clinic_id, slug, name, name_en, body_region_id, source, version, is_active, created_at, updated_at)
 VALUES (
   'a0000001-0000-0000-0000-000000000001',
   '11111111-1111-1111-1111-111111111111',
   'acl_post_op_weeks_1_4',
   'שיקום ACL — שבועות 1–4',
   'ACL rehab — weeks 1-4',
-  'Knee',
+  (SELECT id FROM app.body_region WHERE slug = 'knee'),
   'clinic',
   '1.0',
   true,

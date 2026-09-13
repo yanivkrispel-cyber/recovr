@@ -76,8 +76,10 @@ interface DatasetRecord {
 // --- derived fields ------------------------------------------------------------
 // The dataset classifies by body part, not by rehab intent; category is a
 // keyword guess (same approach as scripts/_gen-protocols-import.cjs) and worth a
-// clinical review pass. region is stored verbatim from body_part — for system
-// rows the exercise search derives region from protocol usage anyway.
+// clinical review pass. muscle_group is stored verbatim from body_part — it's
+// a bodybuilding muscle-group taxonomy, a different concept from the clinical
+// app.body_region (T-28); body_region_id is left unset for dataset rows, since
+// clinical region for these comes from protocol association (search_exercises).
 
 function mapCategory(rec: DatasetRecord): string {
   const n = rec.name.toLowerCase();
@@ -195,7 +197,7 @@ const exerciseRows = records.map((rec) => ({
   name: rec.name, // no Hebrew in the dataset — English name is a placeholder
   name_en: rec.name,
   category: mapCategory(rec),
-  region: rec.body_part,
+  muscle_group: rec.body_part,
   muscles: mapMuscles(rec),
   equipment: mapEquipment(rec),
   instructions: rec.instructions?.en ?? null,
@@ -266,11 +268,11 @@ if (!DRY_RUN) {
       `
       WITH up AS (
         INSERT INTO app.exercise
-          (id, clinic_id, name, name_en, category, region, muscles, equipment,
+          (id, clinic_id, name, name_en, category, muscle_group, muscles, equipment,
            instructions, is_bilateral, source, external_ref, is_active)
         SELECT
           uuid_generate_v5(uuid_ns_url(), 'recoveryos:exercise:dataset:' || (r->>'key')),
-          NULL, r->>'name', r->>'name_en', r->>'category', r->>'region',
+          NULL, r->>'name', r->>'name_en', r->>'category', r->>'muscle_group',
           ARRAY(SELECT jsonb_array_elements_text(r->'muscles')),
           ARRAY(SELECT jsonb_array_elements_text(r->'equipment')),
           r->>'instructions', (r->>'is_bilateral')::boolean,
@@ -278,7 +280,7 @@ if (!DRY_RUN) {
         FROM jsonb_array_elements($1::jsonb) AS r
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name, name_en = EXCLUDED.name_en, category = EXCLUDED.category,
-          region = EXCLUDED.region, muscles = EXCLUDED.muscles, equipment = EXCLUDED.equipment,
+          muscle_group = EXCLUDED.muscle_group, muscles = EXCLUDED.muscles, equipment = EXCLUDED.equipment,
           instructions = EXCLUDED.instructions, external_ref = EXCLUDED.external_ref,
           is_active = EXCLUDED.is_active
         RETURNING 1

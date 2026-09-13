@@ -1,6 +1,6 @@
 import { useContext, useState, type CSSProperties } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { t } from 'shared';
+import { t, type BodyRegion } from 'shared';
 import { Badge, Button, EmptyState, Skeleton, useIsTablet } from 'ui';
 import { AuthContext, SupabaseContext } from '../App';
 import AppShell from '../components/AppShell';
@@ -21,7 +21,7 @@ interface ExerciseRow {
   name: string;
   name_en: string | null;
   category: string;
-  region: string | null;
+  body_region: BodyRegion | null;
   is_bilateral: boolean;
   source: 'system' | 'clinic';
   protocol_labels: string[];
@@ -30,7 +30,7 @@ interface ExerciseRow {
 
 interface FilterOptions {
   categories: string[];
-  regions: string[];
+  body_regions: BodyRegion[];
   phases: number[];
   protocols: { slug: string; name: string }[];
   custom_count: number;

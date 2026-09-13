@@ -36,7 +36,7 @@ patient's timezone · cursor pagination (`?cursor=&limit=`) · `Idempotency-Key`
 | GET | `/patients/:id/home-program.pdf` | server-rendered PDF of the printed program |
 | GET | `/alerts?state=open` · POST `/alerts/:id/review` | alert inbox |
 | GET | `/protocols` · `/protocols/:slug` | library + phases + criteria |
-| GET | `/exercises?q=&category=&region=&protocol=&phase=&limit=&offset=` | library search (used by Add Exercise) → `{items:[Exercise], total}`. `limit` defaults to 60, capped at 200. |
+| GET | `/exercises?q=&category=&region_id=&protocol=&phase=&limit=&offset=` | library search (used by Add Exercise) → `{items:[Exercise], total}`. `region_id` is a `body_region` id (T-28), not free text. `limit` defaults to 60, capped at 200. |
 | POST | `/exercises` | clinic-custom exercise |
 | GET/POST/DELETE | `/plan-templates` | saved phase templates |
 | GET | `/measure-definitions` | measurement catalog, clinic overrides over system defaults |

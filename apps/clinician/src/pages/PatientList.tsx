@@ -1,7 +1,7 @@
 import { useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
-import { t } from 'shared';
+import { t, type BodyRegion } from 'shared';
 import { Badge, Button, EmptyState, Input, Modal, Select, Skeleton, clickableDivProps, useToast } from 'ui';
 import { AuthContext, SupabaseContext } from '../App';
 import AppShell from '../components/AppShell';
@@ -269,7 +269,7 @@ type ProtocolOption = {
   slug: string;
   name: string;
   name_en: string | null;
-  region: string | null;
+  body_region: BodyRegion | null;
   phases: ProtoPhase[];
 };
 

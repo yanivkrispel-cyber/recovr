@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState, type CSSProperties } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { t } from 'shared';
+import { t, type BodyRegion } from 'shared';
 import { Button, Input, Select, Skeleton } from 'ui';
 import { SupabaseContext } from '../App';
 import ExerciseDetailDrawer from './ExerciseDetailDrawer';
@@ -60,14 +60,14 @@ interface ExerciseOption {
   name: string;
   name_en: string | null;
   category: string;
-  region: string | null;
+  body_region: BodyRegion | null;
   phase_match?: boolean;
   has_media?: boolean;
 }
 
 interface FilterOptions {
   categories: string[];
-  regions: string[];
+  body_regions: BodyRegion[];
 }
 
 interface EditPlanProps {
@@ -117,7 +117,7 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
   const [addOpen, setAddOpen] = useState(false);
   const [addQuery, setAddQuery] = useState('');
   const [addCategory, setAddCategory] = useState('');
-  const [addRegion, setAddRegion] = useState('');
+  const [addRegionId, setAddRegionId] = useState('');
   const [addResults, setAddResults] = useState<ExerciseOption[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -154,14 +154,14 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
     setDirty(false);
   }
 
-  async function runAddSearch(overrides?: { q?: string; category?: string; region?: string }) {
+  async function runAddSearch(overrides?: { q?: string; category?: string; regionId?: string }) {
     const q = overrides?.q ?? addQuery;
     const cat = overrides?.category ?? addCategory;
-    const reg = overrides?.region ?? addRegion;
+    const regionId = overrides?.regionId ?? addRegionId;
     const params = new URLSearchParams();
     if (q) params.set('q', q);
     if (cat) params.set('category', cat);
-    if (reg) params.set('region', reg);
+    if (regionId) params.set('region_id', regionId);
     if (phaseN) params.set('phase', String(phaseN));
     const { data } = await supabase.functions.invoke(`exercises?${params.toString()}`, { method: 'GET' });
     setAddResults((data as { items: ExerciseOption[] })?.items ?? []);
@@ -204,7 +204,7 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
     setAddOpen(false);
     setAddQuery('');
     setAddCategory('');
-    setAddRegion('');
+    setAddRegionId('');
     setAddResults([]);
     setSelectedIds(new Set());
   }
@@ -621,14 +621,14 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
                         </div>
                         <div style={{ minWidth: 150 }}>
                           <Select
-                            value={addRegion}
+                            value={addRegionId}
                             onChange={(e) => {
-                              setAddRegion(e.target.value);
-                              runAddSearch({ region: e.target.value });
+                              setAddRegionId(e.target.value);
+                              runAddSearch({ regionId: e.target.value });
                             }}
                             options={[
                               { value: '', label: 'כל האזורים' },
-                              ...(filterOptions?.regions ?? []).map((r) => ({ value: r, label: r })),
+                              ...(filterOptions?.body_regions ?? []).map((r) => ({ value: r.id, label: r.name })),
                             ]}
                           />
                         </div>
