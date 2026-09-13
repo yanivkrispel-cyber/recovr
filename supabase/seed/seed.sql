@@ -498,3 +498,59 @@ SELECT app.catalog_backfill_governance();
 INSERT INTO app.catalog_curator (user_id, note)
 VALUES ('22222222-2222-2222-2222-222222222222', 'demo curator (seed)')
 ON CONFLICT (user_id) DO NOTHING;
+
+-- ============================================================================
+-- Catalog cleanup step 1 (2026-09-13) — the 3 cross-source merges from the
+-- approved decision list (M01-M03): the protocols-data.json system-catalog
+-- rows for Quad Sets / Straight Leg Raise / Heel Slides duplicate the
+-- hand-authored acl_post_op_weeks_1_4 rows above, which already carry Hebrew
+-- instructions and this seed's demo patient-plan data. Everything else in the
+-- decision list (renames, in-catalog merges, replacements, region/category
+-- fixes) is already baked into protocols-data.json / protocols_import.sql —
+-- see scripts/_apply-catalog-cleanup.cjs. Uses app.catalog_merge_exercise
+-- (0035), the same function curators use from the library workspace.
+-- https://claude.ai/code/artifact/27d95f2c-46a6-4bc4-975f-29d34997fc70
+DO $$
+DECLARE
+  v_pairs UUID[][] := ARRAY[
+    ARRAY['97ff2d75-4689-5ecf-9e33-77b750cfa9ee', 'e0000001-0000-0000-0000-000000000001'], -- Quad Sets -> Quad set
+    ARRAY['ae360637-161c-5f8c-8599-59936368de08', 'e0000001-0000-0000-0000-000000000003'], -- Straight Leg Raise -> Straight leg raise
+    ARRAY['423b7cda-3452-5d58-a4ca-a45c126445ff', 'e0000001-0000-0000-0000-000000000002']  -- Heel Slides -> Heel slide
+  ];
+  v_pair UUID[];
+BEGIN
+  FOREACH v_pair SLICE 1 IN ARRAY v_pairs LOOP
+    PERFORM app.catalog_merge_exercise(NULL, v_pair[1], v_pair[2]);
+  END LOOP;
+END $$;
+
+-- Region overrides (backfill can't single out one region for an exercise
+-- used across protocols of different regions; these are the curator's
+-- explicit call from the decision list — M04, M17, F01).
+UPDATE app.exercise SET body_region_id = (SELECT id FROM app.body_region WHERE slug = r.slug), updated_at = now()
+FROM (VALUES
+  ('Bridge', 'hip_thigh'),
+  ('Single-Leg Balance', 'ankle_foot'),
+  ('Short Foot Exercise', 'ankle_foot'),
+  ('Ball Squeeze', 'wrist_hand'),
+  ('Hamstring Stretch', 'hip_thigh'),
+  ('Seated Calf Raise', 'lower_leg'),
+  ('Single-Leg Calf Raise', 'lower_leg'),
+  ('Stationary Bike', 'knee')
+) AS r(name_en, slug)
+WHERE app.exercise.clinic_id IS NULL AND app.exercise.name_en = r.name_en AND app.exercise.deleted_at IS NULL;
+
+-- Category corrections (F02, plus two the name-based heuristic in
+-- _gen-protocols-import.cjs gets wrong for these specific names).
+UPDATE app.exercise SET category = c.category, updated_at = now()
+FROM (VALUES
+  ('Running Gait Retraining', 'Control'),
+  ('Return to Run Program', 'Cardio'),
+  ('Prone Press-Ups (McKenzie)', 'Mobility'),
+  ('Thoracic Extension', 'Mobility'),
+  ('Frozen Bottle Roll', 'Mobility'),
+  ('Pelvic Tilts', 'Control'),
+  ('Deep Neck Flexor Activation', 'Control'),
+  ('Lateral Hops', 'Control')
+) AS c(name_en, category)
+WHERE app.exercise.clinic_id IS NULL AND app.exercise.name_en = c.name_en AND app.exercise.deleted_at IS NULL;
