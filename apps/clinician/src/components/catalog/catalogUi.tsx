@@ -7,6 +7,7 @@ export const fieldLabelStyle: CSSProperties = {
 };
 
 export const textInputStyle: CSSProperties = {
+  direction: 'rtl', textAlign: 'right',
   width: '100%', boxSizing: 'border-box', padding: '9px 11px', borderRadius: 'var(--radius-button)',
   border: 'var(--border-input)', background: 'var(--white)', fontFamily: 'var(--font-ui)', fontSize: 14,
   color: 'var(--ink)', outline: 'none',
@@ -219,6 +220,7 @@ export function CueListEditor({
           <input
             ref={(el) => { refs.current[i] = el; }}
             value={cue}
+            dir="rtl"
             disabled={disabled}
             placeholder={t('catalog.field.key_cues.placeholder')}
             onChange={(e) => onChange(value.map((c, k) => (k === i ? e.target.value : c)))}

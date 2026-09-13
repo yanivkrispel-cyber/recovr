@@ -64,7 +64,15 @@ Clinical rows are **soft-deleted** (`deleted_at`) — never hard delete.
   "catalog team", never by name.
 - **exercise_media** — id, exercise_id, kind (`image`|`gif`|`video`), url, thumb_url, width,
   height, duration_ms, order, source_file (original filename from the dataset), verified_by,
-  verified_at
+  verified_at.
+  Media manager (T-31): kind adds `clip` (uploaded MP4/WebM; `video` stays a YouTube id),
+  clinic_id (null = master media managed by catalog curators; set = one clinic's private media,
+  shown before master media to that clinic and its patients only — every read goes through
+  `app.exercise_media_visible(clinic_id)`), rights (`unknown`|`own`|`licensed`|`open`|`embed`),
+  attribution, start_sec / end_sec (trim window), mime_type, size_bytes, uploaded_by,
+  review_note. `order` 0 is the primary visual. New verification requires rights ≠ `unknown`;
+  one YouTube video per exercise per scope. Uploads live under `uploads/master/<exercise>/` or
+  `uploads/clinic/<clinic>/<exercise>/` in the private `exercise-media` bucket.
   > `verified_by` matters: media must be confirmed as depicting the exercise before it can
   > appear in a patient-facing document (see RULES §7 and TASKS T-14).
 - **exercise_favorite** (T-29) — user_id, exercise_id, clinic_id, created_at; PK (user_id, exercise_id)

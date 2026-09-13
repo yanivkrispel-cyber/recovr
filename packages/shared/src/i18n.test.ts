@@ -48,7 +48,7 @@ describe('i18n copy layer (COPY.md)', () => {
   it('has no leftover interpolation placeholders in plain keys', () => {
     for (const [key, value] of Object.entries(he)) {
       // keys that legitimately carry a placeholder
-      if (/\{(query|min|max|n|version|name|count|clinician|shown|total|phase_n|category|value|phases|field|updated|reasons)\}/.test(value)) continue;
+      if (/\{(query|min|max|n|version|name|count|clinician|shown|total|phase_n|category|value|phases|field|updated|reasons|done|ok|failed|skipped)\}/.test(value)) continue;
       expect(value, `${key} has an unfilled {placeholder}`).not.toMatch(/\{[a-z_]+\}/);
     }
   });

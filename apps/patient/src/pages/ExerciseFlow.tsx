@@ -25,11 +25,13 @@ interface ExerciseFlowProps {
 }
 
 interface ExerciseMedia {
-  kind: 'image' | 'gif' | 'video';
+  kind: 'image' | 'gif' | 'video' | 'clip';
   url: string;
   thumb_url: string | null;
   width: number | null;
   height: number | null;
+  start_sec?: number | null;
+  end_sec?: number | null;
 }
 
 interface TodayItem {
@@ -58,13 +60,12 @@ function ExerciseMediaFrame({
   name: string;
   compact?: boolean;
 }) {
-  // The GIF is the rep-loop visual — tiny, autoplays instantly, no network
-  // cost on every set. A YouTube video (kind='video', url is an id — see
-  // packages/shared/src/youtube.ts) is supplementary instructional content,
-  // surfaced separately below, never as this frame's image src.
-  const primary = media?.find((m) => m.kind !== 'video' && m.kind === 'gif')
-    ?? media?.find((m) => m.kind !== 'video')
-    ?? null;
+  // The rep-loop visual is the first non-YouTube item — the API returns media
+  // in the clinic's chosen order (T-31), so the clinician picks what shows
+  // here (GIF, photo, or an uploaded clip). A YouTube video (kind='video', url
+  // is an id — see packages/shared/src/youtube.ts) is supplementary
+  // instructional content, surfaced separately below, never as this frame.
+  const primary = media?.find((m) => m.kind !== 'video') ?? null;
 
   if (!primary) {
     return (
@@ -97,12 +98,45 @@ function ExerciseMediaFrame({
         justifyContent: 'center',
       }}
     >
-      <img
-        src={mediaSrc(primary.url)}
-        alt={name}
-        style={{ height: compact ? 128 : 200, width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }}
-      />
+      {primary.kind === 'clip' ? (
+        <ClipLoop media={primary} name={name} height={compact ? 128 : 200} />
+      ) : (
+        <img
+          src={mediaSrc(primary.url)}
+          alt={name}
+          style={{ height: compact ? 128 : 200, width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }}
+        />
+      )}
     </div>
+  );
+}
+
+// An uploaded clip plays like the GIF it replaces: muted, looping, inline.
+// A trim window (start_sec/end_sec) loops just that part.
+function ClipLoop({ media, name, height }: { media: ExerciseMedia; name: string; height: number }) {
+  const start = media.start_sec ?? 0;
+  const end = media.end_sec ?? null;
+  return (
+    <video
+      src={mediaSrc(media.url)}
+      poster={media.thumb_url ? mediaSrc(media.thumb_url) : undefined}
+      aria-label={name}
+      muted
+      loop={end == null && start === 0}
+      autoPlay
+      playsInline
+      onLoadedMetadata={(e) => { if (start > 0) e.currentTarget.currentTime = start; }}
+      onTimeUpdate={(e) => {
+        const v = e.currentTarget;
+        if (end != null && v.currentTime >= end) v.currentTime = start;
+      }}
+      onEnded={(e) => {
+        const v = e.currentTarget;
+        v.currentTime = start;
+        void v.play();
+      }}
+      style={{ height, width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }}
+    />
   );
 }
 
@@ -141,7 +175,7 @@ function ExerciseVideoSection({ media, name }: { media?: ExerciseMedia[]; name: 
     );
   }
 
-  return <YouTubeFacade youtubeId={video.url} title={name} height={200} />;
+  return <YouTubeFacade youtubeId={video.url} title={name} height={200} startSec={video.start_sec} endSec={video.end_sec} />;
 }
 
 interface Today {

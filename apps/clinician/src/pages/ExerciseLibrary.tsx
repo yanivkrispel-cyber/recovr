@@ -10,8 +10,10 @@ import {
 import { Button, EmptyState, Skeleton, useIsTablet } from 'ui';
 import { AuthContext, SupabaseContext } from '../App';
 import AppShell from '../components/AppShell';
+import BulkMediaImport from '../components/catalog/BulkMediaImport';
 import CatalogBulkGrid from '../components/catalog/CatalogBulkGrid';
 import ExerciseEditor from '../components/catalog/ExerciseEditor';
+import MediaQueue from '../components/catalog/MediaQueue';
 import NewExerciseModal from '../components/catalog/NewExerciseModal';
 import {
   FACET_KEYS, catalogSearch, mediaSrc, type CatalogFacets, type CatalogFilters, type CatalogItem, type CatalogPage,
@@ -79,7 +81,8 @@ export default function ExerciseLibrary() {
   const search = useSearch({ strict: false }) as { id?: string };
   const isTablet = useIsTablet(); // T-22: tablet is view-only
 
-  const [view, setView] = useState<'workspace' | 'bulk'>(() => readLocal(VIEW_KEY, 'workspace'));
+  const [view, setView] = useState<'workspace' | 'bulk' | 'media'>(() => readLocal(VIEW_KEY, 'workspace'));
+  const [importOpen, setImportOpen] = useState(false);
   const [qInput, setQInput] = useState('');
   const [filters, setFilters] = useState<CatalogFilters>({});
   const [selectedId, setSelectedId] = useState<string | null>(search.id ?? null);
@@ -91,7 +94,8 @@ export default function ExerciseLibrary() {
   const listRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const effectiveView = isTablet ? 'workspace' : view;
+  // tablet is view-only: no bulk grid; the media queue stays browsable
+  const effectiveView = isTablet && view === 'bulk' ? 'workspace' : view;
 
   useEffect(() => {
     try { localStorage.setItem(VIEW_KEY, JSON.stringify(view)); } catch { /* storage unavailable */ }
@@ -240,6 +244,8 @@ export default function ExerciseLibrary() {
       options: [
         { value: 'with', label: t('catalog.media.with'), count: facetCount('media', 'with') },
         { value: 'without', label: t('catalog.media.without'), count: facetCount('media', 'without') },
+        { value: 'verified', label: t('catalog.media.verified'), count: facetCount('media', 'verified') },
+        { value: 'unverified', label: t('catalog.media.unverified'), count: facetCount('media', 'unverified') },
       ],
     },
     {
@@ -271,6 +277,7 @@ export default function ExerciseLibrary() {
               {t('catalog.subtitle', { total })}{isFetching && !isFetchingNextPage ? ' · …' : ''}
             </div>
           </div>
+          {effectiveView !== 'media' && (<>
           <div style={{ flex: '1 1 320px', position: 'relative' }}>
             <input
               ref={searchRef}
@@ -300,9 +307,11 @@ export default function ExerciseLibrary() {
               <option key={s} value={s}>{t('catalog.sort.label')}: {t(`catalog.sort.${s}`)}</option>
             ))}
           </select>
-          {!isTablet && (
+          </>)}
+          {effectiveView === 'media' && <span style={{ flex: 1 }} />}
+          {(
             <div role="tablist" style={{ display: 'inline-flex', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-pill)', padding: 3, background: 'var(--white)' }}>
-              {(['workspace', 'bulk'] as const).map((v) => (
+              {(isTablet ? (['workspace', 'media'] as const) : (['workspace', 'bulk', 'media'] as const)).map((v) => (
                 <button
                   key={v}
                   role="tab"
@@ -311,16 +320,17 @@ export default function ExerciseLibrary() {
                   onClick={() => setView(v)}
                   style={{ border: 'none', borderRadius: 'var(--radius-pill)', padding: '6px 13px', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', background: view === v ? 'var(--navy)' : 'transparent', color: view === v ? 'var(--cream)' : 'var(--ink-soft)' }}
                 >
-                  {t(v === 'workspace' ? 'catalog.view.workspace' : 'catalog.view.bulk')}
+                  {t(`catalog.view.${v}`)}
                 </button>
               ))}
             </div>
           )}
+          {!isTablet && <Button variant="secondary" onClick={() => setImportOpen(true)}>⬆ {t('media.import.open')}</Button>}
           {!isTablet && <Button onClick={() => setCreateOpen(true)}>+ {t('catalog.new')}</Button>}
         </div>
 
-        {/* Views + facets */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {/* Views + facets (catalog views only — the media queue has its own filters) */}
+        <div style={{ display: effectiveView === 'media' ? 'none' : 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--muted)', marginInlineEnd: 2 }}>{t('catalog.views.title')}</span>
             {PRESETS.map((p) => (
@@ -385,6 +395,8 @@ export default function ExerciseLibrary() {
         <div style={{ flex: 1, minHeight: 0, display: 'flex', background: 'var(--white)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-panel)', overflow: 'hidden' }}>
           {error ? (
             <div style={{ padding: 24, flex: 1 }}><EmptyState title={t('error.generic.title')} body={t('error.generic.body')} /></div>
+          ) : effectiveView === 'media' ? (
+            <MediaQueue readOnly={isTablet} onOpenExercise={(id) => { setSelectedId(id); setView('workspace'); }} />
           ) : effectiveView === 'bulk' ? (
             isLoading ? <div style={{ padding: 20, flex: 1 }}><Skeleton count={10} height={30} /></div> : (
               <CatalogBulkGrid
@@ -442,6 +454,16 @@ export default function ExerciseLibrary() {
           )}
         </div>
       </div>
+
+      <BulkMediaImport
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onDone={() => {
+          invalidateList();
+          queryClient.invalidateQueries({ queryKey: ['catalog-exercise'] });
+          queryClient.invalidateQueries({ queryKey: ['media-queue'] });
+        }}
+      />
 
       <NewExerciseModal
         open={createOpen}

@@ -87,11 +87,11 @@ export default function NewExerciseModal({
       >
         <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           <span style={fieldLabelStyle}>{t('catalog.field.name')}</span>
-          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} style={textInputStyle} />
+          <input autoFocus dir="rtl" value={name} onChange={(e) => setName(e.target.value)} style={textInputStyle} />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           <span style={fieldLabelStyle}>{t('catalog.field.name_en')}</span>
-          <input dir="ltr" value={nameEn} onChange={(e) => setNameEn(e.target.value)} style={textInputStyle} />
+          <input dir="ltr" value={nameEn} onChange={(e) => setNameEn(e.target.value)} style={{ ...textInputStyle, direction: 'ltr', textAlign: 'left' }} />
         </label>
 
         {similar && similar.items.length > 0 && (

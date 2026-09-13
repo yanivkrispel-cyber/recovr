@@ -36,6 +36,7 @@ patient's timezone · cursor pagination (`?cursor=&limit=`) · `Idempotency-Key`
 | GET | `/patients/:id/home-program.pdf` | server-rendered PDF of the printed program |
 | GET | `/alerts?state=open` · POST `/alerts/:id/review` | alert inbox |
 | GET | `/protocols` · `/protocols/:slug` | library + phases + criteria |
+| POST | `/protocols/:id/exercises` | attach an approved exercise to a phase `{exercise_id, phase_n}` → `{ok, protocol_id, copied, scope, already_attached?}`. System protocol: curators change it for all clinics; others get a clinic copy (T-32) |
 | GET | `/exercises?q=&category=&region_id=&protocol=&phase=&equipment=&favorites=1&media=1&limit=&offset=` | library search (used by the exercise picker) → `{items:[Exercise], total}`. `region_id` is a `body_region` id (T-28), not free text. `limit` defaults to 60, capped at 200. Items carry picker card fields (T-29): `equipment`, `is_favorite`, `thumb_url`/`gif_url` (signed, API-origin-relative), `media_verified`. |
 | GET | `/exercises/recommend?protocol_id=&region_id=&phase=&anchor_ids=&exclude_ids=&limit=` | picker recommendations (T-29) → `{context:{protocol_id, body_region, phase_n, region_protocol_total, anchor_categories}, items:[Exercise + score, rank, reasons[], prescription, frequency]}`. Region falls back to the protocol's. Signals: protocol library + this clinic's picker history only. |
 | GET | `/exercises/recent` | exercises this clinician added through the picker, newest first (T-29) |
@@ -51,6 +52,13 @@ patient's timezone · cursor pagination (`?cursor=&limit=`) · `Idempotency-Key`
 | DELETE | `/exercises/:id/override?fields=a,b` | back to the catalog version for those (or all) fields (T-30) |
 | GET | `/exercises/:id/history` · POST `/exercises/revisions/:id/restore` | change history; restore re-applies a revision's `from` values as a new change (T-30) |
 | GET | `/exercises/similar?name=&name_en=&exclude_id=` | duplicate check while creating/renaming (T-30) |
+| POST | `/exercises/:id/media/upload-url` | `{files:[{mime_type, size_bytes}] (≤20)}` → `{scope, targets:[{path, token, thumb_path, thumb_token}]}` signed Storage upload targets. Types/caps: JPG/PNG/WebP 5MB, GIF 15MB, MP4/WebM 50MB (T-31) |
+| POST | `/exercises/:id/media` | register media `{kind, path \| youtube_id, thumb_path?, source_file?, width?, height?, duration_ms?, mime_type?, size_bytes?, rights?, attribution?, start_sec?, end_sec?, primary?, verify?}` — the object must already exist under the caller's scope prefix; `verify` needs known rights (T-31) |
+| PUT | `/exercises/:id/media/order` | `{ids}` — the full media list of the caller's scope, first = primary (T-31) |
+| PATCH / DELETE | `/exercises/media/:mediaId` | update `{patch: rights\|attribution\|start_sec\|end_sec\|review_note}` (rights → unknown withdraws verification) · remove (deletes uploaded objects; dataset objects are never deleted) (T-31) |
+| POST | `/exercises/media/verify` | `{ids (≤500), verified, rights?, note?}` → `{updated, skipped:[{id, reason: rights_unknown\|forbidden\|not_found}]}` (T-31) |
+| GET | `/exercises/media/queue?status=pending\|verified\|rights_unknown\|all&source=dataset\|upload\|youtube&exercise_status=&limit=&offset=` | media the caller manages (curator: master + own clinic) → `{total, counts, items}` (T-31) |
+| POST | `/exercises/media/match` | `{names (≤100, normalized file names)}` → best 3 exercise candidates per name with a score, for bulk import (T-31) |
 | DELETE | `/exercises/:id` | soft-delete a clinic exercise; 422 `in_use` when a protocol or current plan still uses it (archive instead) |
 | GET/POST/DELETE | `/plan-templates` | saved phase templates |
 | GET | `/measure-definitions` | measurement catalog, clinic overrides over system defaults |

@@ -6,7 +6,7 @@ import { SupabaseContext } from '../App';
 
 interface Media {
   id: string;
-  kind: 'image' | 'gif' | 'video';
+  kind: 'image' | 'gif' | 'video' | 'clip';
   url: string;
   thumb_url: string | null;
   width: number | null;
@@ -136,7 +136,11 @@ export default function ExerciseDetailDrawer({
     openInLibrary(newId);
   }
 
-  const primary = data?.media?.find((m) => m.kind === 'gif') ?? data?.media?.[0] ?? null;
+  // list order is authoritative (T-31); a clip shows its poster frame here
+  const primaryMedia = data?.media?.find((m) => m.kind !== 'video') ?? null;
+  const primary = primaryMedia && primaryMedia.kind === 'clip'
+    ? (primaryMedia.thumb_url ? { ...primaryMedia, url: primaryMedia.thumb_url } : null)
+    : primaryMedia;
 
   return (
     <>

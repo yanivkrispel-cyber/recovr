@@ -5,6 +5,9 @@ interface YouTubeFacadeProps {
   title: string;
   height?: number;
   style?: CSSProperties;
+  /** Trim window (T-31): play from / stop at these seconds. */
+  startSec?: number | null;
+  endSec?: number | null;
 }
 
 // Click-to-load embed: a live <iframe src="youtube.../embed"> pulls in ~1MB of
@@ -13,13 +16,13 @@ interface YouTubeFacadeProps {
 // thumbnail (no API key needed) until the viewer taps it, and only then swaps
 // in the real iframe — youtube-nocookie.com so no tracking cookie is set
 // before that tap either.
-export function YouTubeFacade({ youtubeId, title, height = 200, style }: YouTubeFacadeProps) {
+export function YouTubeFacade({ youtubeId, title, height = 200, style, startSec, endSec }: YouTubeFacadeProps) {
   const [loaded, setLoaded] = useState(false);
 
   if (loaded) {
     return (
       <iframe
-        src={`https://www.youtube-nocookie.com/embed/${youtubeId}?autoplay=1&rel=0`}
+        src={`https://www.youtube-nocookie.com/embed/${youtubeId}?autoplay=1&rel=0${startSec ? `&start=${startSec}` : ''}${endSec ? `&end=${endSec}` : ''}`}
         title={title}
         width="100%"
         height={height}

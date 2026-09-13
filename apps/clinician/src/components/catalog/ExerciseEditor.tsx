@@ -8,10 +8,10 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  DIFFICULTY_LEVELS, EXERCISE_CATEGORIES, START_POSITIONS, difficultyLabel, exerciseCategoryLabel, parseYouTubeId,
+  DIFFICULTY_LEVELS, EXERCISE_CATEGORIES, START_POSITIONS, difficultyLabel, exerciseCategoryLabel,
   startPositionLabel, t, type BodyRegion, type ContentField, type ExerciseStatus,
 } from 'shared';
-import { Button, EmptyState, Skeleton, Toggle, YouTubeFacade, useToast } from 'ui';
+import { Button, EmptyState, Skeleton, Toggle, useToast } from 'ui';
 import { SupabaseContext } from '../../App';
 import {
   CatalogApiError, MASTER_ONLY_FIELDS, deleteExercise, duplicateExercise, editableFrom, findSimilar,
@@ -23,6 +23,7 @@ import {
   smallButtonStyle, textInputStyle, textareaStyle,
 } from './catalogUi';
 import ExerciseHistory from './ExerciseHistory';
+import MediaManager from './MediaManager';
 import PatientPreview from './PatientPreview';
 import UsagePanel from './UsagePanel';
 
@@ -320,8 +321,9 @@ function EditorBody({
     focusable?.focus({ preventScroll: true });
   }
 
-  const primaryMedia = ex.media.find((m) => m.kind === 'gif' && m.url) ?? ex.media.find((m) => m.kind === 'image' && m.url) ?? null;
-  const video = ex.media.find((m) => m.kind === 'video') ?? null;
+  // the list order is authoritative: the first non-YouTube item is the primary visual
+  const primaryMedia = ex.media.find((m) => m.kind !== 'video') ?? null;
+  const headerThumb = primaryMedia ? (primaryMedia.kind === 'clip' ? primaryMedia.thumb_url : primaryMedia.url) : null;
   const regionOptions = useMemo(() => regions.map((r) => ({ value: r.id, label: r.name })), [regions]);
 
   const statusActions: { status: ExerciseStatus; label: string; primary?: boolean; disabledReason?: string }[] = (() => {
@@ -382,7 +384,7 @@ function EditorBody({
   const textArea = (k: 'description' | 'instructions' | 'common_mistakes' | 'safety_notes' | 'contraindications', rows = 3) => (
     <textarea
       id={`f-${k}`}
-      dir="auto"
+      dir="rtl"
       value={draft[k] ?? ''}
       disabled={!canEdit(k)}
       rows={rows}
@@ -398,8 +400,8 @@ function EditorBody({
       <div style={{ position: 'sticky', insetBlockStart: 0, zIndex: 'var(--z-sticky)', background: 'var(--white)', paddingBlock: '16px 0', paddingInline: 22, borderBlockEnd: '1px solid var(--shell-border-soft)' }}>
         <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
           <div style={{ width: 64, height: 64, flex: 'none', borderRadius: 12, overflow: 'hidden', background: 'var(--shell-sidebar-bg)', border: '1px solid var(--line-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {primaryMedia?.url
-              ? <img src={mediaSrc(primaryMedia.url)} alt="" width={64} height={64} style={{ objectFit: 'contain' }} />
+            {headerThumb
+              ? <img src={mediaSrc(headerThumb)} alt="" width={64} height={64} style={{ objectFit: 'contain' }} />
               : <span aria-hidden style={{ fontSize: 22, color: 'var(--muted-2)' }}>◌</span>}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -492,7 +494,7 @@ function EditorBody({
             {field({ k: "name", label: t('catalog.field.name'), wide: false, children: (
               <input
                 id="f-name"
-                dir="auto"
+                dir="rtl"
                 value={draft.name}
                 disabled={!canEdit('name')}
                 onChange={(e) => setField('name', e.target.value, e.target.value.trim() ? 'debounce' : 'local')}
@@ -511,7 +513,7 @@ function EditorBody({
                 disabled={!canEdit('name_en')}
                 onChange={(e) => setField('name_en', e.target.value, 'debounce')}
                 onBlur={() => void flush()}
-                style={{ ...textInputStyle, background: canEdit('name_en') ? 'var(--white)' : 'var(--paper)' }}
+                style={{ ...textInputStyle, direction: 'ltr', textAlign: 'left', background: canEdit('name_en') ? 'var(--white)' : 'var(--paper)' }}
               />
             ) })}
           </div>
@@ -589,10 +591,10 @@ function EditorBody({
             </div>
           </div>
           {field({ k: "muscles", label: t('catalog.field.muscles'), hint: ex.muscle_group ? t('catalog.field.muscle_group', { value: ex.muscle_group }) : undefined, children: (
-            <TagInput id="f-muscles" dir="ltr" value={draft.muscles} disabled={!canEdit('muscles')} onChange={(v) => setField('muscles', v)} />
+            <TagInput id="f-muscles" dir="rtl" value={draft.muscles} disabled={!canEdit('muscles')} onChange={(v) => setField('muscles', v)} />
           ) })}
           {field({ k: "equipment", label: t('catalog.field.equipment'), hint: t('catalog.field.equipment.hint'), children: (
-            <TagInput id="f-equipment" dir="ltr" value={draft.equipment} suggestions={equipmentSuggestions} disabled={!canEdit('equipment')} onChange={(v) => setField('equipment', v)} />
+            <TagInput id="f-equipment" dir="rtl" value={draft.equipment} suggestions={equipmentSuggestions} disabled={!canEdit('equipment')} onChange={(v) => setField('equipment', v)} />
           ) })}
         </Section>
 
@@ -618,27 +620,7 @@ function EditorBody({
         </Section>
 
         <Section id="sec-media" title={t('catalog.section.media')}>
-          {primaryMedia?.url ? (
-            <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-              <div style={{ position: 'relative', border: '1px solid var(--line-soft)', borderRadius: 'var(--radius-card)', overflow: 'hidden', background: 'var(--shell-sidebar-bg)' }}>
-                <img src={mediaSrc(primaryMedia.url)} alt={draft.name_en ?? draft.name} width={200} height={200} style={{ display: 'block', objectFit: 'contain' }} />
-                {!primaryMedia.verified && (
-                  <span style={{ position: 'absolute', insetBlockStart: 8, insetInlineStart: 8, background: 'var(--flag-red)', color: 'var(--white)', fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 5 }}>
-                    {t('picker.card.unverified')}
-                  </span>
-                )}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, maxWidth: 260 }}>
-                {!primaryMedia.verified && <div>{t('catalog.media.unverified')}</div>}
-                {ex.external_ref && <div>© Gym visual — https://gymvisual.com/</div>}
-                {primaryMedia.source_file && <div dir="ltr">{primaryMedia.source_file}</div>}
-              </div>
-            </div>
-          ) : (
-            <div style={{ fontSize: 13, color: 'var(--muted)' }}>{t('catalog.media.none')}</div>
-          )}
-          <VideoField ex={ex} video={video} readOnly={readOnly} onSaved={reload} />
-          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('catalog.media.next_phase')}</div>
+          <MediaManager ex={ex} readOnly={readOnly} onChanged={() => { reload(); onListInvalidate(); }} />
         </Section>
 
         <Section id="sec-usage" title={t('catalog.section.usage')}>
@@ -650,18 +632,20 @@ function EditorBody({
         </Section>
       </div>
 
-      <PatientPreview open={previewOpen} onClose={() => setPreviewOpen(false)} fields={draft} media={primaryMedia} />
+      <PatientPreview open={previewOpen} onClose={() => setPreviewOpen(false)} fields={draft} media={ex.media} />
     </div>
   );
 }
 
 function SaveIndicator({ state, onRetry }: { state: SaveState; onRetry: () => void }) {
-  if (state === 'idle') return null;
+  if (state === 'idle') {
+    return <span style={{ fontSize: 11.5, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{t('catalog.save.auto')}</span>;
+  }
   const color = state === 'error' || state === 'conflict' ? 'var(--danger)' : state === 'saved' ? 'var(--flag-green)' : 'var(--muted)';
   return (
     <span role="status" aria-live="polite" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color, whiteSpace: 'nowrap' }}>
       {state === 'saving' && t('catalog.save.saving')}
-      {state === 'saved' && `✓ ${t('catalog.save.saved')}`}
+      {state === 'saved' && `✓ ${t('catalog.save.saved')} · ${t('catalog.save.auto')}`}
       {state === 'conflict' && t('catalog.save.error')}
       {state === 'error' && (
         <>
@@ -670,52 +654,5 @@ function SaveIndicator({ state, onRetry }: { state: SaveState; onRetry: () => vo
         </>
       )}
     </span>
-  );
-}
-
-// Supplementary YouTube video. Only a clinic's own exercise can carry an
-// attached video today (app.set_exercise_video); the full media manager is
-// the next phase.
-function VideoField({ ex, video, readOnly, onSaved }: { ex: CatalogExercise; video: CatalogExercise['media'][number] | null; readOnly: boolean; onSaved: () => void }) {
-  const supabase = useContext(SupabaseContext);
-  const toast = useToast();
-  const initial = video?.url ?? '';
-  const [value, setValue] = useState(initial);
-  const parsed = value.trim() ? parseYouTubeId(value) : null;
-  const invalid = value.trim() !== '' && !parsed;
-  const editable = ex.is_clinic_owned && !readOnly;
-
-  async function save() {
-    if (invalid || (parsed ?? '') === initial) return;
-    const { data, error } = await supabase.functions.invoke(`exercises/${ex.id}/video`, { method: 'PUT', body: { youtube_id: parsed } });
-    if (error || (data as { error?: string })?.error) {
-      toast.show(t('error.save.body'), { tone: 'error' });
-      return;
-    }
-    onSaved();
-  }
-
-  if (!editable && !video) return null;
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <label htmlFor="f-video" style={fieldLabelStyle}>{t('catalog.field.video')}</label>
-      {editable && (
-        <input
-          id="f-video"
-          dir="ltr"
-          value={value}
-          placeholder="https://youtube.com/watch?v=…"
-          onChange={(e) => setValue(e.target.value)}
-          onBlur={save}
-          style={{ ...textInputStyle, borderColor: invalid ? 'var(--danger)' : undefined }}
-        />
-      )}
-      {invalid && <span style={{ fontSize: 12, color: 'var(--danger)' }}>{t('catalog.field.video.invalid')}</span>}
-      {(parsed ?? (editable ? null : video?.url)) && (
-        <div style={{ maxWidth: 360 }}>
-          <YouTubeFacade youtubeId={(parsed ?? video?.url)!} title={ex.name} height={180} />
-        </div>
-      )}
-    </div>
   );
 }

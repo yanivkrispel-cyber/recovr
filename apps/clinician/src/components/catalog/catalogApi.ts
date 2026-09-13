@@ -1,6 +1,6 @@
 // T-30 exercise catalog — API types and calls for the library workspace.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { BodyRegion, CompletenessKey, ContentField, ExerciseStatus } from 'shared';
+import type { BodyRegion, CompletenessKey, ContentField, ExerciseStatus, MediaKind, MediaRights } from 'shared';
 
 export interface CatalogFilters {
   q?: string;
@@ -41,6 +41,7 @@ export interface CatalogItem {
   thumb_url: string | null;
   gif_url: string | null;
   media_verified: boolean;
+  has_verified_media: boolean;
   protocol_count: number;
 }
 
@@ -71,14 +72,25 @@ export interface CatalogPage {
 
 export interface CatalogMedia {
   id: string;
-  kind: 'image' | 'gif' | 'video';
+  kind: MediaKind;
   url: string | null;
   thumb_url: string | null;
   width: number | null;
   height: number | null;
+  duration_ms?: number | null;
   order: number;
   source_file: string | null;
+  mime_type?: string | null;
+  size_bytes?: number | null;
+  rights: MediaRights;
+  attribution: string | null;
+  start_sec: number | null;
+  end_sec: number | null;
+  review_note?: string | null;
   verified: boolean;
+  verified_at?: string | null;
+  scope: 'master' | 'clinic';
+  can_manage: boolean;
 }
 
 export interface CatalogExercise {
@@ -125,6 +137,7 @@ export interface CatalogExercise {
     active_plan_count: number;
   };
   media: CatalogMedia[];
+  media_scope: 'master' | 'clinic';
   created_at: string;
   updated_at: string;
 }
@@ -272,3 +285,82 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 export function mediaSrc(u: string): string {
   return u.startsWith('http') ? u : `${SUPABASE_URL}${u}`;
 }
+
+// --- T-31 media ---------------------------------------------------------------
+
+export interface UploadTarget {
+  path: string;
+  token: string;
+  thumb_path: string;
+  thumb_token: string;
+}
+
+export interface MediaAddInput {
+  kind: MediaKind;
+  path?: string;
+  youtube_id?: string;
+  thumb_path?: string;
+  source_file?: string;
+  width?: number;
+  height?: number;
+  duration_ms?: number;
+  mime_type?: string;
+  size_bytes?: number;
+  rights?: MediaRights;
+  attribution?: string;
+  start_sec?: number | null;
+  end_sec?: number | null;
+  primary?: boolean;
+  verify?: boolean;
+}
+
+export interface MediaQueueItem extends Omit<CatalogMedia, 'order' | 'can_manage'> {
+  source: 'dataset' | 'upload' | 'youtube';
+  exercise: { id: string; name: string; name_en: string | null; status: ExerciseStatus; is_clinic_owned: boolean };
+}
+
+export interface MediaQueuePage {
+  total: number;
+  counts: { pending: number; verified: number; rights_unknown: number; all: number };
+  items: MediaQueueItem[];
+  viewer: { is_curator: boolean };
+}
+
+export interface MatchCandidate {
+  id: string;
+  name: string;
+  name_en: string | null;
+  status: ExerciseStatus;
+  is_clinic_owned: boolean;
+  score: number;
+  media_count: number;
+}
+
+export const mediaUploadTargets = (supabase: SupabaseClient, exerciseId: string, files: { mime_type: string; size_bytes: number }[]) =>
+  call<{ scope: 'master' | 'clinic'; targets: UploadTarget[] }>(supabase, `exercises/${exerciseId}/media/upload-url`, { method: 'POST', body: { files } });
+
+export const addMedia = (supabase: SupabaseClient, exerciseId: string, media: MediaAddInput) =>
+  call<{ ok: true; id: string; scope: string }>(supabase, `exercises/${exerciseId}/media`, { method: 'POST', body: { ...media } });
+
+export const reorderMedia = (supabase: SupabaseClient, exerciseId: string, ids: string[]) =>
+  call<{ ok: true }>(supabase, `exercises/${exerciseId}/media/order`, { method: 'PUT', body: { ids } });
+
+export const updateMedia = (supabase: SupabaseClient, mediaId: string, patch: Partial<Pick<CatalogMedia, 'rights' | 'attribution' | 'start_sec' | 'end_sec' | 'review_note'>>) =>
+  call<{ ok: true; verified: boolean }>(supabase, `exercises/media/${mediaId}`, { method: 'PATCH', body: { patch } });
+
+export const removeMedia = (supabase: SupabaseClient, mediaId: string) =>
+  call<{ ok: true }>(supabase, `exercises/media/${mediaId}`, { method: 'DELETE' });
+
+export const verifyMedia = (supabase: SupabaseClient, ids: string[], verified: boolean, rights?: MediaRights | null, note?: string) =>
+  call<BulkResult>(supabase, 'exercises/media/verify', { method: 'POST', body: { ids, verified, rights: rights ?? null, note: note ?? null } });
+
+export function mediaQueue(supabase: SupabaseClient, filters: { status?: string; source?: string; exercise_status?: string }, limit: number, offset: number) {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(filters)) if (v) params.set(k, v);
+  params.set('limit', String(limit));
+  params.set('offset', String(offset));
+  return call<MediaQueuePage>(supabase, `exercises/media/queue?${params.toString()}`, { method: 'GET' });
+}
+
+export const matchMediaNames = (supabase: SupabaseClient, names: string[]) =>
+  call<{ items: { name: string; candidates: MatchCandidate[] }[] }>(supabase, 'exercises/media/match', { method: 'POST', body: { names } });

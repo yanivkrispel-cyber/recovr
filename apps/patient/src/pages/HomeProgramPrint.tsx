@@ -5,7 +5,7 @@ import { supabase } from '../App';
 import { secondaryLabel } from '../lib/label';
 
 interface Media {
-  kind: 'image' | 'gif' | 'video';
+  kind: 'image' | 'gif' | 'video' | 'clip';
   url: string;
   thumb_url: string | null;
   width: number | null;
@@ -72,13 +72,13 @@ function frequency(e: PlanExercise): string {
   return `${d}×/שבוע`;
 }
 
-function printImage(media: Media[]): Media | null {
-  // A video's url is a bare YouTube id, not an image src — never printable,
-  // so it's excluded from every fallback tier including the last-resort one.
-  return media.find((m) => m.kind === 'image')
-    ?? media.find((m) => m.kind === 'gif')
-    ?? media.find((m) => m.kind !== 'video')
-    ?? null;
+/** The still to print, as an image src path. */
+function printImage(media: Media[]): string | null {
+  // A video's url is a bare YouTube id, not an image src — never printable.
+  // An uploaded clip prints its poster frame (thumb_url).
+  const still = media.find((m) => m.kind === 'image') ?? media.find((m) => m.kind === 'gif');
+  if (still) return still.url;
+  return media.find((m) => m.kind === 'clip' && m.thumb_url)?.thumb_url ?? null;
 }
 
 const PRINT_CSS = `
@@ -298,7 +298,7 @@ function PageTwo({ data }: { data: HomeProgram }) {
               <div key={i} style={{ border: '1px solid var(--sand)', borderRadius: 12, padding: 14, display: 'grid', gridTemplateColumns: '150px 1fr', gap: 16, breakInside: 'avoid' }}>
                 <div style={{ borderRadius: 9, background: 'var(--sand)', border: img ? '1px solid var(--line-input)' : '1px dashed var(--line-input)', aspectRatio: '4 / 3', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 8, boxSizing: 'border-box', overflow: 'hidden' }}>
                   {img ? (
-                    <img src={mediaSrc(img.url)} alt={e.name_en ?? e.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                    <img src={mediaSrc(img)} alt={e.name_en ?? e.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                   ) : (
                     <div style={{ fontSize: 9.5, color: 'var(--muted-2)', lineHeight: 1.5 }}>
                       תמונת תרגיל<br />{e.name_en ?? e.name}

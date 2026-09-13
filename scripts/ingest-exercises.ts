@@ -299,14 +299,15 @@ if (!DRY_RUN) {
       `
       WITH up AS (
         INSERT INTO app.exercise_media
-          (id, exercise_id, kind, url, thumb_url, width, height, "order", source_file)
+          (id, exercise_id, kind, url, thumb_url, width, height, "order", source_file, attribution)
         SELECT
           uuid_generate_v5(uuid_ns_url(), 'recoveryos:exercise_media:dataset:' || (r->>'key') || ':' || (r->>'kind')),
           uuid_generate_v5(uuid_ns_url(), 'recoveryos:exercise:dataset:' || (r->>'key')),
           r->>'kind', r->>'url', r->>'thumb_url',
           (r->>'width')::int, (r->>'height')::int,
           CASE r->>'kind' WHEN 'gif' THEN 0 ELSE 1 END,
-          r->>'source_file'
+          r->>'source_file',
+          '© Gym visual — https://gymvisual.com/'  -- rights stay 'unknown' (T-31) until licensed
         FROM jsonb_array_elements($1::jsonb) AS r
         ON CONFLICT (id) DO UPDATE SET
           url = EXCLUDED.url, thumb_url = EXCLUDED.thumb_url, width = EXCLUDED.width,

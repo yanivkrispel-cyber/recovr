@@ -10,6 +10,7 @@
 //   PUT|DELETE /exercises/:id/favorite
 //   POST /exercises/picker-events
 // Exercise catalog workspace (T-30): see handleCatalog below.
+// Exercise media manager (T-31): see handleMedia below.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -109,18 +110,7 @@ async function handleCatalog(req: Request, url: URL, service: any, userId: strin
 
   if (req.method === 'GET' && rest.length === 2 && rest[0] === 'catalog' && UUID_RE.test(rest[1])) {
     const { data, error } = await rpc('catalog_get_exercise', { p_exercise_id: rest[1] });
-    if (!error && !data?.error) {
-      for (const m of data.media ?? []) {
-        if (m.kind === 'video') continue; // url is a YouTube id
-        for (const field of ['url', 'thumb_url'] as const) {
-          const path = m[field];
-          if (typeof path === 'string' && path && !path.startsWith('http')) {
-            const signed = await getSignedMediaUrl(service, path);
-            m[field] = signed ? signed.replace(/^https?:\/\/[^/]+/, '') : null;
-          }
-        }
-      }
-    }
+    if (!error && !data?.error) await signMediaRows(service, data.media ?? []);
     return rpcResult(data, error);
   }
 
@@ -175,6 +165,9 @@ async function handleCatalog(req: Request, url: URL, service: any, userId: strin
     return rpcResult(data, error);
   }
 
+  const mediaResponse = await handleMedia(req, url, service, rpc, rest);
+  if (mediaResponse) return mediaResponse;
+
   if (req.method === 'GET' && rest.length === 1 && rest[0] === 'similar') {
     const excludeId = url.searchParams.get('exclude_id');
     if (excludeId && !UUID_RE.test(excludeId)) return json({ error: 'validation_failed' }, 422);
@@ -183,6 +176,159 @@ async function handleCatalog(req: Request, url: URL, service: any, userId: strin
       p_name_en: url.searchParams.get('name_en'),
       p_exclude_id: excludeId,
     });
+    return rpcResult(data, error);
+  }
+
+  return null;
+}
+
+// Accepted uploads and their caps — mirrors UPLOAD_RULES in
+// packages/shared/src/exerciseMedia.ts (the client pre-checks, this enforces).
+const UPLOAD_RULES: Record<string, { maxBytes: number; ext: string }> = {
+  'image/jpeg': { maxBytes: 5 * 1024 * 1024, ext: 'jpg' },
+  'image/png': { maxBytes: 5 * 1024 * 1024, ext: 'png' },
+  'image/webp': { maxBytes: 5 * 1024 * 1024, ext: 'webp' },
+  'image/gif': { maxBytes: 15 * 1024 * 1024, ext: 'gif' },
+  'video/mp4': { maxBytes: 50 * 1024 * 1024, ext: 'mp4' },
+  'video/webm': { maxBytes: 50 * 1024 * 1024, ext: 'webm' },
+};
+const MEDIA_BUCKET = 'exercise-media';
+
+// deno-lint-ignore no-explicit-any
+async function signMediaRows(service: any, rows: any[]) {
+  const paths: string[] = [];
+  for (const m of rows) {
+    if (m.kind === 'video') continue; // url is a YouTube id
+    for (const f of ['url', 'thumb_url']) if (typeof m[f] === 'string' && m[f] && !m[f].startsWith('http')) paths.push(m[f]);
+  }
+  const signed = await getSignedMediaUrls(service, paths);
+  for (const m of rows) {
+    if (m.kind === 'video') continue;
+    for (const f of ['url', 'thumb_url']) {
+      const p = m[f];
+      if (typeof p === 'string' && p && !p.startsWith('http')) {
+        const s = signed.get(p);
+        m[f] = s ? s.replace(/^https?:\/\/[^/]+/, '') : null;
+      }
+    }
+  }
+}
+
+// T-31 media manager:
+//   POST   /exercises/:id/media/upload-url   {files:[{mime_type, size_bytes}]} -> signed upload targets
+//   POST   /exercises/:id/media              register an uploaded file or a YouTube link
+//   PUT    /exercises/:id/media/order        {ids}
+//   PATCH  /exercises/media/:mediaId         {patch: rights|attribution|start_sec|end_sec|review_note}
+//   DELETE /exercises/media/:mediaId
+//   POST   /exercises/media/verify           {ids, verified, rights?, note?}
+//   GET    /exercises/media/queue?status=&source=&exercise_status=&limit=&offset=
+//   POST   /exercises/media/match            {names} (normalized file names)
+async function handleMedia(
+  req: Request,
+  url: URL,
+  // deno-lint-ignore no-explicit-any
+  service: any,
+  // deno-lint-ignore no-explicit-any
+  rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: any; error: { message: string } | null }>,
+  rest: string[],
+): Promise<Response | null> {
+  if (req.method === 'POST' && rest.length === 3 && UUID_RE.test(rest[0]) && rest[1] === 'media' && rest[2] === 'upload-url') {
+    const body = await req.json().catch(() => null);
+    const files = Array.isArray(body?.files) ? body.files : null;
+    if (!files || files.length === 0 || files.length > 20) return json({ error: 'validation_failed', message: 'invalid_files' }, 422);
+    const { data: scope, error } = await rpc('catalog_media_scope', { p_exercise_id: rest[0] });
+    if (error || scope?.error) return rpcResult(scope, error);
+
+    const targets = [];
+    for (const f of files) {
+      const rule = UPLOAD_RULES[f?.mime_type];
+      if (!rule) return json({ error: 'validation_failed', message: 'unsupported_type' }, 422);
+      if (!Number.isFinite(f.size_bytes) || f.size_bytes <= 0 || f.size_bytes > rule.maxBytes) {
+        return json({ error: 'validation_failed', message: 'too_large' }, 422);
+      }
+      const id = crypto.randomUUID();
+      const path = `${scope.prefix}${id}.${rule.ext}`;
+      const thumbPath = `${scope.prefix}${id}-thumb.jpg`;
+      const [main, thumb] = await Promise.all([
+        service.storage.from(MEDIA_BUCKET).createSignedUploadUrl(path),
+        service.storage.from(MEDIA_BUCKET).createSignedUploadUrl(thumbPath),
+      ]);
+      if (main.error || thumb.error) return json({ error: 'internal_error', details: (main.error ?? thumb.error).message }, 500);
+      targets.push({ path, token: main.data.token, thumb_path: thumbPath, thumb_token: thumb.data.token });
+    }
+    return json({ scope: scope.scope, targets });
+  }
+
+  if (req.method === 'POST' && rest.length === 2 && UUID_RE.test(rest[0]) && rest[1] === 'media') {
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== 'object') return json({ error: 'validation_failed' }, 422);
+    const { data, error } = await rpc('catalog_media_add', { p_exercise_id: rest[0], p_media: body });
+    return rpcResult(data, error, 201);
+  }
+
+  if (req.method === 'PUT' && rest.length === 3 && UUID_RE.test(rest[0]) && rest[1] === 'media' && rest[2] === 'order') {
+    const body = await req.json().catch(() => null);
+    const ids = Array.isArray(body?.ids) ? body.ids : null;
+    if (!ids || ids.some((id: unknown) => typeof id !== 'string' || !UUID_RE.test(id))) return json({ error: 'validation_failed' }, 422);
+    const { data, error } = await rpc('catalog_media_reorder', { p_exercise_id: rest[0], p_ids: ids });
+    return rpcResult(data, error);
+  }
+
+  if (rest[0] !== 'media') return null;
+
+  if (req.method === 'PATCH' && rest.length === 2 && UUID_RE.test(rest[1])) {
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body.patch !== 'object') return json({ error: 'validation_failed' }, 422);
+    const { data, error } = await rpc('catalog_media_update', { p_media_id: rest[1], p_patch: body.patch });
+    return rpcResult(data, error);
+  }
+
+  if (req.method === 'DELETE' && rest.length === 2 && UUID_RE.test(rest[1])) {
+    const { data, error } = await rpc('catalog_media_remove', { p_media_id: rest[1] });
+    if (!error && !data?.error && Array.isArray(data.delete_paths) && data.delete_paths.length > 0) {
+      const { error: rmError } = await service.storage.from(MEDIA_BUCKET).remove(data.delete_paths);
+      // the row is gone either way; an orphaned object is only wasted space
+      if (rmError) console.log(JSON.stringify({ level: 'warn', msg: 'media object delete failed', paths: data.delete_paths, error: rmError.message }));
+      await service.schema('app').from('media_signed_url_cache').delete().in('path', data.delete_paths);
+    }
+    return rpcResult(data, error);
+  }
+
+  if (req.method === 'POST' && rest.length === 2 && rest[1] === 'verify') {
+    const body = await req.json().catch(() => null);
+    const ids = Array.isArray(body?.ids) ? body.ids : null;
+    if (!ids || ids.length === 0 || ids.length > 500 || ids.some((id: unknown) => typeof id !== 'string' || !UUID_RE.test(id))) {
+      return json({ error: 'validation_failed', message: 'invalid_ids' }, 422);
+    }
+    const { data, error } = await rpc('catalog_media_verify', {
+      p_ids: ids, p_verified: body.verified !== false, p_rights: body.rights ?? null, p_note: body.note ?? null,
+    });
+    return rpcResult(data, error);
+  }
+
+  if (req.method === 'GET' && rest.length === 2 && rest[1] === 'queue') {
+    const p = url.searchParams;
+    const filters: Record<string, string> = {};
+    for (const key of ['status', 'source', 'exercise_status']) {
+      const v = p.get(key);
+      if (v) filters[key] = v;
+    }
+    const { data, error } = await rpc('catalog_media_queue', {
+      p_filters: filters,
+      p_limit: p.get('limit') ? Number(p.get('limit')) : undefined,
+      p_offset: p.get('offset') ? Number(p.get('offset')) : undefined,
+    });
+    if (!error && !data?.error) await signMediaRows(service, data.items ?? []);
+    return rpcResult(data, error);
+  }
+
+  if (req.method === 'POST' && rest.length === 2 && rest[1] === 'match') {
+    const body = await req.json().catch(() => null);
+    const names = Array.isArray(body?.names) ? body.names : null;
+    if (!names || names.length === 0 || names.length > 100 || names.some((n: unknown) => typeof n !== 'string' || n.length > 200)) {
+      return json({ error: 'validation_failed', message: 'invalid_names' }, 422);
+    }
+    const { data, error } = await rpc('catalog_media_match', { p_names: names });
     return rpcResult(data, error);
   }
 

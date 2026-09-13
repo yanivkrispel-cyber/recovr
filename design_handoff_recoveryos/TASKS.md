@@ -126,6 +126,31 @@ browser-print PDF · minimal (undesigned) auth screens · dataset media dev-only
   enrichment (after), semantic search.
 - Migration 0032; endpoints in `API_CONTRACT.md`.
 
+**T-31 Exercise media manager**
+- Media per scope: master media (catalog curators, all clinics) or a clinic's private media
+  (shown first to that clinic and its patients). All media reads — clinician, picker, patient
+  app, printed program — go through `app.exercise_media_visible`.
+- Upload images, GIFs and MP4/WebM clips straight to Storage through signed upload URLs; the
+  browser renders a JPEG thumbnail (first frame); the row is registered only once the object
+  exists. YouTube links with a start/end trim; clips loop their trim window in the patient app.
+- Order / primary, rights (own / licensed / open / embed / unknown) + attribution, verify /
+  unverify, remove (uploaded objects deleted, dataset objects never). New verification requires
+  known rights; media verified before T-31 with unknown rights is flagged, not relabelled.
+- Library "media verification" view: pending / rights-unknown / verified queue by source, bulk
+  verify with a rights declaration. Bulk import: file names matched to exercises (names,
+  English names, aliases), matches confirmed or corrected, then uploaded in one batch.
+- Search facet adds verified / unverified media. CLAUDE.md §Media unchanged: patients and
+  prints only ever receive verified media.
+- Migration 0033; endpoints in `API_CONTRACT.md`.
+
+**T-32 Add-to-protocol follows hybrid ownership**
+- The exercise editor's "add to protocol" offers every active protocol (clinic + system), grouped.
+- Clinic protocol: attached in place. System protocol: a catalog curator attaches to the system
+  protocol itself (all clinics; version bumped); anyone else gets a private clinic copy
+  (protocol_duplicate) with the exercise attached. Patients on existing plans are unaffected.
+- Only approved exercises can be attached. Migration 0034.
+- Not in this task: curators editing system protocols in the full protocol editor.
+
 ## M2 — Patient app (P0)
 **T-10 Today / Home**
 - Today's session, progress ring, exercise list with done state, start-first-incomplete CTA.
