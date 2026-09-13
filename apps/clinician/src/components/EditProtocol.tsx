@@ -73,6 +73,8 @@ interface FilterOptions {
   body_regions: BodyRegion[];
 }
 
+const ADD_PAGE_SIZE = 60;
+
 interface EditProtocolProps {
   protocolId: string | null; // null = create mode
   open: boolean;
@@ -125,6 +127,8 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
   const [addCategory, setAddCategory] = useState('');
   const [addRegionId, setAddRegionId] = useState('');
   const [addResults, setAddResults] = useState<ExerciseOption[]>([]);
+  const [addTotal, setAddTotal] = useState(0);
+  const [addLoadingMore, setAddLoadingMore] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [detailId, setDetailId] = useState<string | null>(null);
 
@@ -216,8 +220,27 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
     if (q) params.set('q', q);
     if (cat) params.set('category', cat);
     if (regionId) params.set('region_id', regionId);
+    params.set('limit', String(ADD_PAGE_SIZE));
+    params.set('offset', '0');
     const { data } = await supabase.functions.invoke(`exercises?${params.toString()}`, { method: 'GET' });
-    setAddResults((data as { items: ExerciseOption[] })?.items ?? []);
+    const result = data as { items: ExerciseOption[]; total: number } | undefined;
+    setAddResults(result?.items ?? []);
+    setAddTotal(result?.total ?? 0);
+  }
+
+  async function loadMoreAddResults() {
+    setAddLoadingMore(true);
+    const params = new URLSearchParams();
+    if (addQuery) params.set('q', addQuery);
+    if (addCategory) params.set('category', addCategory);
+    if (addRegionId) params.set('region_id', addRegionId);
+    params.set('limit', String(ADD_PAGE_SIZE));
+    params.set('offset', String(addResults.length));
+    const { data } = await supabase.functions.invoke(`exercises?${params.toString()}`, { method: 'GET' });
+    const result = data as { items: ExerciseOption[]; total: number } | undefined;
+    setAddResults((prev) => [...prev, ...(result?.items ?? [])]);
+    setAddTotal(result?.total ?? addTotal);
+    setAddLoadingMore(false);
   }
 
   function openAddPanel() {
@@ -252,6 +275,7 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
     setAddCategory('');
     setAddRegionId('');
     setAddResults([]);
+    setAddTotal(0);
     setSelectedIds(new Set());
   }
 
@@ -561,6 +585,9 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
                         </div>
                       </div>
 
+                      <div style={{ fontSize: 11, color: 'var(--nav-inactive-text)', marginBottom: 6 }}>
+                        {addTotal > 0 && `מוצגים ${addResults.length} מתוך ${addTotal}`}
+                      </div>
                       <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--shell-border-soft)', borderRadius: 8 }}>
                         {addResults.length === 0 ? (
                           <div style={{ padding: 16, textAlign: 'center', fontSize: 13, color: 'var(--nav-inactive-text)' }}>אין תוצאות</div>
@@ -593,6 +620,14 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
                           );
                         })}
                       </div>
+
+                      {addResults.length < addTotal && (
+                        <div style={{ textAlign: 'center', marginTop: 8 }}>
+                          <Button size="sm" variant="secondary" loading={addLoadingMore} onClick={loadMoreAddResults}>
+                            טען עוד · Load more
+                          </Button>
+                        </div>
+                      )}
 
                       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
                         <Button size="sm" variant="ghost" onClick={() => setAddOpen(false)}>{t('clinician.plan.discard')}</Button>
