@@ -200,6 +200,12 @@ export function dosageSummary(d: Dosage | null | undefined): string | null {
   }
 }
 
+/**
+ * Labels for both COMPLETENESS_KEYS (the editor's completeness meter) and
+ * the two extra fields app.catalog_set_status's approval gate can report
+ * that aren't part of that meter: 'instruction_steps' and
+ * 'default_prescription'.
+ */
 export function completenessKeyLabel(k: string): string {
   switch (k) {
     case 'name_he': return t('catalog.missing.name_he');
@@ -213,6 +219,8 @@ export function completenessKeyLabel(k: string): string {
     case 'start_position': return t('catalog.missing.start_position');
     case 'difficulty': return t('catalog.missing.difficulty');
     case 'media': return t('catalog.missing.media');
+    case 'instruction_steps': return t('catalog.missing.instruction_steps');
+    case 'default_prescription': return t('catalog.missing.default_prescription');
     default: return k;
   }
 }

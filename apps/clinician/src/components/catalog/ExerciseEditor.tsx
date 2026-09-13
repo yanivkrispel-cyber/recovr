@@ -9,7 +9,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState, type Rea
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CONTRACTION_TYPES, DIFFICULTY_LEVELS, EXERCISE_CATEGORIES, ITEM_KINDS, LATERALITY_OPTIONS, START_POSITIONS,
-  WEIGHT_BEARING_OPTIONS, contractionTypeLabel, difficultyLabel, exerciseCategoryLabel, itemKindLabel,
+  WEIGHT_BEARING_OPTIONS, completenessKeyLabel, contractionTypeLabel, difficultyLabel, exerciseCategoryLabel, itemKindLabel,
   lateralityLabel, startPositionLabel, t, weightBearingLabel, type BodyRegion, type ContentField, type ExerciseStatus,
 } from 'shared';
 import { Button, EmptyState, Skeleton, Toggle, useToast } from 'ui';
@@ -259,11 +259,15 @@ function EditorBody({
       await settle();
       const res = await setStatus(supabase, [ex.id], status);
       if (res.skipped.length > 0) {
-        const reason = res.skipped[0].reason;
-        const msg = reason === 'missing_body_region' ? t('catalog.status.approve_needs_region')
-          : reason === 'missing_required_fields' ? t('catalog.status.approve_needs_fields')
+        const skip = res.skipped[0];
+        const msg = skip.reason === 'missing_body_region' ? t('catalog.status.approve_needs_region')
+          : skip.reason === 'missing_required_fields' ? (
+            skip.fields?.length
+              ? t('catalog.status.approve_needs_fields.list', { fields: skip.fields.map(completenessKeyLabel).join(', ') })
+              : t('catalog.status.approve_needs_fields')
+          )
           : t('error.save.body');
-        toast.show(msg, { tone: 'error', duration: 4000 });
+        toast.show(msg, { tone: 'error', duration: 4500 });
       } else {
         onItemChanged(ex.id, { status });
         reload();

@@ -4,7 +4,7 @@
 // skipped by the server and reported back.
 import { useContext, useState, type CSSProperties } from 'react';
 import {
-  DIFFICULTY_LEVELS, EXERCISE_CATEGORIES, START_POSITIONS, difficultyLabel, exerciseCategoryLabel, startPositionLabel, t,
+  DIFFICULTY_LEVELS, EXERCISE_CATEGORIES, START_POSITIONS, completenessKeyLabel, difficultyLabel, exerciseCategoryLabel, startPositionLabel, t,
   type BodyRegion, type ExerciseStatus, type I18nKey,
 } from 'shared';
 import { Button, useToast } from 'ui';
@@ -23,6 +23,7 @@ const REASON_KEY: Record<string, I18nKey> = {
   forbidden: 'catalog.bulk.reason.forbidden',
   master_field: 'catalog.bulk.reason.master_field',
   missing_body_region: 'catalog.bulk.reason.missing_body_region',
+  missing_required_fields: 'catalog.bulk.reason.missing_required_fields',
   not_found: 'catalog.bulk.reason.not_found',
 };
 
@@ -49,8 +50,17 @@ export default function CatalogBulkGrid({
     if (res.updated > 0) toast.show(t('catalog.bulk.done', { updated: res.updated }), { tone: 'success' });
     if (res.skipped.length > 0) {
       const counts = new Map<string, number>();
-      for (const s of res.skipped) counts.set(s.reason, (counts.get(s.reason) ?? 0) + 1);
-      const reasons = [...counts].map(([r, n]) => `${REASON_KEY[r] ? t(REASON_KEY[r]) : r} (${n})`).join(', ');
+      const missingFields = new Set<string>();
+      for (const s of res.skipped) {
+        counts.set(s.reason, (counts.get(s.reason) ?? 0) + 1);
+        if (s.reason === 'missing_required_fields') for (const f of s.fields ?? []) missingFields.add(f);
+      }
+      const reasons = [...counts].map(([r, n]) => {
+        const label = REASON_KEY[r] ? t(REASON_KEY[r]) : r;
+        const detail = r === 'missing_required_fields' && missingFields.size > 0
+          ? ` (${[...missingFields].map(completenessKeyLabel).join(', ')})` : '';
+        return `${label}${detail} (${n})`;
+      }).join(', ');
       toast.show(t('catalog.bulk.skipped', { n: res.skipped.length, reasons }), { tone: 'error', duration: 5000 });
     }
   }

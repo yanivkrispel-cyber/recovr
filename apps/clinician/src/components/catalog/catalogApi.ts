@@ -222,7 +222,7 @@ export interface HistoryEntry {
 
 export interface BulkResult {
   updated: number;
-  skipped: { id: string; reason: string }[];
+  skipped: { id: string; reason: string; fields?: string[] }[];
 }
 
 export interface ApiError {

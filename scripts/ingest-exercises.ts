@@ -311,6 +311,9 @@ if (!DRY_RUN) {
          IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = '_catalog_apply_dataset_enrichment_batch2_2026_09_13') THEN
            PERFORM app._catalog_apply_dataset_enrichment_batch2_2026_09_13();
          END IF;
+         IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = '_catalog_apply_key_cues_2026_09_13') THEN
+           PERFORM app._catalog_apply_key_cues_2026_09_13();
+         END IF;
        END $$`,
     );
 
