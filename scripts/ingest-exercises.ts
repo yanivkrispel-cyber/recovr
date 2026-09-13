@@ -295,6 +295,20 @@ if (!DRY_RUN) {
     );
     exercisesUpserted = Number(ex.rows[0].n);
 
+    // Catalog cleanup step 5 (2026-09-13, migration 0040): a `db reset`
+    // wipes and recreates dataset rows at revision 0, so the Hebrew/region/
+    // dosage enrichment applied by that migration is gone until re-applied
+    // here — same reason --verify re-runs above. No-op if the function
+    // doesn't exist (an older database that hasn't run 0040 yet).
+    await db.queryArray(
+      `DO $$
+       BEGIN
+         IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = '_catalog_apply_dataset_enrichment_2026_09_13') THEN
+           PERFORM app._catalog_apply_dataset_enrichment_2026_09_13();
+         END IF;
+       END $$`,
+    );
+
     const md = await db.queryObject<{ n: bigint }>(
       `
       WITH up AS (
