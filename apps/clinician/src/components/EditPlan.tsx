@@ -1,9 +1,9 @@
 import { useContext, useEffect, useState, type CSSProperties } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { t, type BodyRegion } from 'shared';
+import { t } from 'shared';
 import { Button, Input, Select, Skeleton } from 'ui';
 import { SupabaseContext } from '../App';
-import ExerciseDetailDrawer from './ExerciseDetailDrawer';
+import ExercisePicker, { type PickedExercise } from './ExercisePicker';
 
 interface PlanExercise {
   id: string | null; // null = new, not yet saved
@@ -55,21 +55,6 @@ interface PlanData {
   protocol_phases: ProtocolPhase[];
 }
 
-interface ExerciseOption {
-  id: string;
-  name: string;
-  name_en: string | null;
-  category: string;
-  body_region: BodyRegion | null;
-  phase_match?: boolean;
-  has_media?: boolean;
-}
-
-interface FilterOptions {
-  categories: string[];
-  body_regions: BodyRegion[];
-}
-
 interface EditPlanProps {
   patientId: string;
   open: boolean;
@@ -97,16 +82,6 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
     enabled: open,
   });
 
-  const { data: filterOptions } = useQuery({
-    queryKey: ['exercise-filter-options'],
-    queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('exercises/filter-options', { method: 'GET' });
-      if (error) throw error;
-      return data as FilterOptions;
-    },
-    enabled: open,
-  });
-
   const [phaseN, setPhaseN] = useState<number | null>(null);
   const [editTab, setEditTab] = useState<EditTab>('exercises');
   const [draft, setDraft] = useState<PlanExercise[]>([]);
@@ -115,12 +90,6 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
   const [dirty, setDirty] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [addQuery, setAddQuery] = useState('');
-  const [addCategory, setAddCategory] = useState('');
-  const [addRegionId, setAddRegionId] = useState('');
-  const [addResults, setAddResults] = useState<ExerciseOption[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [detailId, setDetailId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ currentVersion: number } | null>(null);
@@ -154,59 +123,28 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
     setDirty(false);
   }
 
-  async function runAddSearch(overrides?: { q?: string; category?: string; regionId?: string }) {
-    const q = overrides?.q ?? addQuery;
-    const cat = overrides?.category ?? addCategory;
-    const regionId = overrides?.regionId ?? addRegionId;
-    const params = new URLSearchParams();
-    if (q) params.set('q', q);
-    if (cat) params.set('category', cat);
-    if (regionId) params.set('region_id', regionId);
-    if (phaseN) params.set('phase', String(phaseN));
-    const { data } = await supabase.functions.invoke(`exercises?${params.toString()}`, { method: 'GET' });
-    setAddResults((data as { items: ExerciseOption[] })?.items ?? []);
-  }
+  const draftExerciseIds = draft.map((d) => d.exercise_id);
 
-  function openAddPanel() {
-    setAddOpen(true);
-    setSelectedIds(new Set());
-    runAddSearch();
-  }
-
-  function toggleSelect(id: string) {
-    setSelectedIds((s) => {
-      const next = new Set(s);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+  function addPickedExercises(picked: PickedExercise[]) {
+    setDraft((d) => {
+      const already = new Set(d.map((r) => r.exercise_id));
+      const toAdd = picked.filter((p) => !already.has(p.exercise_id));
+      return [
+        ...d,
+        ...toAdd.map((p, i) => ({
+          id: null,
+          exercise_id: p.exercise_id,
+          name: p.name,
+          name_en: p.name_en,
+          sets: p.sets,
+          reps: p.reps,
+          rest_sec: p.rest_sec,
+          order: d.length + i + 1,
+          clinician_note: null,
+        })),
+      ];
     });
-  }
-
-  const draftExerciseIds = new Set(draft.map((d) => d.exercise_id));
-
-  function addSelectedExercises() {
-    const toAdd = addResults.filter((ex) => selectedIds.has(ex.id) && !draftExerciseIds.has(ex.id));
-    setDraft((d) => [
-      ...d,
-      ...toAdd.map((ex, i) => ({
-        id: null,
-        exercise_id: ex.id,
-        name: ex.name,
-        name_en: ex.name_en,
-        sets: 3,
-        reps: 10,
-        rest_sec: 60,
-        order: d.length + i + 1,
-        clinician_note: null,
-      })),
-    ]);
     setDirty(true);
-    setAddOpen(false);
-    setAddQuery('');
-    setAddCategory('');
-    setAddRegionId('');
-    setAddResults([]);
-    setSelectedIds(new Set());
   }
 
   function removeExercise(row: PlanExercise) {
@@ -563,7 +501,7 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
                   <div style={{ background: 'var(--shell-sidebar-bg)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-panel)', overflow: 'hidden' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--shell-border)' }}>
                       <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>תרגילים · Exercises</div>
-                      <button onClick={openAddPanel} style={ghostPillStyle}>+ הוסף תרגיל · Add Exercise</button>
+                      <button onClick={() => setAddOpen(true)} style={ghostPillStyle}>+ הוסף תרגיל · Add Exercise</button>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 0.5fr', padding: '10px 18px', fontSize: 11, color: 'var(--nav-inactive-text)', fontWeight: 600 }}>
                       <div>תרגיל · Exercise</div><div>סטים</div><div>חזרות</div><div>מנוחה (שנ׳)</div><div />
@@ -592,99 +530,6 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
                       </div>
                     ))}
                   </div>
-
-                  {addOpen && (
-                    <div style={{ background: 'var(--shell-sidebar-bg)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-card)', padding: 16 }}>
-                      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-                        <div style={{ minWidth: 180, flex: 1 }}>
-                          <Input
-                            placeholder="חיפוש"
-                            value={addQuery}
-                            onChange={(e) => {
-                              setAddQuery(e.target.value);
-                              runAddSearch({ q: e.target.value });
-                            }}
-                          />
-                        </div>
-                        <div style={{ minWidth: 150 }}>
-                          <Select
-                            value={addCategory}
-                            onChange={(e) => {
-                              setAddCategory(e.target.value);
-                              runAddSearch({ category: e.target.value });
-                            }}
-                            options={[
-                              { value: '', label: 'כל הקטגוריות' },
-                              ...(filterOptions?.categories ?? []).map((c) => ({ value: c, label: c })),
-                            ]}
-                          />
-                        </div>
-                        <div style={{ minWidth: 150 }}>
-                          <Select
-                            value={addRegionId}
-                            onChange={(e) => {
-                              setAddRegionId(e.target.value);
-                              runAddSearch({ regionId: e.target.value });
-                            }}
-                            options={[
-                              { value: '', label: 'כל האזורים' },
-                              ...(filterOptions?.body_regions ?? []).map((r) => ({ value: r.id, label: r.name })),
-                            ]}
-                          />
-                        </div>
-                      </div>
-
-                      <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--shell-border-soft)', borderRadius: 8 }}>
-                        {addResults.length === 0 ? (
-                          <div style={{ padding: 16, textAlign: 'center', fontSize: 13, color: 'var(--nav-inactive-text)' }}>אין תוצאות</div>
-                        ) : addResults.map((ex) => {
-                          const alreadyInPhase = draftExerciseIds.has(ex.id);
-                          return (
-                            <div
-                              key={ex.id}
-                              style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                                padding: '8px 12px', fontSize: 13, borderBottom: '1px solid var(--shell-border-soft)',
-                                opacity: alreadyInPhase ? 0.6 : 1,
-                              }}
-                            >
-                              <label
-                                style={{
-                                  display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0,
-                                  cursor: alreadyInPhase ? 'not-allowed' : 'pointer',
-                                }}
-                              >
-                                <input type="checkbox" disabled={alreadyInPhase} checked={selectedIds.has(ex.id)} onChange={() => toggleSelect(ex.id)} />
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.name}</span>
-                                {ex.phase_match && (
-                                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--gold-deep)', background: 'var(--nav-active-bg)', padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap' }}>
-                                    מתאים לשלב
-                                  </span>
-                                )}
-                              </label>
-                              <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                                {alreadyInPhase && <span style={{ color: 'var(--nav-inactive-text)', fontSize: 12 }}>כבר בשלב זה</span>}
-                                <button
-                                  type="button"
-                                  onClick={() => setDetailId(ex.id)}
-                                  style={{ background: 'transparent', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-pill)', padding: '3px 10px', fontSize: 11, color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit' }}
-                                >
-                                  פרטים
-                                </button>
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-                        <Button size="sm" variant="ghost" onClick={() => setAddOpen(false)}>{t('clinician.plan.discard')}</Button>
-                        <Button size="sm" onClick={addSelectedExercises} disabled={selectedIds.size === 0}>
-                          הוסף ({selectedIds.size})
-                        </Button>
-                      </div>
-                    </div>
-                  )}
 
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <Input placeholder="שם תבנית" value={templateName} onChange={(e) => setTemplateName(e.target.value)} />
@@ -758,12 +603,23 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
         )}
       </div>
 
-      <ExerciseDetailDrawer
-        exerciseId={detailId}
-        open={detailId !== null}
-        onClose={() => setDetailId(null)}
-        onDuplicated={(newId) => setDetailId(newId)}
-      />
+      {plan && (
+        <ExercisePicker
+          open={addOpen && phaseN !== null}
+          onClose={() => setAddOpen(false)}
+          context={{
+            entry: 'plan',
+            protocolId: plan.pathology.protocol_id,
+            bodyRegionId: null, // resolved server-side from the plan's protocol
+            phaseN,
+            phaseName: plan.phases.find((p) => p.n === phaseN)?.name ?? null,
+            label: plan.pathology.name,
+          }}
+          existingIds={draftExerciseIds}
+          doseFields={['sets', 'reps', 'rest_sec']}
+          onAdd={addPickedExercises}
+        />
+      )}
     </div>
   );
 }

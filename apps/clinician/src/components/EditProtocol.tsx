@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { t, type BodyRegion } from 'shared';
 import { Button, Input, Select, Skeleton } from 'ui';
 import { SupabaseContext } from '../App';
-import ExerciseDetailDrawer from './ExerciseDetailDrawer';
+import ExercisePicker, { type PickedExercise } from './ExercisePicker';
 
 interface Goal {
   he: string;
@@ -60,20 +60,10 @@ interface ProtocolDetail {
   }[];
 }
 
-interface ExerciseOption {
-  id: string;
-  name: string;
-  name_en: string | null;
-  category: string;
-  body_region: BodyRegion | null;
-}
-
 interface FilterOptions {
   categories: string[];
   body_regions: BodyRegion[];
 }
-
-const ADD_PAGE_SIZE = 60;
 
 interface EditProtocolProps {
   protocolId: string | null; // null = create mode
@@ -123,14 +113,6 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
   const [nameTouched, setNameTouched] = useState(false);
 
   const [addOpen, setAddOpen] = useState(false);
-  const [addQuery, setAddQuery] = useState('');
-  const [addCategory, setAddCategory] = useState('');
-  const [addRegionId, setAddRegionId] = useState('');
-  const [addResults, setAddResults] = useState<ExerciseOption[]>([]);
-  const [addTotal, setAddTotal] = useState(0);
-  const [addLoadingMore, setAddLoadingMore] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [detailId, setDetailId] = useState<string | null>(null);
 
   // (Re)initialize the draft whenever the editor opens, for either a fresh
   // create or a loaded protocol.
@@ -210,73 +192,21 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
   }
 
   const phase = phases[activePhase];
-  const draftExerciseIds = new Set(phase?.exercises.map((e) => e.exercise_id) ?? []);
+  const draftExerciseIds = phase?.exercises.map((e) => e.exercise_id) ?? [];
 
-  async function runAddSearch(overrides?: { q?: string; category?: string; regionId?: string }) {
-    const q = overrides?.q ?? addQuery;
-    const cat = overrides?.category ?? addCategory;
-    const regionId = overrides?.regionId ?? addRegionId;
-    const params = new URLSearchParams();
-    if (q) params.set('q', q);
-    if (cat) params.set('category', cat);
-    if (regionId) params.set('region_id', regionId);
-    params.set('limit', String(ADD_PAGE_SIZE));
-    params.set('offset', '0');
-    const { data } = await supabase.functions.invoke(`exercises?${params.toString()}`, { method: 'GET' });
-    const result = data as { items: ExerciseOption[]; total: number } | undefined;
-    setAddResults(result?.items ?? []);
-    setAddTotal(result?.total ?? 0);
-  }
-
-  async function loadMoreAddResults() {
-    setAddLoadingMore(true);
-    const params = new URLSearchParams();
-    if (addQuery) params.set('q', addQuery);
-    if (addCategory) params.set('category', addCategory);
-    if (addRegionId) params.set('region_id', addRegionId);
-    params.set('limit', String(ADD_PAGE_SIZE));
-    params.set('offset', String(addResults.length));
-    const { data } = await supabase.functions.invoke(`exercises?${params.toString()}`, { method: 'GET' });
-    const result = data as { items: ExerciseOption[]; total: number } | undefined;
-    setAddResults((prev) => [...prev, ...(result?.items ?? [])]);
-    setAddTotal(result?.total ?? addTotal);
-    setAddLoadingMore(false);
-  }
-
-  function openAddPanel() {
-    setAddOpen(true);
-    setSelectedIds(new Set());
-    runAddSearch();
-  }
-
-  function toggleSelect(id: string) {
-    setSelectedIds((s) => {
-      const next = new Set(s);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function addSelectedExercises() {
-    const toAdd = addResults.filter((ex) => selectedIds.has(ex.id) && !draftExerciseIds.has(ex.id));
+  function addPickedExercises(picked: PickedExercise[]) {
+    const already = new Set(draftExerciseIds);
+    const toAdd = picked.filter((p) => !already.has(p.exercise_id));
     updatePhase(activePhase, {
       exercises: [
         ...phase.exercises,
-        ...toAdd.map((ex, i) => ({
-          exercise_id: ex.id, name: ex.name, name_en: ex.name_en,
-          sets: 3, reps: 10, hold_sec: null, frequency: '', notes: '',
+        ...toAdd.map((p, i) => ({
+          exercise_id: p.exercise_id, name: p.name, name_en: p.name_en,
+          sets: p.sets, reps: p.reps, hold_sec: p.hold_sec, frequency: p.frequency ?? '', notes: '',
           order: phase.exercises.length + i + 1,
         })),
       ],
     });
-    setAddOpen(false);
-    setAddQuery('');
-    setAddCategory('');
-    setAddRegionId('');
-    setAddResults([]);
-    setAddTotal(0);
-    setSelectedIds(new Set());
   }
 
   function removeExercise(index: number) {
@@ -517,7 +447,7 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
                   <div style={{ background: 'var(--shell-sidebar-bg)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-panel)', overflow: 'hidden' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--shell-border)' }}>
                       <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>תרגילים · Exercises</div>
-                      {!readOnly && <button onClick={openAddPanel} style={ghostPillStyle}>+ הוסף תרגיל · Add Exercise</button>}
+                      {!readOnly && <button onClick={() => setAddOpen(true)} style={ghostPillStyle}>+ הוסף תרגיל · Add Exercise</button>}
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.6fr 0.6fr 0.6fr 1fr 0.5fr', padding: '10px 18px', fontSize: 11, color: 'var(--nav-inactive-text)', fontWeight: 600 }}>
                       <div>תרגיל · Exercise</div><div>סטים</div><div>חזרות</div><div>החזקה (שנ׳)</div><div>תדירות</div><div />
@@ -543,100 +473,6 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
                       </div>
                     ))}
                   </div>
-
-                  {addOpen && !readOnly && (
-                    <div style={{ background: 'var(--shell-sidebar-bg)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-card)', padding: 16 }}>
-                      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-                        <div style={{ minWidth: 180, flex: 1 }}>
-                          <Input
-                            placeholder="חיפוש"
-                            value={addQuery}
-                            onChange={(e) => {
-                              setAddQuery(e.target.value);
-                              runAddSearch({ q: e.target.value });
-                            }}
-                          />
-                        </div>
-                        <div style={{ minWidth: 150 }}>
-                          <Select
-                            value={addCategory}
-                            onChange={(e) => {
-                              setAddCategory(e.target.value);
-                              runAddSearch({ category: e.target.value });
-                            }}
-                            options={[
-                              { value: '', label: 'כל הקטגוריות' },
-                              ...(filterOptions?.categories ?? []).map((c) => ({ value: c, label: c })),
-                            ]}
-                          />
-                        </div>
-                        <div style={{ minWidth: 150 }}>
-                          <Select
-                            value={addRegionId}
-                            onChange={(e) => {
-                              setAddRegionId(e.target.value);
-                              runAddSearch({ regionId: e.target.value });
-                            }}
-                            options={[
-                              { value: '', label: 'כל האזורים' },
-                              ...(filterOptions?.body_regions ?? []).map((r) => ({ value: r.id, label: r.name })),
-                            ]}
-                          />
-                        </div>
-                      </div>
-
-                      <div style={{ fontSize: 11, color: 'var(--nav-inactive-text)', marginBottom: 6 }}>
-                        {addTotal > 0 && `מוצגים ${addResults.length} מתוך ${addTotal}`}
-                      </div>
-                      <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--shell-border-soft)', borderRadius: 8 }}>
-                        {addResults.length === 0 ? (
-                          <div style={{ padding: 16, textAlign: 'center', fontSize: 13, color: 'var(--nav-inactive-text)' }}>אין תוצאות</div>
-                        ) : addResults.map((ex) => {
-                          const already = draftExerciseIds.has(ex.id);
-                          return (
-                            <div
-                              key={ex.id}
-                              style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                                padding: '8px 12px', fontSize: 13, borderBottom: '1px solid var(--shell-border-soft)',
-                                opacity: already ? 0.6 : 1,
-                              }}
-                            >
-                              <label style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, cursor: already ? 'not-allowed' : 'pointer' }}>
-                                <input type="checkbox" disabled={already} checked={selectedIds.has(ex.id)} onChange={() => toggleSelect(ex.id)} />
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.name}</span>
-                              </label>
-                              <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                                {already && <span style={{ color: 'var(--nav-inactive-text)', fontSize: 12 }}>כבר בשלב זה</span>}
-                                <button
-                                  type="button"
-                                  onClick={() => setDetailId(ex.id)}
-                                  style={{ background: 'transparent', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-pill)', padding: '3px 10px', fontSize: 11, color: 'var(--ink-soft)', cursor: 'pointer', fontFamily: 'inherit' }}
-                                >
-                                  פרטים
-                                </button>
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {addResults.length < addTotal && (
-                        <div style={{ textAlign: 'center', marginTop: 8 }}>
-                          <Button size="sm" variant="secondary" loading={addLoadingMore} onClick={loadMoreAddResults}>
-                            טען עוד · Load more
-                          </Button>
-                        </div>
-                      )}
-
-                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-                        <Button size="sm" variant="ghost" onClick={() => setAddOpen(false)}>{t('clinician.plan.discard')}</Button>
-                        <Button size="sm" onClick={addSelectedExercises} disabled={selectedIds.size === 0}>
-                          הוסף ({selectedIds.size})
-                        </Button>
-                      </div>
-                    </div>
-                  )}
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>קריטריונים להתקדמות · Criteria</div>
@@ -700,11 +536,20 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
         )}
       </div>
 
-      <ExerciseDetailDrawer
-        exerciseId={detailId}
-        open={detailId !== null}
-        onClose={() => setDetailId(null)}
-        onDuplicated={(newId) => setDetailId(newId)}
+      <ExercisePicker
+        open={addOpen && !readOnly && !!phase}
+        onClose={() => setAddOpen(false)}
+        context={{
+          entry: 'protocol',
+          protocolId,
+          bodyRegionId: bodyRegionId || null,
+          phaseN: activePhase + 1,
+          phaseName: phase?.name,
+          label: name.trim() || null,
+        }}
+        existingIds={draftExerciseIds}
+        doseFields={['sets', 'reps', 'hold_sec']}
+        onAdd={addPickedExercises}
       />
     </div>
   );

@@ -90,6 +90,21 @@ browser-print PDF · minimal (undesigned) auth screens · dataset media dev-only
 - Migrations 0028-0030; `region=` query param on `GET /exercises` renamed to `region_id=`
   (see `API_CONTRACT.md`).
 
+**T-29 Smart exercise picker (phase 1)**
+- One `ExercisePicker` window replaces the two copy-pasted Add Exercise panels (protocol editor,
+  patient plan editor): context header (protocol/pathology, region, phase), views Recommended /
+  All / Favorites / Recent, filters (region, category, equipment, media-only), GIF-on-hover cards,
+  a basket where sets/reps/hold-or-rest are set before adding (pre-filled from the protocol
+  prescription the exercise was actually given), category balance, "complete the selection".
+- `app.recommend_exercises`: explainable scoring (region+phase usage share, neighbouring phases of
+  the same protocol, co-occurrence with the phase's exercises, own-clinic picker history,
+  favorites, category gap); every card shows its reasons. Weights/reason order mirrored and
+  tested in `packages/shared/src/exerciseRecommend.ts`. Near-duplicate names are collapsed.
+- Scope (product owner, 2026-09-13): signals from the protocol library and this clinic's picker
+  history only — no patient data, nothing cross-clinic, nothing added automatically.
+- Migration 0031; endpoints in `API_CONTRACT.md`. Later phases: clinical metadata enrichment
+  (reviewed, never auto-applied), semantic search + LLM rerank, progression graph, learned weights.
+
 ## M2 — Patient app (P0)
 **T-10 Today / Home**
 - Today's session, progress ring, exercise list with done state, start-first-incomplete CTA.

@@ -4,15 +4,57 @@
 //   POST /exercises                                       -> create clinic-custom exercise
 //   POST /exercises/:id/duplicate                         -> clone into a clinic-owned copy
 //   DELETE /exercises/:id                                 -> soft-delete a clinic-custom exercise
+// Exercise picker (T-29):
+//   GET  /exercises/recommend?protocol_id=&region_id=&phase=&anchor_ids=&exclude_ids=&limit=
+//   GET  /exercises/recent?limit=
+//   PUT|DELETE /exercises/:id/favorite
+//   POST /exercises/picker-events
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
 import { withCors } from '../_shared/cors.ts';
-import { getSignedMediaUrl } from '../_shared/signed-media-url.ts';
+import { getSignedMediaUrl, getSignedMediaUrls } from '../_shared/signed-media-url.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+type Card = Record<string, unknown>;
+
+const MAX_ID_LIST = 100;
+
+// Picker/search cards carry Storage object paths (thumb_path / gif_path).
+// Swap them for signed URLs relative to the API origin — same convention as
+// the detail route below (the client prefixes its own Supabase URL).
+// deno-lint-ignore no-explicit-any
+async function withCardMedia(service: any, items: Card[]) {
+  const isStoragePath = (p: unknown): p is string => typeof p === 'string' && p !== '' && !p.startsWith('http');
+  const signed = await getSignedMediaUrls(service, items.flatMap((i) => [i.thumb_path, i.gif_path]).filter(isStoragePath));
+  const resolve = (p: unknown): string | null => {
+    if (typeof p !== 'string' || !p) return null;
+    if (p.startsWith('http')) return p;
+    const url = signed.get(p);
+    return url ? url.replace(/^https?:\/\/[^/]+/, '') : null;
+  };
+  for (const item of items) {
+    item.thumb_url = resolve(item.thumb_path);
+    item.gif_url = resolve(item.gif_path);
+    delete item.thumb_path;
+    delete item.gif_path;
+  }
+}
+
+// Comma-separated UUID list from a query param; null when any entry is malformed.
+function parseIdList(raw: string | null): string[] | null {
+  if (!raw) return [];
+  const ids = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  if (ids.length > MAX_ID_LIST || ids.some((id) => !UUID_RE.test(id))) return null;
+  return ids;
+}
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+}
 
 interface CreateInput {
   name: string;
@@ -99,6 +141,52 @@ Deno.serve(withCors(async (req) => {
     });
   }
 
+  if (req.method === 'GET' && url.pathname.endsWith('/recommend')) {
+    const protocolId = url.searchParams.get('protocol_id');
+    const regionId = url.searchParams.get('region_id');
+    const phase = url.searchParams.get('phase');
+    const limit = url.searchParams.get('limit');
+    const anchorIds = parseIdList(url.searchParams.get('anchor_ids'));
+    const excludeIds = parseIdList(url.searchParams.get('exclude_ids'));
+
+    if ((protocolId && !UUID_RE.test(protocolId)) || (regionId && !UUID_RE.test(regionId))
+        || (phase && !/^\d{1,3}$/.test(phase)) || anchorIds === null || excludeIds === null) {
+      return json({ error: 'validation_failed' }, 422);
+    }
+
+    const { data: result, error } = await service.schema('app').rpc('recommend_exercises', {
+      p_clinician_id: user.id,
+      p_protocol_id: protocolId || null,
+      p_body_region_id: regionId || null,
+      p_phase_n: phase ? Number(phase) : null,
+      p_anchor_ids: anchorIds,
+      p_exclude_ids: excludeIds,
+      p_limit: limit ? Number(limit) : undefined,
+    });
+
+    if (error) return json({ error: 'internal_error', details: error.message }, 500);
+    if (result?.error === 'forbidden') return json({ error: 'forbidden' }, 403);
+    if (result?.error === 'not_found') return json({ error: 'not_found' }, 404);
+    if (result?.error === 'validation_failed') return json({ error: 'validation_failed', message: result.message }, 422);
+
+    await withCardMedia(service, result.items ?? []);
+    return json(result);
+  }
+
+  if (req.method === 'GET' && url.pathname.endsWith('/recent')) {
+    const limit = url.searchParams.get('limit');
+    const { data: result, error } = await service.schema('app').rpc('recent_picked_exercises', {
+      p_clinician_id: user.id,
+      p_limit: limit ? Number(limit) : undefined,
+    });
+
+    if (error) return json({ error: 'internal_error', details: error.message }, 500);
+    if (result?.error === 'forbidden') return json({ error: 'forbidden' }, 403);
+
+    await withCardMedia(service, result.items ?? []);
+    return json(result);
+  }
+
   if (req.method === 'GET') {
     const q = url.searchParams.get('q');
     const category = url.searchParams.get('category');
@@ -108,6 +196,9 @@ Deno.serve(withCors(async (req) => {
     const protocol = url.searchParams.get('protocol');
     const limit = url.searchParams.get('limit');
     const offset = url.searchParams.get('offset');
+    const equipment = url.searchParams.get('equipment');
+    const favoritesOnly = url.searchParams.get('favorites') === '1';
+    const mediaOnly = url.searchParams.get('media') === '1';
 
     if (regionId && !UUID_RE.test(regionId)) {
       return new Response(JSON.stringify({ error: 'validation_failed', message: 'invalid_region_id' }), { status: 422 });
@@ -123,6 +214,9 @@ Deno.serve(withCors(async (req) => {
       p_protocol_slug: protocol,
       p_limit: limit ? Number(limit) : undefined,
       p_offset: offset ? Number(offset) : undefined,
+      p_equipment: equipment,
+      p_favorites_only: favoritesOnly,
+      p_media_only: mediaOnly,
     });
 
     if (error) {
@@ -132,9 +226,42 @@ Deno.serve(withCors(async (req) => {
       return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 });
     }
 
+    await withCardMedia(service, result.items ?? []);
     return new Response(JSON.stringify(result), {
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  if ((req.method === 'PUT' || req.method === 'DELETE') && url.pathname.endsWith('/favorite')) {
+    const parts = url.pathname.split('/').filter(Boolean);
+    const exerciseId = parts[parts.length - 2];
+    if (!exerciseId || !UUID_RE.test(exerciseId)) return json({ error: 'not_found' }, 404);
+
+    const { data: result, error } = await service.schema('app').rpc('set_exercise_favorite', {
+      p_clinician_id: user.id,
+      p_exercise_id: exerciseId,
+      p_on: req.method === 'PUT',
+    });
+
+    if (error) return json({ error: 'internal_error', details: error.message }, 500);
+    if (result?.error === 'forbidden') return json({ error: 'forbidden' }, 403);
+    if (result?.error === 'not_found') return json({ error: 'not_found' }, 404);
+    return json(result);
+  }
+
+  if (req.method === 'POST' && url.pathname.endsWith('/picker-events')) {
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== 'object') return json({ error: 'validation_failed' }, 422);
+
+    const { data: result, error } = await service.schema('app').rpc('log_exercise_pick_events', {
+      p_clinician_id: user.id,
+      p_payload: body,
+    });
+
+    if (error) return json({ error: 'internal_error', details: error.message }, 500);
+    if (result?.error === 'forbidden') return json({ error: 'forbidden' }, 403);
+    if (result?.error === 'validation_failed') return json({ error: 'validation_failed', message: result.message }, 422);
+    return json(result, 201);
   }
 
   if (req.method === 'POST' && url.pathname.endsWith('/duplicate')) {

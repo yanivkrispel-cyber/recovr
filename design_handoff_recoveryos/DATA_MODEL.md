@@ -48,6 +48,12 @@ Clinical rows are **soft-deleted** (`deleted_at`) — never hard delete.
   verified_at
   > `verified_by` matters: media must be confirmed as depicting the exercise before it can
   > appear in a patient-facing document (see RULES §7 and TASKS T-14).
+- **exercise_favorite** (T-29) — user_id, exercise_id, clinic_id, created_at; PK (user_id, exercise_id)
+- **exercise_pick_event** (T-29) — id, clinic_id, user_id, picker_session_id, entry
+  (`protocol`|`plan`), protocol_id, body_region_id, phase_n, exercise_id, event
+  (`shown`|`added`), source (`recommended`|`search`|`favorite`|`recent`), rank, score, created_at.
+  Picker log: feeds "recent" and the clinic-history recommendation signal. No patient ids —
+  learning stays within the clinic and never reads patient records.
 
 ## Patient plan
 - **plan** — id, patient_id, protocol_id, started_at, current_phase_n, status

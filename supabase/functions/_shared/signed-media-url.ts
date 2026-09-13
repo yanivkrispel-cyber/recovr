@@ -9,6 +9,46 @@ const TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days — media is static, not per-u
 // handed a URL that's about to 403 mid-session.
 const REFRESH_MARGIN_SECONDS = 24 * 60 * 60;
 
+/**
+ * Batch form of getSignedMediaUrl for list responses (e.g. a page of picker
+ * cards): one cache read, one Storage call for the misses, one cache write.
+ * Returns path -> signed URL; paths that couldn't be signed are absent.
+ */
+export async function getSignedMediaUrls(service: any, paths: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const unique = [...new Set(paths.filter((p) => typeof p === 'string' && p))];
+  if (unique.length === 0) return out;
+
+  const { data: cached } = await service
+    .schema('app')
+    .from('media_signed_url_cache')
+    .select('path, url, expires_at')
+    .in('path', unique);
+
+  for (const row of cached ?? []) {
+    if (new Date(row.expires_at).getTime() - Date.now() > REFRESH_MARGIN_SECONDS * 1000) {
+      out.set(row.path, row.url);
+    }
+  }
+
+  const missing = unique.filter((p) => !out.has(p));
+  if (missing.length === 0) return out;
+
+  const { data: signed } = await service.storage.from(BUCKET).createSignedUrls(missing, TTL_SECONDS);
+  const expiresAt = new Date(Date.now() + TTL_SECONDS * 1000).toISOString();
+  const rows: { path: string; url: string; expires_at: string }[] = [];
+  for (const s of signed ?? []) {
+    if (!s?.path || !s?.signedUrl || s.error) continue;
+    out.set(s.path, s.signedUrl);
+    rows.push({ path: s.path, url: s.signedUrl, expires_at: expiresAt });
+  }
+  if (rows.length > 0) {
+    await service.schema('app').from('media_signed_url_cache').upsert(rows, { onConflict: 'path' });
+  }
+
+  return out;
+}
+
 export async function getSignedMediaUrl(service: any, path: string): Promise<string | null> {
   const { data: cached } = await service
     .schema('app')

@@ -36,7 +36,11 @@ patient's timezone · cursor pagination (`?cursor=&limit=`) · `Idempotency-Key`
 | GET | `/patients/:id/home-program.pdf` | server-rendered PDF of the printed program |
 | GET | `/alerts?state=open` · POST `/alerts/:id/review` | alert inbox |
 | GET | `/protocols` · `/protocols/:slug` | library + phases + criteria |
-| GET | `/exercises?q=&category=&region_id=&protocol=&phase=&limit=&offset=` | library search (used by Add Exercise) → `{items:[Exercise], total}`. `region_id` is a `body_region` id (T-28), not free text. `limit` defaults to 60, capped at 200. |
+| GET | `/exercises?q=&category=&region_id=&protocol=&phase=&equipment=&favorites=1&media=1&limit=&offset=` | library search (used by the exercise picker) → `{items:[Exercise], total}`. `region_id` is a `body_region` id (T-28), not free text. `limit` defaults to 60, capped at 200. Items carry picker card fields (T-29): `equipment`, `is_favorite`, `thumb_url`/`gif_url` (signed, API-origin-relative), `media_verified`. |
+| GET | `/exercises/recommend?protocol_id=&region_id=&phase=&anchor_ids=&exclude_ids=&limit=` | picker recommendations (T-29) → `{context:{protocol_id, body_region, phase_n, region_protocol_total, anchor_categories}, items:[Exercise + score, rank, reasons[], prescription, frequency]}`. Region falls back to the protocol's. Signals: protocol library + this clinic's picker history only. |
+| GET | `/exercises/recent` | exercises this clinician added through the picker, newest first (T-29) |
+| PUT/DELETE | `/exercises/:id/favorite` | star / unstar for the current clinician (T-29) |
+| POST | `/exercises/picker-events` | best-effort picker log `{picker_session_id, entry, protocol_id?, body_region_id?, phase_n?, events:[{exercise_id, event: shown\|added, source?, rank?, score?}]}` (T-29) |
 | POST | `/exercises` | clinic-custom exercise |
 | GET/POST/DELETE | `/plan-templates` | saved phase templates |
 | GET | `/measure-definitions` | measurement catalog, clinic overrides over system defaults |
