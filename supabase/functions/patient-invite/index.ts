@@ -18,7 +18,12 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const APP_BASE_URL = Deno.env.get('APP_BASE_URL') ?? 'http://localhost:5173';
 // Where the patient PWA is served. Prod: same host as APP_BASE_URL (paths
 // /app and /m). Local dev: the patient vite server on its own port.
-const PATIENT_BASE_URL = Deno.env.get('PATIENT_BASE_URL') ?? APP_BASE_URL;
+// Callers below always append "/m/...", so normalize away a trailing slash
+// or an already-included "/m" here — otherwise a misconfigured secret
+// produces a doubled "/m/m/..." in every invite link and image URL.
+const PATIENT_BASE_URL = (Deno.env.get('PATIENT_BASE_URL') ?? APP_BASE_URL)
+  .replace(/\/+$/, '')
+  .replace(/\/m$/, '');
 // Prod: Gmail SMTP relay (GMAIL_SMTP_USER/PASSWORD — see _shared/gmail-smtp.ts).
 // Local dev: falls back to the raw SMTP relay (Inbucket) below when unset.
 const GMAIL_CONFIGURED = !!(Deno.env.get('GMAIL_SMTP_USER') && Deno.env.get('GMAIL_SMTP_PASSWORD'));
