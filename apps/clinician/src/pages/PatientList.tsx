@@ -589,7 +589,7 @@ function AddPatientModal({
                 }
               />
               <Input
-                label="טלפון (לשליחה בוואטסאפ) · Phone (optional, for WhatsApp)"
+                label="טלפון · Phone"
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}

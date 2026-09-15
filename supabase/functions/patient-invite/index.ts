@@ -56,12 +56,16 @@ function b64Body(s: string): string {
   return (b64utf8(s).match(/.{1,76}/g) ?? []).join('\r\n');
 }
 
+// Real logo art, not a styled-text approximation — needs an absolute URL
+// since email clients render this HTML with no origin of their own.
+const EMAIL_LOGO_URL = `${PATIENT_BASE_URL}/m/brand/email-logo.png`;
+
 function inviteEmailHtml(clinicianName: string, inviteUrl: string): string {
   return (
     `<div dir="rtl" style="font-family:system-ui,Arial;max-width:520px;margin:0 auto;font-size:15px;color:#221c14">` +
-    `<p style="font-family:Arial,Helvetica,sans-serif;font-size:26px;font-weight:700;letter-spacing:0.5px;margin:0 0 18px">` +
-    `<span style="color:#C9A24B">Re</span><span style="color:#1B2140">COVR</span>` +
-    `<span style="color:#1B2140;font-size:14px;font-weight:400"> &nbsp;by krispel</span></p>` +
+    `<p style="margin:0 0 22px">` +
+    `<img src="${EMAIL_LOGO_URL}" alt="ReCOVR by krispel" width="180" style="display:block;height:auto;border:0">` +
+    `</p>` +
     `<h2 style="font-size:18px">הפעלת החשבון שלך</h2>` +
     `<p>${clinicianName} הזמין/ה אותך לעקוב אחרי תוכנית השיקום שלך ב-ReCOVR.</p>` +
     `<p><a href="${inviteUrl}" style="display:inline-block;background:#1B2140;color:#fff;` +
