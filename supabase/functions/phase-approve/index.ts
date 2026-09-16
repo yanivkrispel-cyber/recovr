@@ -39,8 +39,11 @@ Deno.serve(withCors(async (req) => {
     return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 });
   }
 
-  // Verify role
-  const { data: roleRow } = await userClient
+  const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+  // Verify role. Read with the service client: client roles have no access
+  // to app tables (0046/0047), so the user-JWT client would always see none.
+  const { data: roleRow } = await service
     .schema('app')
     .from('user')
     .select('role, clinic_id')
@@ -53,8 +56,6 @@ Deno.serve(withCors(async (req) => {
   const url = new URL(req.url);
   const patientId = url.pathname.split('/').filter(Boolean).slice(-2, -1)[0];
   const body: Input = await req.json();
-
-  const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   // The clinician's own clinic, expressed as a schema name — this is what
   // the patient's resolved schema must match. (Comparing a schema name to

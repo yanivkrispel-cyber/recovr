@@ -156,7 +156,11 @@ Deno.serve(withCors(async (req) => {
     return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 });
   }
 
-  const { data: roleRow } = await userClient
+  const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+  // Read with the service client: client roles have no access to app tables
+  // (0046/0047), so the user-JWT client would always see no row.
+  const { data: roleRow } = await service
     .schema('app')
     .from('user')
     .select('role, name')
@@ -170,8 +174,6 @@ Deno.serve(withCors(async (req) => {
   if (!body.name || !body.email) {
     return new Response(JSON.stringify({ error: 'validation_failed' }), { status: 422 });
   }
-
-  const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   const { data: result, error } = body.protocol_id
     ? await service.schema('app').rpc('create_patient_with_plan', {
         p_clinician_id: user.id,
