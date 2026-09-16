@@ -10,6 +10,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
 import { withCors } from '../_shared/cors.ts';
+import { requireMfa } from '../_shared/mfa.ts';
 import { sendViaGmail } from '../_shared/gmail-smtp.ts';
 import { rateLimit } from '../_shared/rate-limit.ts';
 
@@ -156,6 +157,8 @@ Deno.serve(withCors(async (req) => {
   if (userErr || !user) {
     return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 });
   }
+  const mfaRefusal = await requireMfa(req, user);
+  if (mfaRefusal) return mfaRefusal;
 
   const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 

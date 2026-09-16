@@ -7,6 +7,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
 import { withCors } from '../_shared/cors.ts';
+import { requireMfa } from '../_shared/mfa.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -27,6 +28,8 @@ Deno.serve(withCors(async (req) => {
   if (userErr || !user) {
     return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 });
   }
+  const mfaRefusal = await requireMfa(req, user);
+  if (mfaRefusal) return mfaRefusal;
 
   const svc = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 

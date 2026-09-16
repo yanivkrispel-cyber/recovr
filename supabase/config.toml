@@ -57,6 +57,15 @@ refresh_token_reuse_interval = 10
 enable_signup = false  # clinics invite only
 enable_anonymous_sign_ins = false
 
+# TOTP second factor. Admins must enroll; clinicians may opt in. Enforced
+# server-side by supabase/functions/_shared/mfa.ts (aal2 required).
+[auth.mfa]
+max_enrolled_factors = 10
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
 [auth.email]
 enable_signup = true
 double_confirm_changes = true

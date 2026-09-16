@@ -4,6 +4,7 @@ import { Skeleton, EmptyState } from 'ui';
 import { t, thresholdOptions, type Units } from 'shared';
 import { AuthContext, SupabaseContext } from '../App';
 import AppShell from '../components/AppShell';
+import { MfaSettings } from '../components/Mfa';
 
 interface Settings {
   adherence_threshold: number;
@@ -28,7 +29,7 @@ const ALERT_LABELS: Record<keyof Settings['alerts'], string> = {
 };
 
 export default function Settings() {
-  const { user } = useContext(AuthContext);
+  const { user, refreshUser } = useContext(AuthContext);
   const supabase = useContext(SupabaseContext);
   const queryClient = useQueryClient();
   const [form, setForm] = useState<Settings | null>(null);
@@ -144,6 +145,13 @@ export default function Settings() {
                 />
                 שלח לי סיכום שבועי
               </label>
+            </Section>
+
+            <Section
+              title="אימות דו-שלבי · Two-factor authentication"
+              hint="קוד מאפליקציית אימות בנוסף לסיסמה. לאחר ההפעלה יידרש בכל כניסה."
+            >
+              <MfaSettings required={user.mfa.required} onChanged={() => void refreshUser()} />
             </Section>
 
             <div style={{ fontSize: 12, color: save.isError ? 'var(--flag-red)' : 'var(--nav-inactive-text)', minHeight: 16 }}>
