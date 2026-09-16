@@ -8,7 +8,9 @@
 // can't go through supabase-js/REST like the rest of the codebase does.
 // create_clinic_tables() only adds missing tables/indexes
 // (CREATE ... IF NOT EXISTS); it never drops or alters existing ones, so
-// this is safe to run against live clinic data.
+// this is safe to run against live clinic data. Also (re-)applies
+// enable_rls_for_schema() so any newly-added table ends up RLS-enabled
+// like the rest of the schema (see 0046_enable_rls.sql).
 //
 // Usage: deno run --allow-net --allow-env scripts/apply-to-all-clinics.ts
 // Requires: SUPABASE_DB_URL (see `supabase status` -> DB_URL).
@@ -46,6 +48,7 @@ try {
 
       try {
         await client.queryObject('SELECT create_clinic_tables($1)', [schemaName]);
+        await client.queryObject('SELECT enable_rls_for_schema($1)', [schemaName]);
         console.log('    ✓ Applied');
       } catch (err) {
         console.error(`    ✗ Failed: ${err instanceof Error ? err.message : err}`);

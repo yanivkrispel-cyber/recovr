@@ -26,6 +26,10 @@ ON CONFLICT (id) DO NOTHING;
 CREATE SCHEMA IF NOT EXISTS clinic_demo;
 SELECT create_clinic_tables('clinic_demo');
 
+-- Match what provision_clinic() now does for real clinics: lock the schema
+-- down with RLS (see 0046_enable_rls.sql) so local dev mirrors prod.
+SELECT enable_rls_for_schema('clinic_demo');
+
 -- 4. From here on, work in the clinic schema and the app/auth schemas.
 SET search_path TO clinic_demo, app, public, auth, extensions;
 
