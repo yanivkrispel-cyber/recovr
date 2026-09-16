@@ -70,16 +70,17 @@ export default function App() {
           }, 0);
         }
         if (session?.user) {
-          supabase
-            .schema('app')
-            .from('user')
-            .select('*')
-            .eq('id', session.user.id)
-            .single()
-            .then(({ data }) => {
-              setUser(data as User);
-              setLoading(false);
-            });
+          // Profile comes from an edge function: the browser has no direct
+          // access to the app schema. Deferred for the same deadlock reason as
+          // above — invoke() reads the session through supabase.auth.
+          setTimeout(() => {
+            supabase.functions
+              .invoke<User>('clinician-me', { method: 'GET' })
+              .then(({ data, error }) => {
+                setUser(error ? null : data);
+                setLoading(false);
+              });
+          }, 0);
         } else {
           setUser(null);
           setLoading(false);
