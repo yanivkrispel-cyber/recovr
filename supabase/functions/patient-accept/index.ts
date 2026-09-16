@@ -5,6 +5,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
 import { withCors } from '../_shared/cors.ts';
+import { hashKey, ipKey, rateLimit } from '../_shared/rate-limit.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -22,12 +23,18 @@ Deno.serve(withCors(async (req) => {
   const parts = url.pathname.split('/').filter(Boolean);
   const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+  // Public endpoint: throttle per client IP (token guessing is infeasible at
+  // 256 bits, but this also caps load and account-creation attempts).
+  const ip = await ipKey(req);
+
   if (req.method === 'GET') {
     // .../patients/invite/:token — token is the last segment.
     const inviteToken = parts[parts.length - 1];
     if (!inviteToken) {
       return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
     }
+    const limited = await rateLimit(service, `accept-get:ip:${ip}`, 60, 600);
+    if (limited) return limited;
 
     const { data: invite, error } = await service.schema('app').rpc('resolve_invite', {
       p_token: inviteToken,
@@ -53,6 +60,9 @@ Deno.serve(withCors(async (req) => {
     if (!inviteToken) {
       return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
     }
+    const limited = await rateLimit(service, `accept-post:ip:${ip}`, 10, 600)
+      ?? await rateLimit(service, `accept-post:token:${await hashKey(inviteToken)}`, 5, 3600);
+    if (limited) return limited;
 
     const body: AcceptInput = await req.json();
     if (!body.password || body.password.length < 10 || !body.consent) {
@@ -78,10 +88,10 @@ Deno.serve(withCors(async (req) => {
     });
 
     if (createErr || !created?.user) {
-      return new Response(
-        JSON.stringify({ error: 'validation_failed', details: createErr?.message }),
-        { status: 422 },
-      );
+      // Auth's message (e.g. "already registered", password-policy text) is
+      // logged, not returned: this endpoint is public.
+      console.error('[patient-accept] createUser failed:', createErr?.message);
+      return new Response(JSON.stringify({ error: 'validation_failed' }), { status: 422 });
     }
 
     const { data: result, error: acceptErr } = await service

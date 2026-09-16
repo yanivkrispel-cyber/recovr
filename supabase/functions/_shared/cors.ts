@@ -26,6 +26,33 @@ function corsHeadersFor(req: Request): Record<string, string> {
   return headers;
 }
 
+function fnName(req: Request): string {
+  return new URL(req.url).pathname.split('/').filter(Boolean)[0] ?? 'unknown';
+}
+
+// Server errors never carry internals to the client. Handlers put the raw
+// database/auth message in `details` for 5xx responses; it's logged here and
+// stripped, so a schema/function name can't leak through an error body.
+async function redactServerError(req: Request, res: Response): Promise<Response> {
+  if (res.status < 500 || !res.body) return res;
+  const text = await res.text();
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = null;
+  }
+  if (body && typeof body === 'object' && 'details' in body) {
+    const { details, ...rest } = body as Record<string, unknown>;
+    console.error(JSON.stringify({ level: 'error', fn: fnName(req), status: res.status, details }));
+    const headers = new Headers(res.headers);
+    headers.set('Content-Type', 'application/json');
+    headers.delete('Content-Length');
+    return new Response(JSON.stringify(rest), { status: res.status, statusText: res.statusText, headers });
+  }
+  return new Response(text, { status: res.status, statusText: res.statusText, headers: res.headers });
+}
+
 export function withCors(
   handler: (req: Request) => Response | Promise<Response>,
 ): (req: Request) => Promise<Response> {
@@ -34,7 +61,24 @@ export function withCors(
     if (req.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: cors });
     }
-    const res = await handler(req);
+    let res: Response;
+    try {
+      res = await redactServerError(req, await handler(req));
+    } catch (e) {
+      // An unhandled throw would otherwise surface as a runtime error page
+      // without CORS headers (the browser then reports a misleading CORS
+      // failure) and could include the exception text.
+      console.error(JSON.stringify({
+        level: 'error',
+        fn: fnName(req),
+        msg: 'unhandled exception',
+        details: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+      }));
+      res = new Response(JSON.stringify({ error: 'internal_error' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     const headers = new Headers(res.headers);
     for (const [k, v] of Object.entries(cors)) headers.set(k, v);
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });

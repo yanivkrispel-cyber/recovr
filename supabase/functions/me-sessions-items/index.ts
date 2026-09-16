@@ -67,7 +67,8 @@ Deno.serve(withCors(async (req) => {
     });
 
   if (writeErr) {
-    return new Response(JSON.stringify({ error: 'validation_failed', details: writeErr }), { status: 422 });
+    console.error('[me-sessions-items] write_session_items failed:', writeErr.message);
+    return new Response(JSON.stringify({ error: 'validation_failed' }), { status: 422 });
   }
   // Per CLAUDE.md hard rule #4: an id belonging to someone else is 404,
   // never 403 — don't let the response distinguish "not yours" from

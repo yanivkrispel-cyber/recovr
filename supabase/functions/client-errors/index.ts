@@ -6,6 +6,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
 import { withCors } from '../_shared/cors.ts';
+import { ipKey, rateLimit } from '../_shared/rate-limit.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -20,6 +21,11 @@ Deno.serve(withCors(async (req) => {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 });
   }
+
+  // Public write path: cap per client IP before touching the body.
+  const svc = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+  const limited = await rateLimit(svc, `client-errors:ip:${await ipKey(req)}`, 30, 60);
+  if (limited) return limited;
 
   const raw = await req.text();
   if (raw.length > MAX_BYTES) {
@@ -46,7 +52,6 @@ Deno.serve(withCors(async (req) => {
   }
 
   try {
-    const svc = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
     const { error } = await svc.schema('app').rpc('record_client_error', { p: payload, p_actor: actor });
     if (error) {
       log('error', 'record failed', { details: error.message });

@@ -113,7 +113,8 @@ Deno.serve(withCors(async (req) => {
     });
 
   if (txErr) {
-    return new Response(JSON.stringify({ error: 'validation_failed', details: txErr }), { status: 422 });
+    console.error('[phase-approve] write_phase_transition failed:', txErr.message);
+    return new Response(JSON.stringify({ error: 'validation_failed' }), { status: 422 });
   }
 
   return new Response(JSON.stringify({ transition }), {

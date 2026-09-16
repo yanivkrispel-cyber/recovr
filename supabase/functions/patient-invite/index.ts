@@ -11,6 +11,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
 import { withCors } from '../_shared/cors.ts';
 import { sendViaGmail } from '../_shared/gmail-smtp.ts';
+import { rateLimit } from '../_shared/rate-limit.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -169,6 +170,11 @@ Deno.serve(withCors(async (req) => {
   if (!roleRow || !['clinician', 'admin'].includes(roleRow.role)) {
     return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 });
   }
+
+  // Each call sends an email from our domain: cap it per clinician so a
+  // compromised account can't turn this into a spam relay.
+  const limited = await rateLimit(service, `invite:user:${user.id}`, 30, 3600);
+  if (limited) return limited;
 
   const body: Input = await req.json();
   if (!body.name || !body.email) {
