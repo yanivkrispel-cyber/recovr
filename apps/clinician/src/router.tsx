@@ -1,15 +1,15 @@
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
 import { createRootRoute, createRoute, createRouter, redirect, Outlet } from '@tanstack/react-router';
-import { Skeleton } from 'ui';
+import { Skeleton, lazyWithRetry } from 'ui';
 import Dashboard from './pages/Dashboard';
 
 // Dashboard loads with the shell; the rest split into their own chunks so
 // first paint doesn't carry the whole app (mirrors patient app, T-24).
-const PatientList = lazy(() => import('./pages/PatientList'));
-const PatientOverview = lazy(() => import('./pages/PatientOverview'));
-const ExerciseLibrary = lazy(() => import('./pages/ExerciseLibrary'));
-const Protocols = lazy(() => import('./pages/Protocols'));
-const Settings = lazy(() => import('./pages/Settings'));
+const PatientList = lazyWithRetry(() => import('./pages/PatientList'));
+const PatientOverview = lazyWithRetry(() => import('./pages/PatientOverview'));
+const ExerciseLibrary = lazyWithRetry(() => import('./pages/ExerciseLibrary'));
+const Protocols = lazyWithRetry(() => import('./pages/Protocols'));
+const Settings = lazyWithRetry(() => import('./pages/Settings'));
 
 function ViewFallback() {
   return (

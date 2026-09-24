@@ -24,3 +24,4 @@ export { YouTubeFacade } from './components/YouTubeFacade';
 export { useOnlineStatus } from './hooks/useOnlineStatus';
 export { useIsTablet, TABLET_MAX_WIDTH } from './hooks/useIsTablet';
 export { clickableDivProps } from './utils/interactive';
+export { lazyWithRetry } from './utils/lazyWithRetry';

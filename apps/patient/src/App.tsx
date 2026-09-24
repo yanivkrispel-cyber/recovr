@@ -1,7 +1,7 @@
 import { createClient, type Session } from '@supabase/supabase-js';
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { t } from 'shared';
-import { Skeleton, FullPageLoader } from 'ui';
+import { Skeleton, FullPageLoader, lazyWithRetry } from 'ui';
 import AppShell, { type PatientTab } from './components/AppShell';
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -10,12 +10,12 @@ import { enablePush, syncPushSubscription, type EnablePushResult } from './lib/p
 
 // Home + Login load with the shell; the rest split into their own chunks so
 // first paint doesn't carry the whole app (T-24).
-const ExerciseFlow = lazy(() => import('./pages/ExerciseFlow'));
-const Progress = lazy(() => import('./pages/Progress'));
-const Education = lazy(() => import('./pages/Education'));
-const Messages = lazy(() => import('./pages/Messages'));
-const InviteAccept = lazy(() => import('./pages/InviteAccept'));
-const HomeProgramPrint = lazy(() => import('./pages/HomeProgramPrint'));
+const ExerciseFlow = lazyWithRetry(() => import('./pages/ExerciseFlow'));
+const Progress = lazyWithRetry(() => import('./pages/Progress'));
+const Education = lazyWithRetry(() => import('./pages/Education'));
+const Messages = lazyWithRetry(() => import('./pages/Messages'));
+const InviteAccept = lazyWithRetry(() => import('./pages/InviteAccept'));
+const HomeProgramPrint = lazyWithRetry(() => import('./pages/HomeProgramPrint'));
 
 function ViewFallback() {
   return (
