@@ -41,10 +41,13 @@ interface Input {
   protocol_id?: string;
   start_phase_n?: number;
   excluded_exercise_ids?: string[];
-  // The "Other" injury path: a free-text condition plus hand-picked exercises,
-  // no protocol. Used only when protocol_id is absent.
+  // The "Other" injury path: a free-text condition, no protocol. Exercises
+  // are optional here — a clinician can leave the plan empty and add them
+  // later from the plan card.
   condition?: string;
   custom_exercise_ids?: string[];
+  // Free-text intake note, independent of the injury/condition selection.
+  intake_note?: string;
 }
 
 function addrOnly(from: string): string {
@@ -191,6 +194,7 @@ Deno.serve(withCors(async (req) => {
         p_protocol_id: body.protocol_id,
         p_start_phase_n: body.start_phase_n ?? 1,
         p_excluded_exercise_ids: body.excluded_exercise_ids ?? [],
+        p_intake_note: body.intake_note ?? null,
       })
     : body.condition
       ? await service.schema('app').rpc('create_patient_with_custom_plan', {
@@ -199,6 +203,7 @@ Deno.serve(withCors(async (req) => {
           p_email: body.email,
           p_condition: body.condition,
           p_exercise_ids: body.custom_exercise_ids ?? [],
+          p_intake_note: body.intake_note ?? null,
         })
       : await service.schema('app').rpc('invite_patient', {
           p_clinician_id: user.id,

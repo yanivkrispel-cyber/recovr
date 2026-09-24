@@ -5,6 +5,7 @@ export { Button } from './components/Button';
 export { Logo, LogoMark } from './components/Logo';
 export { FullPageLoader } from './components/FullPageLoader';
 export { Input } from './components/Input';
+export { Textarea } from './components/Textarea';
 export { Select } from './components/Select';
 export { Checkbox } from './components/Checkbox';
 export { Toggle } from './components/Toggle';

@@ -2,7 +2,7 @@ import { useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { t, type BodyRegion } from 'shared';
-import { Badge, Button, EmptyState, Input, Modal, Select, Skeleton, clickableDivProps, useToast } from 'ui';
+import { Badge, Button, EmptyState, Input, Modal, Select, Skeleton, Textarea, clickableDivProps, useToast } from 'ui';
 import { AuthContext, SupabaseContext } from '../App';
 import AppShell from '../components/AppShell';
 
@@ -273,8 +273,6 @@ type ProtocolOption = {
   phases: ProtoPhase[];
 };
 
-type ExSearchRow = { id: string; name: string; name_en: string | null };
-
 function presSummary(p: ProtoExercise['prescription']): string {
   if (!p) return '';
   const parts: string[] = [];
@@ -307,9 +305,7 @@ function AddPatientModal({
   const [excluded, setExcluded] = useState<string[]>([]);
   const [condition, setCondition] = useState('');
   const [conditionTouched, setConditionTouched] = useState(false);
-  const [picked, setPicked] = useState<ExSearchRow[]>([]);
-  const [exQuery, setExQuery] = useState('');
-  const [exResults, setExResults] = useState<ExSearchRow[]>([]);
+  const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [result, setResult] = useState<{ patientId: string; inviteUrl: string; emailed: boolean } | null>(null);
@@ -329,24 +325,14 @@ function AddPatientModal({
   const selectedPhase =
     selectedProtocol?.phases.find((ph) => ph.n === phaseN) ?? selectedProtocol?.phases[0] ?? null;
 
-  // "Other" collapses the phase step; the wizard runs 1 -> 3.
-  const stepList = isOther ? [1, 3] : [1, 2, 3];
+  // "Other" skips phase-select and exercise-picking entirely — the plan
+  // starts empty and exercises are added later from the plan card.
+  const stepList = isOther ? [1] : [1, 2, 3];
 
   const nameValid = name.trim().length > 0;
   const emailValid = EMAIL_RE.test(email.trim());
   const conditionValid = condition.trim().length > 0;
   const step1Valid = nameValid && emailValid && !!protocolId && (!isOther || conditionValid);
-
-  useEffect(() => {
-    if (!open || !isOther || step !== 3) return;
-    const h = setTimeout(async () => {
-      const params = new URLSearchParams();
-      if (exQuery.trim()) params.set('q', exQuery.trim());
-      const { data } = await supabase.functions.invoke(`exercises?${params.toString()}`, { method: 'GET' });
-      setExResults((data as { items: ExSearchRow[] })?.items ?? []);
-    }, 250);
-    return () => clearTimeout(h);
-  }, [open, isOther, step, exQuery, supabase]);
 
   function reset() {
     setStep(1);
@@ -360,9 +346,7 @@ function AddPatientModal({
     setExcluded([]);
     setCondition('');
     setConditionTouched(false);
-    setPicked([]);
-    setExQuery('');
-    setExResults([]);
+    setNotes('');
     setSaving(false);
     setSaveError(null);
     setResult(null);
@@ -379,21 +363,10 @@ function AddPatientModal({
     setExcluded([]);
     setCondition('');
     setConditionTouched(false);
-    setPicked([]);
-    setExQuery('');
-    setExResults([]);
   }
 
   function toggleExclude(id: string) {
     setExcluded((x) => (x.includes(id) ? x.filter((i) => i !== id) : [...x, id]));
-  }
-
-  function addPicked(row: ExSearchRow) {
-    setPicked((p) => (p.some((x) => x.id === row.id) ? p : [...p, row]));
-  }
-
-  function removePicked(id: string) {
-    setPicked((p) => p.filter((x) => x.id !== id));
   }
 
   async function handleCreate() {
@@ -406,7 +379,7 @@ function AddPatientModal({
             name: name.trim(),
             email: email.trim(),
             condition: condition.trim(),
-            custom_exercise_ids: picked.map((p) => p.id),
+            intake_note: notes.trim() || undefined,
           }
         : {
             name: name.trim(),
@@ -414,6 +387,7 @@ function AddPatientModal({
             protocol_id: protocolId,
             start_phase_n: phaseN,
             excluded_exercise_ids: excluded,
+            intake_note: notes.trim() || undefined,
           },
     });
     setSaving(false);
@@ -460,7 +434,8 @@ function AddPatientModal({
       <>
         <Button variant="ghost" onClick={close}>ביטול · Cancel</Button>
         <Button
-          disabled={!step1Valid}
+          loading={isOther && saving}
+          disabled={!step1Valid || (isOther && saving)}
           onClick={() => {
             if (!step1Valid) {
               setNameTouched(true);
@@ -468,10 +443,14 @@ function AddPatientModal({
               setConditionTouched(true);
               return;
             }
-            setStep(isOther ? 3 : 2);
+            if (isOther) {
+              handleCreate();
+            } else {
+              setStep(2);
+            }
           }}
         >
-          הבא · Next
+          {isOther ? 'הפעל תכנית · Activate' : 'הבא · Next'}
         </Button>
       </>
     );
@@ -485,12 +464,8 @@ function AddPatientModal({
   } else {
     footer = (
       <>
-        <Button variant="ghost" onClick={() => setStep(isOther ? 1 : 2)}>← הקודם · Back</Button>
-        <Button
-          loading={saving}
-          disabled={isOther && picked.length === 0}
-          onClick={handleCreate}
-        >
+        <Button variant="ghost" onClick={() => setStep(2)}>← הקודם · Back</Button>
+        <Button loading={saving} onClick={handleCreate}>
           הפעל תכנית · Activate
         </Button>
       </>
@@ -623,6 +598,12 @@ function AddPatientModal({
                   <strong style={{ color: 'var(--ink)' }}>{selectedProtocol.name}</strong>
                 </div>
               )}
+              <Textarea
+                label="הערות · Notes"
+                rows={3}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
             </div>
           )}
 
@@ -658,76 +639,6 @@ function AddPatientModal({
                   </div>
                 );
               })}
-            </div>
-          )}
-
-          {step === 3 && isOther && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>
-                בחירת תרגילים · Choose exercises
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--nav-inactive-text)' }}>
-                כל תרגיל נוסף עם מרשם ברירת מחדל 3×10 · Each added with a default 3×10; fine-tune later on the patient card ({picked.length})
-              </div>
-
-              {picked.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {picked.map((ex) => (
-                    <span
-                      key={ex.id}
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 6,
-                        border: '1px solid var(--gold-deep)', background: 'var(--sand)',
-                        color: 'var(--ink)', fontSize: 12, padding: '4px 8px', borderRadius: 'var(--radius-pill)',
-                      }}
-                    >
-                      {ex.name}
-                      <button
-                        type="button"
-                        onClick={() => removePicked(ex.id)}
-                        aria-label={`הסר ${ex.name}`}
-                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--nav-inactive-text)', fontSize: 14, lineHeight: 1, padding: 0 }}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              <Input
-                label="חיפוש תרגילים · Search exercises"
-                value={exQuery}
-                onChange={(e) => setExQuery(e.target.value)}
-              />
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
-                {exResults
-                  .filter((ex) => !picked.some((p) => p.id === ex.id))
-                  .slice(0, 20)
-                  .map((ex) => (
-                    <div
-                      key={ex.id}
-                      {...clickableDivProps(() => addPicked({ id: ex.id, name: ex.name, name_en: ex.name_en }))}
-                      style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-                        border: '1px solid var(--shell-border)', borderRadius: 10, padding: '9px 12px',
-                        fontSize: 13, color: 'var(--ink)', cursor: 'pointer',
-                      }}
-                    >
-                      <span>
-                        {ex.name}{' '}
-                        <span style={{ color: 'var(--nav-inactive-text)', fontSize: 11 }}>{ex.name_en}</span>
-                      </span>
-                      <span style={{ color: 'var(--gold-deep)', fontSize: 12, fontWeight: 700 }}>+ הוסף</span>
-                    </div>
-                  ))}
-                {exResults.filter((ex) => !picked.some((p) => p.id === ex.id)).length === 0 && (
-                  <div style={{ fontSize: 12, color: 'var(--nav-inactive-text)' }}>
-                    אין תוצאות · No matching exercises
-                  </div>
-                )}
-              </div>
             </div>
           )}
 

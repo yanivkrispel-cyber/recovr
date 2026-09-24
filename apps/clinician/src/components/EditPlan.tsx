@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState, type CSSProperties } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { t } from 'shared';
-import { Button, Input, Select, Skeleton } from 'ui';
+import { Button, Input, Select, Skeleton, Textarea } from 'ui';
 import { SupabaseContext } from '../App';
 import ExercisePicker, { type PickedExercise } from './ExercisePicker';
 
@@ -50,6 +50,7 @@ interface PlanPhase {
 interface PlanData {
   version: number;
   current_phase_n: number;
+  intake_note: string | null;
   pathology: { protocol_id: string; name: string; is_custom: boolean };
   phases: PlanPhase[];
   protocol_phases: ProtocolPhase[];
@@ -99,6 +100,10 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
   const [pathologySaving, setPathologySaving] = useState(false);
   const [pathologyError, setPathologyError] = useState<string | null>(null);
   const [pathologyFlash, setPathologyFlash] = useState(false);
+  const [intakeNote, setIntakeNote] = useState('');
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
+  const [noteFlash, setNoteFlash] = useState(false);
 
   // Reset editor state whenever it's (re)opened or the plan finishes loading.
   useEffect(() => {
@@ -110,6 +115,9 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
     setPathologyName(plan.pathology?.name ?? '');
     setPathologyError(null);
     setPathologyFlash(false);
+    setIntakeNote(plan.intake_note ?? '');
+    setNoteError(null);
+    setNoteFlash(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, plan]);
 
@@ -323,6 +331,24 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
     onSaved();
   }
 
+  async function saveNote() {
+    if (!plan || intakeNote.trim() === (plan.intake_note ?? '')) return;
+    setNoteSaving(true);
+    setNoteError(null);
+    const { data, error } = await supabase.functions.invoke(`plan/patients/${patientId}/plan`, {
+      method: 'PATCH',
+      body: { intake_note: intakeNote.trim() },
+    });
+    setNoteSaving(false);
+    if (error || (data as { error?: string })?.error) {
+      setNoteError(t('error.save.body'));
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: ['plan', patientId] });
+    setNoteFlash(true);
+    onSaved();
+  }
+
   function handleConflictReload() {
     setConflict(null);
     queryClient.invalidateQueries({ queryKey: ['plan', patientId] });
@@ -360,7 +386,7 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
             ביטול · Cancel
           </button>
           <Button loading={saving} onClick={handleSaveAndClose} disabled={!plan || !!conflict}>
-            שמור · Save
+            שמור וסגור · Save & Close
           </Button>
         </div>
       </header>
@@ -454,6 +480,35 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
                   </Button>
                 )}
                 {pathologyFlash && (
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--flag-green)', paddingBottom: 9 }}>
+                    ✓ עודכן
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+                <div style={{ flex: 1, maxWidth: 420 }}>
+                  <Textarea
+                    label="הערות · Notes"
+                    rows={3}
+                    value={intakeNote}
+                    disabled={noteSaving}
+                    onChange={(e) => {
+                      setIntakeNote(e.target.value);
+                      setNoteFlash(false);
+                    }}
+                    error={noteError ?? undefined}
+                  />
+                </div>
+                <Button
+                  variant="ghost"
+                  loading={noteSaving}
+                  disabled={intakeNote.trim() === (plan.intake_note ?? '')}
+                  onClick={saveNote}
+                >
+                  עדכן · Update
+                </Button>
+                {noteFlash && (
                   <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--flag-green)', paddingBottom: 9 }}>
                     ✓ עודכן
                   </span>

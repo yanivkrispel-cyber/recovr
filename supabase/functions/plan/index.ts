@@ -1,7 +1,7 @@
 // Edge Function: patient plan (T-07).
 //   GET   /patients/:id/plan?version=N   -> app.get_plan (N omitted = current)
 //   POST  /patients/:id/plan/versions    -> app.save_plan_version, atomic
-//   PATCH /patients/:id/plan             -> app.rename_patient_pathology
+//   PATCH /patients/:id/plan             -> app.rename_patient_pathology and/or app.update_patient_note
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
 import { withCors } from '../_shared/cors.ts';
@@ -133,34 +133,61 @@ Deno.serve(withCors(async (req) => {
       return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
     }
 
-    const body = await req.json().catch(() => ({})) as { name?: unknown };
-    if (typeof body.name !== 'string' || body.name.trim() === '') {
+    const body = await req.json().catch(() => ({})) as { name?: unknown; intake_note?: unknown };
+    const hasName = typeof body.name === 'string' && body.name.trim() !== '';
+    const hasNote = typeof body.intake_note === 'string';
+    if (!hasName && !hasNote) {
       return new Response(JSON.stringify({ error: 'validation_failed' }), { status: 422 });
     }
 
-    const { data: result, error } = await service.schema('app').rpc('rename_patient_pathology', {
-      p_clinician_id: user.id,
-      p_patient_id: patientId,
-      p_name: body.name,
-    });
+    let merged: Record<string, unknown> = {};
 
-    if (error) {
-      return new Response(JSON.stringify({ error: 'internal_error', details: error.message }), { status: 500 });
-    }
-    if (result?.error === 'forbidden') {
-      return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 });
-    }
-    if (result?.error === 'not_found') {
-      return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
-    }
-    if (result?.error === 'not_custom') {
-      return new Response(JSON.stringify({ error: 'not_custom' }), { status: 422 });
-    }
-    if (result?.error === 'validation_failed') {
-      return new Response(JSON.stringify({ error: 'validation_failed' }), { status: 422 });
+    if (hasName) {
+      const { data: result, error } = await service.schema('app').rpc('rename_patient_pathology', {
+        p_clinician_id: user.id,
+        p_patient_id: patientId,
+        p_name: body.name,
+      });
+      if (error) {
+        return new Response(JSON.stringify({ error: 'internal_error', details: error.message }), { status: 500 });
+      }
+      if (result?.error === 'forbidden') {
+        return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 });
+      }
+      if (result?.error === 'not_found') {
+        return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
+      }
+      if (result?.error === 'not_custom') {
+        return new Response(JSON.stringify({ error: 'not_custom' }), { status: 422 });
+      }
+      if (result?.error === 'validation_failed') {
+        return new Response(JSON.stringify({ error: 'validation_failed' }), { status: 422 });
+      }
+      merged = { ...merged, ...result };
     }
 
-    return new Response(JSON.stringify(result), {
+    if (hasNote) {
+      const { data: result, error } = await service.schema('app').rpc('update_patient_note', {
+        p_clinician_id: user.id,
+        p_patient_id: patientId,
+        p_note: body.intake_note,
+      });
+      if (error) {
+        return new Response(JSON.stringify({ error: 'internal_error', details: error.message }), { status: 500 });
+      }
+      if (result?.error === 'forbidden') {
+        return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 });
+      }
+      if (result?.error === 'not_found') {
+        return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
+      }
+      if (result?.error === 'validation_failed') {
+        return new Response(JSON.stringify({ error: 'validation_failed' }), { status: 422 });
+      }
+      merged = { ...merged, ...result };
+    }
+
+    return new Response(JSON.stringify(merged), {
       headers: { 'Content-Type': 'application/json' },
     });
   }
