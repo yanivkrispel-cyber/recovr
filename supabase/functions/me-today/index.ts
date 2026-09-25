@@ -3,7 +3,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
 import { withCors } from '../_shared/cors.ts';
-import { getSignedMediaUrl } from '../_shared/signed-media-url.ts';
+import { signMediaInPlace } from '../_shared/signed-media-url.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -64,19 +64,9 @@ Deno.serve(withCors(async (req) => {
   // filtered) into short-lived signed URLs; the private exercise-media bucket
   // isn't readable with a patient JWT.
   const items = Array.isArray(result.items) ? result.items : [];
-  for (const it of items) {
-    const media = Array.isArray(it?.exercise?.media) ? it.exercise.media : [];
-    for (const m of media) {
-      if (m.kind === 'video') continue; // url is a YouTube id, not a Storage path
-      for (const field of ['url', 'thumb_url'] as const) {
-        const path = m[field];
-        if (typeof path === 'string' && path && !path.startsWith('http') && !path.startsWith('/storage/')) {
-          const signedUrl = await getSignedMediaUrl(service, path);
-          if (signedUrl) m[field] = signedUrl.replace(/^https?:\/\/[^/]+/, '');
-        }
-      }
-    }
-  }
+  // deno-lint-ignore no-explicit-any
+  const media = items.flatMap((x: any) => (Array.isArray(x?.exercise?.media) ? x.exercise.media : []));
+  await signMediaInPlace(service, media);
 
   return new Response(JSON.stringify(result), {
     headers: { 'Content-Type': 'application/json' },

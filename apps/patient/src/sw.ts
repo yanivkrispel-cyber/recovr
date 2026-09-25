@@ -5,6 +5,7 @@ import { precacheAndRoute } from 'workbox-precaching';
 import { registerRoute } from 'workbox-routing';
 import { CacheFirst, StaleWhileRevalidate } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
+import { RangeRequestsPlugin } from 'workbox-range-requests';
 
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<{ url: string; revision: string | null }>;
@@ -20,11 +21,17 @@ precacheAndRoute(self.__WB_MANIFEST ?? []);
 // Cache-first for exercise media; SWR for the plan/today/progress JSON. The
 // match is on url.pathname because the Supabase API/Storage is a different
 // origin in every environment (see the note in the previous vite.config.ts).
+// GIFs are the bulk of the library's media, so they must be in this list.
+// Range requests: Safari fetches <video> with Range headers and won't play a
+// full-body 200 served from cache, so clips need the RangeRequestsPlugin.
 registerRoute(
-  ({ url }) => /\/(exercise-media|exercises)\/.+\.(jpe?g|png|webp|mp4|webm)$/.test(url.pathname),
+  ({ url }) => /\/(exercise-media|exercises)\/.+\.(jpe?g|png|gif|webp|mp4|webm)$/.test(url.pathname),
   new CacheFirst({
     cacheName: 'exercise-media',
-    plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 })],
+    plugins: [
+      new RangeRequestsPlugin(),
+      new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 }),
+    ],
   }),
 );
 registerRoute(

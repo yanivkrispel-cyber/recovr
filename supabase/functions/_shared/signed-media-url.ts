@@ -49,6 +49,35 @@ export async function getSignedMediaUrls(service: any, paths: string[]): Promise
   return out;
 }
 
+/**
+ * Rewrites the bucket-relative `url`/`thumb_url` of every media item in place
+ * to a signed URL, returned API-origin-relative for the client to prefix with
+ * its own configured Supabase URL (local storage signs with an internal docker
+ * host the browser can't resolve). YouTube items (kind='video', url is an id)
+ * and already-absolute paths are left alone. One batch for the whole response
+ * instead of a cache round-trip per file.
+ */
+export async function signMediaInPlace(service: any, media: any[]): Promise<void> {
+  const fields = ['url', 'thumb_url'] as const;
+  const signable = (m: any, f: (typeof fields)[number]) => {
+    const p = m?.[f];
+    return m?.kind !== 'video' && typeof p === 'string' && p && !p.startsWith('http') && !p.startsWith('/storage/');
+  };
+
+  const paths: string[] = [];
+  for (const m of media) for (const f of fields) if (signable(m, f)) paths.push(m[f]);
+  if (paths.length === 0) return;
+
+  const signed = await getSignedMediaUrls(service, paths);
+  for (const m of media) {
+    for (const f of fields) {
+      if (!signable(m, f)) continue;
+      const url = signed.get(m[f]);
+      if (url) m[f] = url.replace(/^https?:\/\/[^/]+/, '');
+    }
+  }
+}
+
 export async function getSignedMediaUrl(service: any, path: string): Promise<string | null> {
   const { data: cached } = await service
     .schema('app')

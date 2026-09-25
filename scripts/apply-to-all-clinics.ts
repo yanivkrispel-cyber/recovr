@@ -1,10 +1,11 @@
 #!/usr/bin/env -S deno run --allow-net --allow-env
 // scripts/apply-to-all-clinics.ts
 // Ensures every clinic schema has the current CLINIC SCHEMA TEMPLATE table
-// set applied. Calls create_clinic_tables() per clinic over a direct
-// Postgres connection: that function (and every clinic_<slug> schema it
-// targets) is not exposed through PostgREST — see [api] schemas in
-// config.toml, which lists only app/storage/graphql_public — so this
+// set applied. Calls create_clinic_tables() and then add_clinic_indexes()
+// (0050) per clinic over a direct Postgres connection: that function (and
+// every clinic_<slug> schema it targets) is not exposed through PostgREST —
+// see [api] schemas in config.toml, which lists only
+// app/storage/graphql_public — so this
 // can't go through supabase-js/REST like the rest of the codebase does.
 // create_clinic_tables() only adds missing tables/indexes
 // (CREATE ... IF NOT EXISTS); it never drops or alters existing ones, so
@@ -49,6 +50,7 @@ try {
 
       try {
         await client.queryObject('SELECT create_clinic_tables($1)', [schemaName]);
+        await client.queryObject('SELECT add_clinic_indexes($1)', [schemaName]);
         await client.queryObject('SELECT lock_down_schema($1)', [schemaName]);
         console.log('    ✓ Applied');
       } catch (err) {

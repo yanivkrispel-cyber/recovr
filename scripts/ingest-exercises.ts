@@ -231,6 +231,10 @@ if (!DRY_RUN) {
               Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
               'Content-Type': m.contentType,
               'x-upsert': 'true',
+              // Storage defaults to max-age=3600; signed URLs are reused for 30
+              // days (see _shared/signed-media-url.ts), so let the browser keep
+              // the bytes that long too.
+              'cache-control': 'max-age=2592000',
             },
             body: bytes,
             // A stalled connection otherwise hangs forever (Deno's fetch has

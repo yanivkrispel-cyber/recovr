@@ -16,6 +16,9 @@ export default defineConfig({
       includeAssets: ['fonts/*.woff2', 'icons/*.svg'],
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,woff2,png,svg}'],
+        // og-image / email-logo exist for link previews and emails only; the
+        // app never renders them, so don't make every install download them.
+        globIgnores: ['brand/**'],
       },
       manifest: {
         id: '/m/',

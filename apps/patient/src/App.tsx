@@ -5,7 +5,7 @@ import { Skeleton, FullPageLoader, lazyWithRetry } from 'ui';
 import AppShell, { type PatientTab } from './components/AppShell';
 import Home from './pages/Home';
 import Login from './pages/Login';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { enablePush, syncPushSubscription, type EnablePushResult } from './lib/push';
 
 // Home + Login load with the shell; the rest split into their own chunks so
@@ -64,17 +64,49 @@ function loadActiveExercise(): { view: View; index: number } | null {
   }
 }
 
+const CACHE_OWNER_KEY = 'rehab:cacheOwner';
+
+// The service worker's plan-json cache is keyed by URL only (/me-today etc. —
+// the Authorization header isn't part of the key), so on a shared device the
+// next patient to sign in would briefly be served the previous one's plan.
+// Drop it, and the in-memory query cache, whenever the signed-in user changes.
+// Returns true when the owner changed.
+async function claimCachesFor(userId: string | null): Promise<boolean> {
+  let owner: string | null = null;
+  try {
+    owner = localStorage.getItem(CACHE_OWNER_KEY);
+    if (userId) localStorage.setItem(CACHE_OWNER_KEY, userId);
+    else localStorage.removeItem(CACHE_OWNER_KEY);
+  } catch {
+    // storage unavailable — fall through and clear to be safe
+  }
+  if (owner === userId) return false;
+  try {
+    if ('caches' in window) await caches.delete('plan-json');
+  } catch {
+    // Cache Storage unavailable (e.g. some private modes) — nothing to clear
+  }
+  return true;
+}
+
 export default function App() {
   const [inviteToken, setInviteToken] = useState<string | null>(getInviteToken);
   const [session, setSession] = useState<Session | null | undefined>(undefined); // undefined = still loading
   const [view, setView] = useState<View>(() => loadActiveExercise()?.view ?? 'home');
   const [activeExerciseIndex, setActiveExerciseIndex] = useState(() => loadActiveExercise()?.index ?? 0);
 
+  const queryClient = useQueryClient();
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    // Clear before setSession so Home's first fetch can't hit the old cache.
+    const apply = async (s: Session | null) => {
+      if (await claimCachesFor(s?.user.id ?? null)) queryClient.clear();
+      setSession(s);
+    };
+    void supabase.auth.getSession().then(({ data }) => apply(data.session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => void apply(s));
     return () => subscription.unsubscribe();
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     if (session) void syncPushSubscription();

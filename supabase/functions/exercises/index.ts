@@ -17,7 +17,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
 import { withCors } from '../_shared/cors.ts';
 import { requireMfa } from '../_shared/mfa.ts';
-import { getSignedMediaUrl, getSignedMediaUrls } from '../_shared/signed-media-url.ts';
+import { getSignedMediaUrls, signMediaInPlace } from '../_shared/signed-media-url.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -398,20 +398,7 @@ Deno.serve(withCors(async (req) => {
       // Mint short-lived signed URLs for the private exercise-media bucket so
       // the client never needs storage access. The `verified` flag on each
       // media row is untouched — the patient-facing gate lives elsewhere.
-      const media = Array.isArray(result.media) ? result.media : [];
-      for (const m of media) {
-        if (m.kind === 'video') continue; // url is a YouTube id, not a Storage path
-        for (const field of ['url', 'thumb_url'] as const) {
-          const path = m[field];
-          if (typeof path === 'string' && path && !path.startsWith('http') && !path.startsWith('/storage/')) {
-            // Return a path relative to the API origin; the client prefixes its
-            // own configured Supabase URL. (Local storage signs URLs with an
-            // internal docker host the browser can't resolve.)
-            const signedUrl = await getSignedMediaUrl(service, path);
-            if (signedUrl) m[field] = signedUrl.replace(/^https?:\/\/[^/]+/, '');
-          }
-        }
-      }
+      await signMediaInPlace(service, Array.isArray(result.media) ? result.media : []);
 
       return new Response(JSON.stringify(result), {
         headers: { 'Content-Type': 'application/json' },

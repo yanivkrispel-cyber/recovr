@@ -7,6 +7,9 @@ import { checkUpload, type MediaRights } from 'shared';
 import { CatalogApiError, addMedia, mediaUploadTargets, type UploadTarget } from './catalogApi';
 
 const BUCKET = 'exercise-media';
+// Paths are unique per upload (random id), so the bytes never change under a
+// URL. Storage defaults to max-age=3600; match the 30-day signed-URL reuse.
+const CACHE_SECONDS = '2592000';
 const THUMB_MAX = 360;
 // A video the browser can't decode (unsupported codec) never fires its load /
 // seek events; without a deadline the upload would hang forever.
@@ -103,8 +106,8 @@ export async function uploadMediaFile(supabase: SupabaseClient, exerciseId: stri
   const target = opts.target ?? (await mediaUploadTargets(supabase, exerciseId, [{ mime_type: file.type, size_bytes: file.size }])).targets[0];
   const storage = supabase.storage.from(BUCKET);
   const [main, thumb] = await Promise.all([
-    storage.uploadToSignedUrl(target.path, target.token, file, { contentType: file.type }),
-    storage.uploadToSignedUrl(target.thumb_path, target.thumb_token, probe.thumb, { contentType: 'image/jpeg' }),
+    storage.uploadToSignedUrl(target.path, target.token, file, { contentType: file.type, cacheControl: CACHE_SECONDS }),
+    storage.uploadToSignedUrl(target.thumb_path, target.thumb_token, probe.thumb, { contentType: 'image/jpeg', cacheControl: CACHE_SECONDS }),
   ]);
   if (main.error || thumb.error) throw 'upload_failed';
 
