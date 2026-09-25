@@ -79,86 +79,92 @@ policy = "oneshot"
 [analytics]
 enabled = false
 
+# Gateway JWT verification is off for every function: each one verifies the
+# caller itself (supabase/functions/_shared/auth.ts — local JWKS check for
+# asymmetric signing keys, Auth server for legacy HS256), and the gateway
+# check doesn't work with asymmetric signing keys (Supabase docs: turn it off
+# before rotating away from the legacy JWT secret). A new function must call
+# getAuthUser() before touching data.
 [functions.me-today]
-verify_jwt = true
+verify_jwt = false
 
 [functions.me-sessions-items]
-verify_jwt = true
+verify_jwt = false
 
 [functions.me-progress]
-verify_jwt = true
+verify_jwt = false
 
 [functions.me-plan]
-verify_jwt = true
+verify_jwt = false
 
 [functions.me-education]
-verify_jwt = true
+verify_jwt = false
 
 [functions.phase-approve]
-verify_jwt = true
+verify_jwt = false
 
 [functions.patient-invite]
-verify_jwt = true
+verify_jwt = false
 
 [functions.patient-accept]
 verify_jwt = false  # first-time invite token, not a session
 
 [functions.dashboard]
-verify_jwt = true
+verify_jwt = false
 
 [functions.patients]
-verify_jwt = true
+verify_jwt = false
 
 [functions.clinician-me]
-verify_jwt = true
+verify_jwt = false
 
 [functions.protocols]
-verify_jwt = true
+verify_jwt = false
 
 [functions.alerts]
-verify_jwt = true
+verify_jwt = false
 
 [functions.patient-overview]
-verify_jwt = true
+verify_jwt = false
 
 [functions.plan]
-verify_jwt = true
+verify_jwt = false
 
 [functions.plan-templates]
-verify_jwt = true
+verify_jwt = false
 
 [functions.exercises]
-verify_jwt = true
+verify_jwt = false
 
 [functions.criteria]
-verify_jwt = true
+verify_jwt = false
 
 [functions.measurements]
-verify_jwt = true
+verify_jwt = false
 
 [functions.assessment-visits]
-verify_jwt = true
+verify_jwt = false
 
 [functions.device-tokens]
-verify_jwt = true
+verify_jwt = false
 
 [functions.messages]
-verify_jwt = true
+verify_jwt = false
 
 [functions.me-messages]
-verify_jwt = true
+verify_jwt = false
 
 [functions.settings]
-verify_jwt = true
+verify_jwt = false
 
 [functions.me-export]
-verify_jwt = true
+verify_jwt = false
 
 [functions.me-delete-request]
-verify_jwt = true
+verify_jwt = false
 
 [functions.deletion-requests]
-verify_jwt = true
+verify_jwt = false
 
 [functions.client-errors]
 verify_jwt = false  # a crash can happen before login; JWT decoded when present
