@@ -13,6 +13,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
 import { withCors } from '../_shared/cors.ts';
+import { getAuthUser } from '../_shared/auth.ts';
 import { requireMfa } from '../_shared/mfa.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -35,14 +36,8 @@ function errorStatus(err: string | undefined): number {
 }
 
 Deno.serve(withCors(async (req) => {
-  const authHeader = req.headers.get('Authorization')!;
-  const token = authHeader.replace('Bearer ', '');
-
-  const userClient = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY')!, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
-  const { data: { user }, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !user) {
+  const user = await getAuthUser(req);
+  if (!user) {
     return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 });
   }
   const mfaRefusal = await requireMfa(req, user);

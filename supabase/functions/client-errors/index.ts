@@ -6,11 +6,11 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
 import { withCors } from '../_shared/cors.ts';
+import { getAuthUser } from '../_shared/auth.ts';
 import { ipKey, rateLimit } from '../_shared/rate-limit.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 const MAX_BYTES = 32 * 1024;
 
 function log(level: string, msg: string, ctx: Record<string, unknown> = {}): void {
@@ -40,15 +40,10 @@ Deno.serve(withCors(async (req) => {
   }
 
   let actor: string | null = null;
-  const authHeader = req.headers.get('Authorization');
-  if (authHeader) {
-    try {
-      const u = createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: authHeader } } });
-      const { data } = await u.auth.getUser();
-      actor = data.user?.id ?? null;
-    } catch {
-      /* anonymous is fine */
-    }
+  try {
+    actor = (await getAuthUser(req))?.id ?? null;
+  } catch {
+    /* anonymous is fine */
   }
 
   try {

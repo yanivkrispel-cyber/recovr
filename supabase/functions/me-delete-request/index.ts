@@ -5,24 +5,18 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
 import { withCors } from '../_shared/cors.ts';
+import { getAuthUser } from '../_shared/auth.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 
 Deno.serve(withCors(async (req) => {
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) {
     return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 });
   }
-  const userClient = createClient(SUPABASE_URL, ANON_KEY, {
-    global: { headers: { Authorization: authHeader } },
-  });
-  const {
-    data: { user },
-    error: userErr,
-  } = await userClient.auth.getUser();
-  if (userErr || !user) {
+  const user = await getAuthUser(req);
+  if (!user) {
     return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 });
   }
 
