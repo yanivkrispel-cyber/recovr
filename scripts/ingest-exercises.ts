@@ -26,6 +26,8 @@
 //   deno run --allow-read --allow-write --allow-net --allow-env scripts/ingest-exercises.ts [--dry-run] [--verify] [--report <path>]
 // Requires: SUPABASE_DB_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 //   (see `supabase status`). DRY_RUN=true is equivalent to --dry-run.
+// Afterwards run `pnpm convert:gif-loops` (scripts/convert-gif-loops.ts) so
+// the new GIF rows get their small MP4 renditions (loop_url, 0053).
 
 import { Client } from 'jsr:@db/postgres@0.19';
 

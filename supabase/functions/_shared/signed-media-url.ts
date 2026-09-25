@@ -50,7 +50,7 @@ export async function getSignedMediaUrls(service: any, paths: string[]): Promise
 }
 
 /**
- * Rewrites the bucket-relative `url`/`thumb_url` of every media item in place
+ * Rewrites the bucket-relative `url`/`thumb_url`/`loop_url` of every media item in place
  * to a signed URL, returned API-origin-relative for the client to prefix with
  * its own configured Supabase URL (local storage signs with an internal docker
  * host the browser can't resolve). YouTube items (kind='video', url is an id)
@@ -58,7 +58,7 @@ export async function getSignedMediaUrls(service: any, paths: string[]): Promise
  * instead of a cache round-trip per file.
  */
 export async function signMediaInPlace(service: any, media: any[]): Promise<void> {
-  const fields = ['url', 'thumb_url'] as const;
+  const fields = ['url', 'thumb_url', 'loop_url'] as const;
   const signable = (m: any, f: (typeof fields)[number]) => {
     const p = m?.[f];
     return m?.kind !== 'video' && typeof p === 'string' && p && !p.startsWith('http') && !p.startsWith('/storage/');

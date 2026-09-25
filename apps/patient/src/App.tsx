@@ -120,8 +120,21 @@ export default function App() {
       if (error) throw error;
       return data;
     },
-    refetchInterval: 20_000,
+    // Fallback only: a new message also arrives as a push, which the service
+    // worker relays below, and React Query refetches on window focus.
+    refetchInterval: 60_000,
   });
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type !== 'push') return;
+      void queryClient.invalidateQueries({ queryKey: ['me-messages-unread'] });
+      void queryClient.invalidateQueries({ queryKey: ['me-messages'] });
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, [queryClient]);
 
   useEffect(() => {
     try {

@@ -49,6 +49,11 @@ self.addEventListener('push', (event) => {
   } catch {
     data = { body: event.data?.text() };
   }
+  // Tell open app windows too, so they refresh the unread badge / thread now
+  // instead of waiting for the next poll (see App.tsx).
+  void self.clients.matchAll({ type: 'window' }).then((wins) => {
+    for (const w of wins) w.postMessage({ type: 'push', tag: data.tag ?? null });
+  });
   event.waitUntil(
     self.registration.showNotification(data.title ?? 'ReCOVR', {
       body: data.body ?? '',

@@ -28,6 +28,8 @@ interface ExerciseMedia {
   kind: 'image' | 'gif' | 'video' | 'clip';
   url: string;
   thumb_url: string | null;
+  /** MP4 rendition of an animated GIF (0053) — played instead of the GIF. */
+  loop_url?: string | null;
   width: number | null;
   height: number | null;
   start_sec?: number | null;
@@ -103,6 +105,8 @@ function ExerciseMediaFrame({
     >
       {primary.kind === 'clip' ? (
         <ClipLoop media={primary} name={name} height={compact ? 128 : 200} />
+      ) : primary.kind === 'gif' && primary.loop_url ? (
+        <GifLoop media={primary} name={name} height={compact ? 128 : 200} />
       ) : (
         <img
           src={mediaSrc(primary.url)}
@@ -111,6 +115,46 @@ function ExerciseMediaFrame({
         />
       )}
     </div>
+  );
+}
+
+// A GIF with an MP4 rendition (loop_url, ~10% of the bytes) plays the video.
+// If it can't autoplay (iOS Low Power Mode, data saver) or fails to load, it
+// swaps back to the GIF itself so the movement is still shown animated.
+function GifLoop({ media, name, height }: { media: ExerciseMedia; name: string; height: number }) {
+  const [fallback, setFallback] = useState(false);
+  const ref = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const v = ref.current;
+    if (!v) return;
+    const p = v.play();
+    if (p) p.catch(() => setFallback(true));
+  }, []);
+
+  if (fallback) {
+    return (
+      <img
+        src={mediaSrc(media.url)}
+        alt={name}
+        style={{ height, width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }}
+      />
+    );
+  }
+  return (
+    <video
+      ref={ref}
+      src={mediaSrc(media.loop_url!)}
+      poster={media.thumb_url ? mediaSrc(media.thumb_url) : undefined}
+      aria-label={name}
+      muted
+      loop
+      autoPlay
+      playsInline
+      disablePictureInPicture
+      onError={() => setFallback(true)}
+      style={{ height, width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }}
+    />
   );
 }
 
