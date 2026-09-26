@@ -161,7 +161,6 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
     setReadOnly(!detail.is_editable);
     setSaveError(null);
     setNameTouched(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, protocolId, detail]);
 
   function updatePhase(index: number, patch: Partial<PhaseDraft>) {

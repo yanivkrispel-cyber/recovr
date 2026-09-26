@@ -36,9 +36,8 @@ export function Badge({ children, tone = 'neutral' }: BadgeProps) {
   );
 }
 
-interface PillProps extends BadgeProps {
-  // Same as Badge for now; semantically distinct when used in status chips.
-}
+// Same as Badge for now; semantically distinct when used in status chips.
+type PillProps = BadgeProps;
 
 export function Pill(props: PillProps) {
   return <Badge {...props} />;

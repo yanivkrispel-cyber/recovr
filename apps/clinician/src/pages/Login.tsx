@@ -1,4 +1,4 @@
-import { useState, useContext } from 'react';
+import { useContext } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loginSchema, t, tZodError, type LoginInput } from 'shared';
@@ -16,8 +16,6 @@ export default function Login() {
     setError,
     formState: { errors, isSubmitting, isValid },
   } = useForm<LoginInput>({ resolver: zodResolver(loginSchema), mode: 'onTouched' });
-
-  const [resetSent, setResetSent] = useState(false);
 
   async function onSubmit(data: LoginInput) {
     const { error } = await supabase.auth.signInWithPassword({

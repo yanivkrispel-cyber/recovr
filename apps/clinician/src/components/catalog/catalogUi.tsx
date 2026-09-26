@@ -276,8 +276,17 @@ export function CueListEditor({
   );
 }
 
-/** Small numeric input for the dosage grid below — no spinners, RTL label above. */
-function numberField(label: string, value: number | null | undefined, disabled: boolean | undefined, onCommit: (n: number | null) => void) {
+/**
+ * Small numeric input for the dosage grid below — no spinners, RTL label above.
+ * A component (not a helper called during render): it holds state, and the
+ * grid renders a different set of fields per dosage mode.
+ */
+function NumberField({ label, value, disabled, onCommit }: {
+  label: string;
+  value: number | null | undefined;
+  disabled: boolean | undefined;
+  onCommit: (n: number | null) => void;
+}) {
   const [local, setLocal] = useState(value == null ? '' : String(value));
   useEffect(() => setLocal(value == null ? '' : String(value)), [value]);
   return (
@@ -318,16 +327,16 @@ export function DosageEditor({ id, value, onCommit, disabled }: { id?: string; v
       {value.mode && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
           {value.mode === 'reps' && <>
-            {numberField(t('catalog.dosage.field.sets'), value.sets, disabled, (n) => set('sets', n))}
-            {numberField(t('catalog.dosage.field.reps'), value.reps, disabled, (n) => set('reps', n))}
+            <NumberField label={t('catalog.dosage.field.sets')} value={value.sets} disabled={disabled} onCommit={(n) => set('sets', n)} />
+            <NumberField label={t('catalog.dosage.field.reps')} value={value.reps} disabled={disabled} onCommit={(n) => set('reps', n)} />
           </>}
           {value.mode === 'hold' && <>
-            {numberField(t('catalog.dosage.field.sets'), value.sets, disabled, (n) => set('sets', n))}
-            {numberField(t('catalog.dosage.field.hold_sec'), value.hold_sec, disabled, (n) => set('hold_sec', n))}
+            <NumberField label={t('catalog.dosage.field.sets')} value={value.sets} disabled={disabled} onCommit={(n) => set('sets', n)} />
+            <NumberField label={t('catalog.dosage.field.hold_sec')} value={value.hold_sec} disabled={disabled} onCommit={(n) => set('hold_sec', n)} />
           </>}
-          {value.mode === 'duration' && numberField(t('catalog.dosage.field.duration_min'), value.duration_min, disabled, (n) => set('duration_min', n))}
-          {value.mode === 'distance' && numberField(t('catalog.dosage.field.distance_m'), value.distance_m, disabled, (n) => set('distance_m', n))}
-          {numberField(t('catalog.dosage.field.rest_sec'), value.rest_sec, disabled, (n) => set('rest_sec', n))}
+          {value.mode === 'duration' && <NumberField label={t('catalog.dosage.field.duration_min')} value={value.duration_min} disabled={disabled} onCommit={(n) => set('duration_min', n)} />}
+          {value.mode === 'distance' && <NumberField label={t('catalog.dosage.field.distance_m')} value={value.distance_m} disabled={disabled} onCommit={(n) => set('distance_m', n)} />}
+          <NumberField label={t('catalog.dosage.field.rest_sec')} value={value.rest_sec} disabled={disabled} onCommit={(n) => set('rest_sec', n)} />
         </div>
       )}
     </div>

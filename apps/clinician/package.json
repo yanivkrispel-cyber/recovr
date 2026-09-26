@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.app.json && vite build",
     "preview": "vite preview",
-    "lint": "eslint src --ext .ts,.tsx",
+    "lint": "eslint src",
     "typecheck": "tsc -p tsconfig.app.json",
     "test": "vitest run --passWithNoTests",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\""

@@ -15,6 +15,7 @@ const RELOAD_FLAG = 'recovr:chunk-reload-attempted';
  * `T` used directly rather than folded into a constraint) so the wrapped
  * component keeps its real prop types instead of widening to `any`.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- same constraint as React.lazy's own signature
 export function lazyWithRetry<T extends ComponentType<any>>(
   factory: () => Promise<{ default: T }>,
 ): LazyExoticComponent<T> {
