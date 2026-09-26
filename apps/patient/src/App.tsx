@@ -1,4 +1,4 @@
-import { createClient, type Session } from '@supabase/supabase-js';
+import type { Session } from '@supabase/auth-js';
 import { Suspense, useEffect, useState } from 'react';
 import { t } from 'shared';
 import { Skeleton, FullPageLoader, lazyWithRetry } from 'ui';
@@ -7,6 +7,7 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { enablePush, syncPushSubscription, type EnablePushResult } from './lib/push';
+import { supabase } from './lib/supabase';
 
 // Home + Login load with the shell; the rest split into their own chunks so
 // first paint doesn't carry the whole app (T-24).
@@ -26,11 +27,7 @@ function ViewFallback() {
   );
 }
 
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY,
-);
-
+// Pages import the client from here; it lives in lib/supabase.ts.
 export { supabase };
 
 type View = 'home' | 'exercise' | 'completion' | 'progress' | 'messages' | 'education' | 'notifications';

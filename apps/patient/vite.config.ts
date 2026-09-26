@@ -45,7 +45,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           react: ['react', 'react-dom'],
-          supabase: ['@supabase/supabase-js'],
+          supabase: ['@supabase/auth-js', '@supabase/functions-js'],
           query: ['@tanstack/react-query'],
         },
       },

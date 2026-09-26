@@ -25,6 +25,11 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="ReCOVR by krispel" />
     <meta name="twitter:image" content="%VITE_SITE_URL%/m/brand/og-image.png" />
+    <!-- Fonts every first screen uses (Heebo Hebrew + Latin, Frank Ruhl Hebrew for
+         headings): start fetching them with the HTML instead of after the CSS. -->
+    <link rel="preload" href="/m/fonts/heebo-1.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/m/fonts/heebo-5.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/m/fonts/frank-ruhl-libre-1.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/m/fonts/heebo.css" />
     <link rel="stylesheet" href="/m/fonts/frank-ruhl-libre.css" />
   </head>
