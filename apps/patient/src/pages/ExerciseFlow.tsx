@@ -128,8 +128,16 @@ function GifLoop({ media, name, height }: { media: ExerciseMedia; name: string; 
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
+    // Only a real "can't play here" falls back. An AbortError is transient —
+    // Chrome pauses video-only media in a hidden tab to save power, and an
+    // interrupted load rejects the same way — and autoplay resumes on its own.
     const p = v.play();
-    if (p) p.catch(() => setFallback(true));
+    if (p) {
+      p.catch((e: unknown) => {
+        const name = e instanceof DOMException ? e.name : '';
+        if (name === 'NotAllowedError' || name === 'NotSupportedError') setFallback(true);
+      });
+    }
   }, []);
 
   if (fallback) {
