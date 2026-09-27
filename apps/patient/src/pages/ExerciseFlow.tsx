@@ -8,6 +8,7 @@ import type { ExerciseMode } from '../App';
 import FeedbackForm from '../components/FeedbackForm';
 import { sessionQueue } from '../lib/sessionQueue';
 import { TODAY_KEY, fetchToday, markDoneLocally } from '../lib/today';
+import { unlockAudio, playTick, playStart, vibrate, isMuted, setMuted } from '../lib/cues';
 
 interface ExerciseFlowProps {
   index: number;
@@ -350,6 +351,8 @@ export default function ExerciseFlow({ index, mode, onAdvance, onComplete, onSin
 
   function handleFinishSet() {
     if (currentSet < totalSets) {
+      // This tap is the gesture iOS needs before the end-of-rest cue can sound.
+      unlockAudio();
       setRestEndsAt(Date.now() + restMs);
     } else {
       setPhase('feedback');
@@ -593,14 +596,6 @@ function ClinicianNote({ note }: { note: string }) {
   );
 }
 
-function vibrate(pattern: number | number[]) {
-  try {
-    navigator.vibrate?.(pattern);
-  } catch {
-    // unsupported (iOS) — the on-screen state is enough
-  }
-}
-
 // Optional countdown for a prescribed hold — tap at the start of each hold.
 // Deadline-based like RestTimer, so a backgrounded tab doesn't drift.
 function HoldTimer({ seconds }: { seconds: number }) {
@@ -659,26 +654,61 @@ function HoldTimer({ seconds }: { seconds: number }) {
 
 function RestTimer({ endsAt, onDone }: { endsAt: number; onDone: () => void }) {
   const [remaining, setRemaining] = useState(() => Math.max(0, Math.ceil((endsAt - Date.now()) / 1000)));
+  const [muted, setMutedState] = useState(isMuted);
   const firedRef = useRef(false);
+  const lastTickRef = useRef<number | null>(null);
+  // onDone is a fresh closure each render; keep it out of the effect's deps so
+  // the countdown (and its tick bookkeeping) only restarts on a new deadline.
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
 
   useEffect(() => {
     firedRef.current = false;
+    lastTickRef.current = null;
     function tick() {
-      const secs = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+      const now = Date.now();
+      const secs = Math.max(0, Math.ceil((endsAt - now) / 1000));
       setRemaining(secs);
+      if (secs > 0 && secs <= 5 && lastTickRef.current !== secs) {
+        lastTickRef.current = secs;
+        playTick();
+      }
       if (secs <= 0 && !firedRef.current) {
         firedRef.current = true;
-        onDone();
+        // Only cue when we're actually at the deadline — not when a reload
+        // restores an already-expired rest or a backgrounded tab wakes late.
+        if (now - endsAt < 1500) {
+          playStart();
+          vibrate(80);
+        }
+        onDoneRef.current();
       }
     }
     tick();
     const id = setInterval(tick, 250);
     return () => clearInterval(id);
-  }, [endsAt, onDone]);
+  }, [endsAt]);
+
+  function toggleMuted() {
+    const next = !muted;
+    setMuted(next);
+    setMutedState(next);
+    if (!next) unlockAudio();
+  }
 
   return (
     <div>
-      <div style={{ fontSize: 14, color: 'var(--patient-muted)', marginBottom: 8 }}>מנוחה</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 14, color: 'var(--patient-muted)', marginBottom: 8 }}>
+        מנוחה
+        <button
+          onClick={toggleMuted}
+          aria-label={muted ? 'הפעל צליל' : 'השתק צליל'}
+          aria-pressed={muted}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 16, padding: 4, lineHeight: 1, opacity: muted ? 0.55 : 0.9 }}
+        >
+          {muted ? '🔕' : '🔔'}
+        </button>
+      </div>
       <div
         style={{
           fontSize: 56,
