@@ -98,6 +98,14 @@ jobs:
       - name: Build frontend
         if: needs.changes.outputs.frontend == 'true'
         run: pnpm run build:firebase
+        # .env.production is gitignored, so the build gets its public config
+        # from repo variables (Settings -> Secrets and variables -> Actions ->
+        # Variables). The vite configs fail the build if any is missing.
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_VAPID_PUBLIC_KEY: ${{ vars.VITE_VAPID_PUBLIC_KEY }}
+          VITE_SITE_URL: ${{ vars.VITE_SITE_URL }}
 
       - name: Deploy hosting
         if: needs.changes.outputs.frontend == 'true'
