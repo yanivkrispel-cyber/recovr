@@ -198,12 +198,28 @@ Deno.serve(withCors(async (req) => {
           url: deepLink(row.event_key, row.payload),
           tag: row.event_key,
         };
+        // One device failing mustn't cost the recipient's other devices the
+        // notification. A 404/410 means the subscription is gone for good
+        // (app uninstalled, permission revoked) — drop the token so it isn't
+        // retried forever. The row counts as sent if any device got it.
+        let delivered = 0;
+        let lastError = '';
         for (const tk of tokens as Array<{ endpoint: string; keys: { p256dh: string; auth: string } }>) {
-          await webpush.sendNotification(
-            { endpoint: tk.endpoint, keys: tk.keys },
-            JSON.stringify(notif),
-          );
+          try {
+            await webpush.sendNotification(
+              { endpoint: tk.endpoint, keys: tk.keys },
+              JSON.stringify(notif),
+            );
+            delivered++;
+          } catch (e) {
+            const status = (e as { statusCode?: number }).statusCode;
+            if (status === 404 || status === 410) {
+              await svc.schema('app').rpc('delete_device_token', { p_endpoint: tk.endpoint });
+            }
+            lastError = `push ${status ?? ''} ${e instanceof Error ? e.message : String(e)}`.trim();
+          }
         }
+        if (delivered === 0) throw new Error(lastError || 'push failed');
       }
       await svc.schema('app').rpc('notification_mark', { p_schema: row.schema, p_id: row.id, p_status: 'sent' });
       sent++;

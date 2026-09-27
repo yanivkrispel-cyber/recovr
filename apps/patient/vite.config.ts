@@ -34,6 +34,7 @@ export default defineConfig({
         scope: '/m/',
         icons: [
           { src: '/m/icons/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+          { src: '/m/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: '/m/icons/icon-maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
         ],
       },

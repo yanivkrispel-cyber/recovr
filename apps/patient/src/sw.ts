@@ -3,7 +3,7 @@
 // offline caching and adds T-18 Web Push handling.
 import { precacheAndRoute } from 'workbox-precaching';
 import { registerRoute } from 'workbox-routing';
-import { CacheFirst, StaleWhileRevalidate } from 'workbox-strategies';
+import { CacheFirst, NetworkFirst } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { RangeRequestsPlugin } from 'workbox-range-requests';
 
@@ -18,9 +18,10 @@ self.addEventListener('activate', (event) => {
 
 precacheAndRoute(self.__WB_MANIFEST ?? []);
 
-// Cache-first for exercise media; SWR for the plan/today/progress JSON. The
-// match is on url.pathname because the Supabase API/Storage is a different
-// origin in every environment (see the note in the previous vite.config.ts).
+// Cache-first for exercise media; network-first for the plan/today/progress
+// JSON. The match is on url.pathname because the Supabase API/Storage is a
+// different origin in every environment (see the note in the previous
+// vite.config.ts).
 // GIFs are the bulk of the library's media, so they must be in this list.
 // Range requests: Safari fetches <video> with Range headers and won't play a
 // full-body 200 served from cache, so clips need the RangeRequestsPlugin.
@@ -34,10 +35,14 @@ registerRoute(
     ],
   }),
 );
+// Stale-while-revalidate used to answer from cache even online, so a refetch
+// right after logging an exercise showed the pre-log state until the fetch
+// after that. The cache is now only the offline / slow-network fallback.
 registerRoute(
   ({ url }) => /\/functions\/v1\/me-(today|plan|progress)$/.test(url.pathname),
-  new StaleWhileRevalidate({
+  new NetworkFirst({
     cacheName: 'plan-json',
+    networkTimeoutSeconds: 4,
     plugins: [new ExpirationPlugin({ maxEntries: 5, maxAgeSeconds: 60 * 60 * 12 })],
   }),
 );
@@ -61,7 +66,8 @@ self.addEventListener('push', (event) => {
       dir: 'rtl',
       lang: 'he',
       icon: '/m/icons/icon-192.png',
-      badge: '/m/icons/icon-192.png',
+      // No badge: Android renders it as an alpha mask, so the full-colour
+      // icon would show as a solid white square. The default bell is better.
       data: { url: data.url ?? '/m/' },
     }),
   );

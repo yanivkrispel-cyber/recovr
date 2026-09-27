@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Skeleton, QueryError, clickableDivProps } from 'ui';
 import { t } from 'shared';
-import { supabase } from '../App';
 import { secondaryLabel } from '../lib/label';
+import { TODAY_KEY, fetchToday } from '../lib/today';
 
 interface TodayItem {
   id: string;
@@ -33,13 +33,9 @@ interface HomeProps {
 export default function Home({ onStartExercise, onOpenProgress, onOpenEducation }: HomeProps) {
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
-  const { data, isLoading, error, refetch } = useQuery<Today>({
-    queryKey: ['today'],
-    queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('me-today', { method: 'GET' });
-      if (error) throw error;
-      return data;
-    },
+  const { data, isLoading, error, refetch } = useQuery<Today | null>({
+    queryKey: TODAY_KEY,
+    queryFn: () => fetchToday<Today>(),
   });
 
   if (isLoading) {

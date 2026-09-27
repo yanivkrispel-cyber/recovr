@@ -4,6 +4,16 @@ const VAPID_PUBLIC = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined
 
 export type EnablePushResult = 'ok' | 'unsupported' | 'denied' | 'no-key' | 'error';
 
+// navigator.serviceWorker.ready never settles when no worker is registered
+// (e.g. `vite dev`, where the PWA plugin doesn't register one), which left
+// the enable button spinning forever. Treat that as "unsupported here".
+function swReady(timeoutMs = 10_000): Promise<ServiceWorkerRegistration | null> {
+  return Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+  ]);
+}
+
 /** Ask for permission, subscribe to Web Push, and register the subscription. */
 export async function enablePush(): Promise<EnablePushResult> {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return 'unsupported';
@@ -12,7 +22,8 @@ export async function enablePush(): Promise<EnablePushResult> {
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') return 'denied';
 
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await swReady();
+    if (!reg) return 'unsupported';
     const sub =
       (await reg.pushManager.getSubscription()) ??
       (await reg.pushManager.subscribe({
@@ -35,8 +46,8 @@ export async function enablePush(): Promise<EnablePushResult> {
 export async function syncPushSubscription(): Promise<void> {
   if (!('serviceWorker' in navigator) || Notification.permission !== 'granted') return;
   try {
-    const reg = await navigator.serviceWorker.ready;
-    const sub = await reg.pushManager.getSubscription();
+    const reg = await swReady();
+    const sub = await reg?.pushManager.getSubscription();
     if (!sub) return;
     const json = sub.toJSON();
     await supabase.functions.invoke('device-tokens', {

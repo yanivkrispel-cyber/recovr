@@ -8,6 +8,8 @@ import Login from './pages/Login';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { enablePush, syncPushSubscription, type EnablePushResult } from './lib/push';
 import { supabase } from './lib/supabase';
+import { onQueueFlushed, sessionQueue } from './lib/sessionQueue';
+import { TODAY_KEY } from './lib/today';
 
 // Home + Login load with the shell; the rest split into their own chunks so
 // first paint doesn't carry the whole app (T-24).
@@ -108,6 +110,21 @@ export default function App() {
   useEffect(() => {
     if (session) void syncPushSubscription();
   }, [session]);
+
+  // Logs left in the offline queue by an earlier run go out on startup; once
+  // any flush lands, the server's `done` flags are current, so refetch.
+  useEffect(() => {
+    if (session) sessionQueue.scheduleFlush(0);
+  }, [session]);
+
+  useEffect(
+    () =>
+      onQueueFlushed(() => {
+        void queryClient.invalidateQueries({ queryKey: TODAY_KEY });
+        void queryClient.invalidateQueries({ queryKey: ['progress'] });
+      }),
+    [queryClient],
+  );
 
   const { data: unread } = useQuery<{ unread: number }>({
     queryKey: ['me-messages-unread'],

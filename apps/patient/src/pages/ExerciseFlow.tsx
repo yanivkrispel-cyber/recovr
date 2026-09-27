@@ -1,21 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { OfflineQueue, uuidv7 } from 'offline';
+import { uuidv7 } from 'offline';
 import { sessionItemSchema, type SessionItemInput } from 'shared';
 import { YouTubeFacade, useOnlineStatus } from 'ui';
-import { supabase } from '../App';
 import { secondaryLabel } from '../lib/label';
 import FeedbackForm from '../components/FeedbackForm';
-
-const queue = new OfflineQueue(
-  async (entries) => {
-    await supabase.functions.invoke(`me-sessions-items/${entries[0]?.session_id}/items`, {
-      method: 'POST',
-      body: { items: entries.map((e) => e.item) },
-    });
-  },
-  { retryDelayMs: 30_000, maxAttempts: 5 },
-);
+import { sessionQueue } from '../lib/sessionQueue';
+import { TODAY_KEY, fetchToday, markDoneLocally } from '../lib/today';
 
 interface ExerciseFlowProps {
   index: number;
@@ -236,6 +227,7 @@ function ExerciseVideoSection({ media, name }: { media?: ExerciseMedia[]; name: 
 interface Today {
   session_id: string;
   items: TodayItem[];
+  progress: { done: number; total: number };
 }
 
 type Phase = 'detail' | 'active' | 'feedback';
@@ -295,12 +287,9 @@ function findNextIncomplete(
 export default function ExerciseFlow({ index, onAdvance, onComplete, onCancel }: ExerciseFlowProps) {
   const queryClient = useQueryClient();
 
-  const { data } = useQuery<Today>({
-    queryKey: ['today'],
-    queryFn: async () => {
-      const { data } = await supabase.functions.invoke('me-today', { method: 'GET' });
-      return data;
-    },
+  const { data } = useQuery<Today | null>({
+    queryKey: TODAY_KEY,
+    queryFn: () => fetchToday<Today>(),
   });
 
   const sessionId = data?.session_id;
@@ -335,7 +324,7 @@ export default function ExerciseFlow({ index, onAdvance, onComplete, onCancel }:
     mutationFn: async (input: { session_id: string; item: SessionItemInput }) => {
       const full = sessionItemSchema.parse(input.item);
       // Always queue to IndexedDB; queue flushes on reconnect
-      await queue.enqueue(input.session_id, full);
+      await sessionQueue.enqueue(input.session_id, full);
     },
   });
 
@@ -379,13 +368,12 @@ export default function ExerciseFlow({ index, onAdvance, onComplete, onCancel }:
       },
     });
     clearPosition(activeSessionId, index);
-    // Don't await this: server `done` flags only update once this sync
-    // actually lands, which won't happen at all while offline. Advancing is
-    // decided below from the local queue instead; this call just keeps the
-    // cache fresh for once connectivity returns.
-    void queryClient.invalidateQueries({ queryKey: ['today'] });
+    // Mark it done in the cache right away. Refetching here would race the
+    // queue's flush and bring back the server's not-yet-updated `done: false`;
+    // App refetches ['today'] once the flush has actually landed.
+    markDoneLocally(queryClient, item.id);
 
-    const locallyDone = await queue.getQueuedPlanExerciseIds(activeSessionId);
+    const locallyDone = await sessionQueue.getQueuedPlanExerciseIds(activeSessionId);
     const nextIndex = findNextIncomplete(items, index, locallyDone);
     if (nextIndex !== null) {
       onAdvance(nextIndex);
