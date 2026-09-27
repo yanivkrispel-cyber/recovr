@@ -13,6 +13,12 @@ interface PlanExercise {
   sets: number | null;
   reps: number | null;
   rest_sec: number | null;
+  hold_sec: number | null;
+  side: 'left' | 'right' | 'bilateral' | null;
+  // Not editable here yet, but carried through so a save doesn't wipe them.
+  load?: number | null;
+  load_unit?: string | null;
+  tempo?: string | null;
   order: number;
   clinician_note: string | null;
 }
@@ -147,6 +153,8 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
           sets: p.sets,
           reps: p.reps,
           rest_sec: p.rest_sec,
+          hold_sec: p.hold_sec,
+          side: null,
           order: d.length + i + 1,
           clinician_note: null,
         })),
@@ -180,10 +188,19 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
     setDirty(true);
   }
 
-  function updateField(index: number, field: 'sets' | 'reps' | 'rest_sec', value: string) {
+  function updateField(index: number, field: 'sets' | 'reps' | 'rest_sec' | 'hold_sec', value: string) {
     setDraft((d) => {
       const next = [...d];
       next[index] = { ...next[index], [field]: value === '' ? null : Number(value) };
+      return next;
+    });
+    setDirty(true);
+  }
+
+  function updateRow(index: number, patch: Partial<Pick<PlanExercise, 'side' | 'clinician_note'>>) {
+    setDraft((d) => {
+      const next = [...d];
+      next[index] = { ...next[index], ...patch };
       return next;
     });
     setDirty(true);
@@ -256,8 +273,13 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
             sets: e.sets,
             reps: e.reps,
             rest_sec: e.rest_sec,
+            hold_sec: e.hold_sec,
+            side: e.side,
+            load: e.load ?? null,
+            load_unit: e.load_unit ?? null,
+            tempo: e.tempo ?? null,
             order: e.order,
-            clinician_note: e.clinician_note,
+            clinician_note: e.clinician_note?.trim() || null,
           })),
           removal_reasons: removals,
           criteria: criteriaDraft.map((c, i) => ({
@@ -582,6 +604,33 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
                           <button onClick={() => moveExercise(i, 1)} disabled={i === draft.length - 1} aria-label="הזז למטה · Move down" style={iconBtnStyle}>↓</button>
                           <button onClick={() => removeExercise(row)} aria-label="הסר תרגיל · Remove exercise" style={{ ...iconBtnStyle, color: 'var(--flag-red)' }}>✕</button>
                         </div>
+                        <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
+                          <input
+                            value={row.clinician_note ?? ''}
+                            onChange={(e) => updateRow(i, { clinician_note: e.target.value })}
+                            placeholder="הערה למטופל (תוצג בזמן התרגיל) · Note to patient"
+                            aria-label="הערה למטופל · Note to patient"
+                            maxLength={280}
+                            style={{ ...numInputStyle, flex: '1 1 220px', width: 'auto', textAlign: 'start' }}
+                          />
+                          <label style={subFieldLabelStyle}>
+                            החזקה (שנ׳)
+                            <input type="number" min={0} value={row.hold_sec ?? ''} onChange={(e) => updateField(i, 'hold_sec', e.target.value)} style={{ ...numInputStyle, width: 64 }} />
+                          </label>
+                          <label style={subFieldLabelStyle}>
+                            צד
+                            <select
+                              value={row.side ?? ''}
+                              onChange={(e) => updateRow(i, { side: (e.target.value || null) as PlanExercise['side'] })}
+                              style={{ ...numInputStyle, width: 'auto' }}
+                            >
+                              <option value="">—</option>
+                              <option value="right">ימין</option>
+                              <option value="left">שמאל</option>
+                              <option value="bilateral">שני הצדדים</option>
+                            </select>
+                          </label>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -705,6 +754,8 @@ const ghostPillStyle: CSSProperties = {
 };
 
 const numInputStyle: CSSProperties = { width: 56, padding: 4, border: 'var(--border-input)', borderRadius: 4 };
+
+const subFieldLabelStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--nav-inactive-text)' };
 
 const iconBtnStyle: CSSProperties = {
   background: 'transparent',

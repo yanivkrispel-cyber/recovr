@@ -34,8 +34,15 @@ interface ExerciseMedia {
 
 interface TodayItem {
   id: string;
-  sets: number;
-  reps: number;
+  sets: number | null;
+  reps: number | null;
+  hold_sec?: number | null;
+  rest_sec?: number | null;
+  side?: 'left' | 'right' | 'bilateral' | null;
+  load?: number | null;
+  load_unit?: string | null;
+  tempo?: string | null;
+  clinician_note?: string | null;
   exercise: {
     name: string; name_en?: string; instructions?: string; instruction_steps?: string[]; key_cues?: string[];
     media?: ExerciseMedia[];
@@ -337,11 +344,13 @@ export default function ExerciseFlow({ index, mode, onAdvance, onComplete, onSin
   const item = data.items[index];
   const items = data.items;
   const activeSessionId = data.session_id;
-  const totalSets = item.sets;
+  const totalSets = Math.max(1, item.sets ?? 1);
+  // The clinician's prescribed rest; 60s only when the plan doesn't say.
+  const restMs = (item.rest_sec && item.rest_sec > 0 ? item.rest_sec : 60) * 1000;
 
   function handleFinishSet() {
     if (currentSet < totalSets) {
-      setRestEndsAt(Date.now() + 60_000);
+      setRestEndsAt(Date.now() + restMs);
     } else {
       setPhase('feedback');
     }
@@ -364,7 +373,7 @@ export default function ExerciseFlow({ index, mode, onAdvance, onComplete, onSin
         id: uuidv7(),
         plan_exercise_id: item.id,
         sets_done: totalSets,
-        reps_done: item.reps,
+        reps_done: item.reps ?? undefined,
         pain_score: feedback.pain,
         difficulty: feedback.difficulty,
         note: feedback.note,
@@ -412,9 +421,8 @@ export default function ExerciseFlow({ index, mode, onAdvance, onComplete, onSin
           <ExerciseMediaFrame media={item.exercise.media} name={item.exercise.name} />
           <ExerciseVideoSection media={item.exercise.media} name={item.exercise.name} />
 
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--patient-text)' }}>
-            <bdi>{item.sets} × {item.reps}</bdi>
-          </div>
+          <Dosage item={item} />
+          {item.clinician_note && <ClinicianNote note={item.clinician_note} />}
 
           {item.exercise.instruction_steps && item.exercise.instruction_steps.length > 0 ? (
             <ol style={{ fontSize: 13, color: 'var(--patient-muted)', lineHeight: 1.6, margin: 0, paddingInlineStart: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -471,12 +479,24 @@ export default function ExerciseFlow({ index, mode, onAdvance, onComplete, onSin
           <div style={{ margin: '12px 0 4px' }}>
             <ExerciseMediaFrame media={item.exercise.media} name={item.exercise.name} compact />
           </div>
-          <div style={{ fontSize: 64, fontWeight: 800, color: 'var(--patient-gold)', fontFamily: 'var(--font-display)', margin: '24px 0' }}>
-            <bdi>{currentSet} / {totalSets}</bdi>
+          <div style={{ fontSize: 13, color: 'var(--patient-muted)', marginTop: 20 }}>
+            סט <bdi>{currentSet}</bdi> מתוך <bdi>{totalSets}</bdi> <span style={{ opacity: 0.75 }}>· Set {currentSet} of {totalSets}</span>
           </div>
-          <div style={{ fontSize: 16, color: 'var(--patient-muted)', marginBottom: 48 }}>
-            סט {currentSet}
+          {/* What to do in this set — the number the patient is counting to. */}
+          <div style={{ fontSize: 56, fontWeight: 800, color: 'var(--patient-gold)', fontFamily: 'var(--font-display)', lineHeight: 1.1, margin: '6px 0 2px' }}>
+            <bdi>{item.reps ?? item.hold_sec ?? `${currentSet}/${totalSets}`}</bdi>
           </div>
+          <div style={{ fontSize: 15, color: 'var(--patient-text)', fontWeight: 600, marginBottom: 12 }}>
+            {item.reps ? 'חזרות · reps' : item.hold_sec ? 'שניות החזקה · sec hold' : ''}
+          </div>
+          <PrescriptionChips item={item} centered />
+          {item.clinician_note && (
+            <div style={{ margin: '14px 0 0', textAlign: 'start' }}>
+              <ClinicianNote note={item.clinician_note} />
+            </div>
+          )}
+          {item.hold_sec && restEndsAt === null ? <HoldTimer seconds={item.hold_sec} /> : null}
+          <div style={{ height: 28 }} />
 
           {restEndsAt !== null ? (
             <RestTimer endsAt={restEndsAt} onDone={handleRestDone} />
@@ -509,6 +529,131 @@ export default function ExerciseFlow({ index, mode, onAdvance, onComplete, onSin
         />
       )}
     </div>
+  );
+}
+
+const SIDE_LABEL: Record<NonNullable<TodayItem['side']>, string> = {
+  right: 'צד ימין · Right side',
+  left: 'צד שמאל · Left side',
+  bilateral: 'שני הצדדים · Both sides',
+};
+
+function chipTexts(item: TodayItem): string[] {
+  const chips: string[] = [];
+  if (item.side) chips.push(SIDE_LABEL[item.side]);
+  // With reps the hold is per rep; without reps it's the headline number.
+  if (item.hold_sec && item.reps) chips.push(`החזקה ${item.hold_sec} שנ׳ בכל חזרה`);
+  if (item.load) chips.push(`משקל ${item.load}${item.load_unit ? ` ${item.load_unit}` : ''}`);
+  if (item.tempo) chips.push(`קצב ${item.tempo}`);
+  if (item.rest_sec) chips.push(`מנוחה ${item.rest_sec} שנ׳ בין סטים`);
+  return chips;
+}
+
+function PrescriptionChips({ item, centered }: { item: TodayItem; centered?: boolean }) {
+  const chips = chipTexts(item);
+  if (chips.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: centered ? 'center' : 'flex-start' }}>
+      {chips.map((c) => (
+        <span key={c} style={{ fontSize: 12, color: 'var(--patient-text)', border: '1px solid var(--patient-border)', borderRadius: 999, padding: '4px 10px' }}>
+          {c}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// "3 סטים × 10 חזרות" (or a hold time) plus the chips — the full
+// prescription on the detail screen, before the patient starts.
+function Dosage({ item }: { item: TodayItem }) {
+  const sets = item.sets ?? 1;
+  const per = item.reps ? `${item.reps} חזרות` : item.hold_sec ? `${item.hold_sec} שנ׳ החזקה` : null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--patient-text)' }}>
+        <bdi>{sets}</bdi> {sets === 1 ? 'סט' : 'סטים'}
+        {per && (
+          <>
+            {' × '}
+            <bdi>{per}</bdi>
+          </>
+        )}
+      </div>
+      <PrescriptionChips item={item} />
+    </div>
+  );
+}
+
+function ClinicianNote({ note }: { note: string }) {
+  return (
+    <div style={{ background: 'var(--patient-card-light)', borderInlineStart: '3px solid var(--patient-gold)', borderRadius: 10, padding: '10px 12px' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--patient-gold)', marginBottom: 3 }}>הערת המטפל · From your clinician</div>
+      <div style={{ fontSize: 13, color: 'var(--patient-text)', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{note}</div>
+    </div>
+  );
+}
+
+function vibrate(pattern: number | number[]) {
+  try {
+    navigator.vibrate?.(pattern);
+  } catch {
+    // unsupported (iOS) — the on-screen state is enough
+  }
+}
+
+// Optional countdown for a prescribed hold — tap at the start of each hold.
+// Deadline-based like RestTimer, so a backgrounded tab doesn't drift.
+function HoldTimer({ seconds }: { seconds: number }) {
+  const [endsAt, setEndsAt] = useState<number | null>(null);
+  const [remaining, setRemaining] = useState(seconds);
+
+  useEffect(() => {
+    if (endsAt === null) return;
+    const deadline = endsAt;
+    function tick() {
+      const secs = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      setRemaining(secs);
+      if (secs <= 0) {
+        vibrate([200, 100, 200]);
+        setEndsAt(null);
+      }
+    }
+    tick();
+    const id = setInterval(tick, 250);
+    return () => clearInterval(id);
+  }, [endsAt]);
+
+  const running = endsAt !== null;
+  return (
+    <button
+      onClick={() => {
+        setRemaining(seconds);
+        setEndsAt(running ? null : Date.now() + seconds * 1000);
+      }}
+      style={{
+        marginTop: 16,
+        padding: '10px 20px',
+        background: running ? 'var(--patient-card-light)' : 'transparent',
+        border: '1px solid var(--patient-gold)',
+        borderRadius: 999,
+        color: 'var(--patient-text)',
+        cursor: 'pointer',
+        fontSize: 14,
+        fontWeight: 600,
+        fontFamily: 'inherit',
+        minWidth: 190,
+      }}
+    >
+      {running ? (
+        <>
+          ⏱ <bdi>{remaining}</bdi> · עצור
+        </>
+      ) : (
+        <>
+          ▶ טיימר החזקה · <bdi>{seconds}</bdi> שנ׳
+        </>
+      )}
+    </button>
   );
 }
 
