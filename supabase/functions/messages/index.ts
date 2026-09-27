@@ -1,6 +1,7 @@
 // Edge Function: clinician side of the patient message thread.
 //   GET  /messages?patient_id=X   -> thread (marks patient messages read)
 //   GET  /messages?unread=1       -> { total, by_patient } unread map
+//   GET  /messages?inbox=1        -> { conversations } latest message + unread per patient
 //   POST /messages  { patient_id, body }  -> send a message
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
@@ -29,6 +30,17 @@ Deno.serve(withCors(async (req) => {
   if (req.method === 'GET') {
     if (url.searchParams.get('unread')) {
       const { data, error } = await svc.schema('app').rpc('messages_unread_clinician', {
+        p_clinician_id: user.id,
+      });
+      if (error) {
+        return new Response(JSON.stringify({ error: 'internal_error', details: error.message }), { status: 500 });
+      }
+      if (data?.error) return new Response(JSON.stringify(data), { status: 403 });
+      return new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (url.searchParams.get('inbox')) {
+      const { data, error } = await svc.schema('app').rpc('inbox_clinician', {
         p_clinician_id: user.id,
       });
       if (error) {

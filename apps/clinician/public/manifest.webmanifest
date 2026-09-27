@@ -1,0 +1,18 @@
+{
+  "id": "/app/",
+  "name": "ReCOVR Clinic",
+  "short_name": "ReCOVR Clinic",
+  "description": "ממשק המטפל — מעקב מטופלים, הודעות ותכניות",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "/app/dashboard",
+  "scope": "/app/",
+  "display": "standalone",
+  "theme_color": "#FBF6EC",
+  "background_color": "#FBF6EC",
+  "icons": [
+    { "src": "/app/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/app/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/app/icons/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

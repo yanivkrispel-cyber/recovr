@@ -1,4 +1,5 @@
 import { useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { t } from 'shared';
 import type { User } from 'shared';
@@ -12,7 +13,7 @@ import { SupabaseContext } from '../App';
 
 const TAB_BAR_HEIGHT = 60;
 
-type IconName = 'dashboard' | 'patients' | 'more';
+type IconName = 'dashboard' | 'patients' | 'messages' | 'more';
 
 function NavIcon({ name }: { name: IconName }) {
   const common = { width: 22, height: 22, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
@@ -33,6 +34,12 @@ function NavIcon({ name }: { name: IconName }) {
           <path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" />
           <path d="M16 4.6a3.5 3.5 0 0 1 0 6.8" />
           <path d="M21.5 20c0-2.8-1.6-4.9-4-5.7" />
+        </svg>
+      );
+    case 'messages':
+      return (
+        <svg {...common}>
+          <path d="M20.5 11.5a8.5 8.5 0 0 1-12.4 7.6L3.5 20.5l1.4-4.4A8.5 8.5 0 1 1 20.5 11.5z" />
         </svg>
       );
     case 'more':
@@ -68,10 +75,24 @@ const tabStyle: CSSProperties = {
 
 const tabActive: CSSProperties = { ...tabStyle, color: 'var(--gold-deep)' };
 
-function TabLink({ to, icon, label }: { to: string; icon: IconName; label: string }) {
+function TabLink({ to, icon, label, badge }: { to: string; icon: IconName; label: string; badge?: number }) {
   return (
     <Link to={to} style={tabStyle} activeProps={{ style: tabActive, 'aria-current': 'page' }}>
-      <NavIcon name={icon} />
+      <span style={{ position: 'relative', display: 'flex' }}>
+        <NavIcon name={icon} />
+        {badge ? (
+          <span
+            aria-label={t('clinician.messages.unread', { count: badge })}
+            style={{
+              position: 'absolute', top: -5, insetInlineStart: 13, minWidth: 17, height: 17, padding: '0 4px', boxSizing: 'border-box',
+              borderRadius: 9, background: 'var(--flag-red)', color: 'var(--cream)', fontSize: 10, fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid var(--shell-sidebar-bg)',
+            }}
+          >
+            {badge > 99 ? '99+' : badge}
+          </span>
+        ) : null}
+      </span>
       {label}
     </Link>
   );
@@ -145,7 +166,17 @@ function MoreSheet({ user, onClose }: { user: User; onClose: () => void }) {
 }
 
 export default function PhoneShell({ user, children }: { user: User; children: ReactNode }) {
+  const supabase = useContext(SupabaseContext);
   const online = useOnlineStatus();
+  const { data: unread } = useQuery({
+    queryKey: ['messages-unread'],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('messages?unread=1', { method: 'GET' });
+      if (error) throw error;
+      return (data as { total: number }).total;
+    },
+    refetchInterval: 30_000,
+  });
   const [moreOpen, setMoreOpen] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const inMore = MORE_ROUTES.some((r) => pathname.endsWith(r) || pathname.includes(`${r}/`));
@@ -191,6 +222,7 @@ export default function PhoneShell({ user, children }: { user: User; children: R
       >
         <TabLink to="/dashboard" icon="dashboard" label={t('clinician.dashboard.title')} />
         <TabLink to="/patients" icon="patients" label={t('clinician.patients.title')} />
+        <TabLink to="/messages" icon="messages" label={t('clinician.messages.title')} badge={unread} />
         <button
           onClick={() => setMoreOpen(true)}
           aria-haspopup="dialog"

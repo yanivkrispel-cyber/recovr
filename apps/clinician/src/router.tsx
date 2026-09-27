@@ -10,6 +10,11 @@ const PatientOverview = lazyWithRetry(() => import('./pages/PatientOverview'));
 const ExerciseLibrary = lazyWithRetry(() => import('./pages/ExerciseLibrary'));
 const Protocols = lazyWithRetry(() => import('./pages/Protocols'));
 const Settings = lazyWithRetry(() => import('./pages/Settings'));
+const Messages = lazyWithRetry(() => import('./pages/Messages'));
+const Chat = lazyWithRetry(() => import('./pages/Chat'));
+
+export const PATIENT_TABS = ['overview', 'plan', 'progress', 'assessments', 'history', 'messages'] as const;
+export type PatientTab = (typeof PATIENT_TABS)[number];
 
 function ViewFallback() {
   return (
@@ -55,6 +60,21 @@ const patientOverviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/patients/$patientId',
   component: PatientOverview,
+  validateSearch: (search: Record<string, unknown>): { tab?: PatientTab } => ({
+    tab: PATIENT_TABS.includes(search.tab as PatientTab) ? (search.tab as PatientTab) : undefined,
+  }),
+});
+
+const messagesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/messages',
+  component: Messages,
+});
+
+const chatRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/messages/$patientId',
+  component: Chat,
 });
 
 const protocolsRoute = createRoute({
@@ -83,6 +103,8 @@ const routeTree = rootRoute.addChildren([
   dashboardRoute,
   patientsRoute,
   patientOverviewRoute,
+  messagesRoute,
+  chatRoute,
   protocolsRoute,
   exercisesRoute,
   settingsRoute,

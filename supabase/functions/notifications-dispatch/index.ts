@@ -79,8 +79,10 @@ function deepLink(event: string, vars: NotifVars): string {
     case 'pain_spike':
       return vars.patient_id ? `/app/patients/${vars.patient_id}` : '/app/';
     case 'new_message':
-      // patient->clinician carries patient_id; clinician->patient does not
-      return vars.patient_id ? `/app/patients/${vars.patient_id}` : '/m/';
+      // patient->clinician carries patient_id; clinician->patient does not.
+      // The clinician route opens the chat on a phone and redirects to the
+      // patient page's Messages tab on desktop.
+      return vars.patient_id ? `/app/messages/${vars.patient_id}` : '/m/';
     default:
       return '/app/';
   }
