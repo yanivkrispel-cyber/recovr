@@ -1,9 +1,10 @@
 import { useContext, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { t, type BodyRegion } from 'shared';
-import { Badge, Button, EmptyState, Skeleton, useIsTablet } from 'ui';
+import { Badge, Button, EmptyState, Skeleton, useIsPhone, useIsTablet } from 'ui';
 import { AuthContext, SupabaseContext } from '../App';
 import AppShell from '../components/AppShell';
+import PhoneRow from '../components/PhoneRow';
 import EditProtocol from '../components/EditProtocol';
 
 interface ProtocolRow {
@@ -24,6 +25,7 @@ export default function Protocols() {
   const supabase = useContext(SupabaseContext);
   const queryClient = useQueryClient();
   const isTablet = useIsTablet(); // T-22: tablet is view-only for v1
+  const isPhone = useIsPhone();
 
   const [editorId, setEditorId] = useState<string | null | 'new'>(null);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
@@ -84,7 +86,7 @@ export default function Protocols() {
         </div>
 
         <div style={{ background: 'var(--shell-sidebar-bg)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-panel)', overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.4fr 0.7fr 0.7fr 1.3fr', padding: '12px 18px', fontSize: 11, color: 'var(--nav-inactive-text)', fontWeight: 600 }}>
+          <div className="m-hide" style={{ display: 'grid', gridTemplateColumns: '2.2fr 1.4fr 0.7fr 0.7fr 1.3fr', padding: '12px 18px', fontSize: 11, color: 'var(--nav-inactive-text)', fontWeight: 600 }}>
             <div>פרוטוקול · Protocol</div><div>אזור · Region</div><div>שלבים</div><div>גרסה</div><div />
           </div>
 
@@ -97,7 +99,20 @@ export default function Protocols() {
               לא נמצאו פרוטוקולים · No protocols found
             </div>
           ) : (
-            protocols?.map((p) => (
+            protocols?.map((p) => isPhone ? (
+              <div key={p.id} style={{ opacity: p.is_active ? 1 : 0.55 }}>
+                <PhoneRow
+                  onClick={() => setEditorId(p.id)}
+                  title={p.name}
+                  trailing={
+                    !p.is_active ? <Badge tone="neutral">בארכיון</Badge>
+                    : p.source === 'clinic' ? <Badge tone="neutral">נוצר על ידך</Badge>
+                    : undefined
+                  }
+                  meta={[p.name_en, p.body_region?.name, `${p.phase_count} שלבים`, `v${p.version}`]}
+                />
+              </div>
+            ) : (
               <div
                 key={p.id}
                 style={{

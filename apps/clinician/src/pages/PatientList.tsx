@@ -93,7 +93,7 @@ export default function PatientList() {
   return (
     <AppShell user={user}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
+        <div className="m-stack m-gap-sm" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
           <div>
             <div style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.01em', fontSize: 21, fontWeight: 700, color: 'var(--ink)' }}>
               {t('clinician.patients.title')} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--nav-inactive-text)' }}>Patients</span>
@@ -104,8 +104,9 @@ export default function PatientList() {
                 : `${patients?.length ?? 0} מטופלים פעילים · active patients`}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div className="m-full" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <input
+              className="m-grow"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="חפש מטופל... · Search patients..."
@@ -145,7 +146,7 @@ export default function PatientList() {
         </div>
 
         {isLoading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+          <div className="m-cols-1 m-gap-sm" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} style={{ background: 'var(--shell-sidebar-bg)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-panel)', padding: 18 }}>
                 <Skeleton count={3} height={16} />
@@ -171,7 +172,7 @@ export default function PatientList() {
             <EmptyState title={t('empty.patients.title')} body={t('empty.patients.body')} action={<Button size="sm">{t('empty.patients.action')}</Button>} />
           )
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+          <div className="m-cols-1 m-gap-sm" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
             {filtered!.map((p) => (
               <div
                 key={p.id}

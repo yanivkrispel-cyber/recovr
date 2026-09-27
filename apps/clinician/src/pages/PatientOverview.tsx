@@ -1,10 +1,11 @@
-import { useContext, useState, type CSSProperties } from 'react';
+import { useContext, useState, type CSSProperties, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { t } from 'shared';
-import { Badge, Button, Skeleton, EmptyState, Tab, Tabs, clickableDivProps, useIsTablet, useToast } from 'ui';
+import { Badge, Button, Skeleton, EmptyState, Tab, Tabs, clickableDivProps, useIsPhone, useIsTablet, useToast } from 'ui';
 import { AuthContext, SupabaseContext } from '../App';
 import AppShell from '../components/AppShell';
+import PhoneRow from '../components/PhoneRow';
 import EditPlan from '../components/EditPlan';
 import MeasurementPanel, { type JointEntry } from '../components/MeasurementPanel';
 import { computeFlag, flagColor, gapFlag, REGION_JOINT, ROM_JOINT_HE, ROM_JOINT_ORDER, sideGap, type FlagState } from '../lib/romFlags';
@@ -179,7 +180,7 @@ export default function PatientOverview() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           {pendingDeletion && (
-            <div style={{ border: '1px solid var(--flag-red)', background: 'rgba(158,59,46,0.06)', borderRadius: 'var(--radius-card)', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+            <div className="m-stack m-gap-sm" style={{ border: '1px solid var(--flag-red)', background: 'rgba(158,59,46,0.06)', borderRadius: 'var(--radius-card)', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
               <div style={{ fontSize: 13, color: 'var(--flag-red)' }}>
                 המטופל ביקש מחיקת נתונים ({new Date(pendingDeletion.requested_at).toLocaleDateString('he-IL')})
                 {pendingDeletion.reason ? ` · ${pendingDeletion.reason}` : ''}
@@ -199,7 +200,7 @@ export default function PatientOverview() {
               </Button>
             </div>
           )}
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <div className="m-stack m-gap-sm" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
             <div>
               <button
                 onClick={() => navigate({ to: '/dashboard' })}
@@ -312,7 +313,7 @@ function OverviewTab({ data, patientId }: { data: OverviewData; patientId: strin
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18, paddingTop: 18 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+      <div className="m-cols-2 m-gap-sm" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
         <div style={kpiCardStyle()}>
           <div style={{ fontSize: 11, color: 'var(--nav-inactive-text)' }}>היענות · Adherence</div>
           <div style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.01em', fontSize: 22, fontWeight: 700, color: 'var(--ink)', marginTop: 6 }}>
@@ -340,7 +341,7 @@ function OverviewTab({ data, patientId }: { data: OverviewData; patientId: strin
       </div>
 
       {topAlert && (
-        <div style={{ background: 'var(--pill-attention-bg)', border: '1px solid #E9BFB2', borderRadius: 'var(--radius-card)', padding: '16px 18px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div className="m-gap-sm" style={{ background: 'var(--pill-attention-bg)', border: '1px solid #E9BFB2', borderRadius: 'var(--radius-card)', padding: '16px 18px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <div>
             <div style={{ fontWeight: 700, color: 'var(--flag-red)', fontSize: 13 }}>דורש בדיקה · Needs Review</div>
             <div style={{ fontSize: 13, color: '#5A2C21', marginTop: 4 }}>{topAlert.type}</div>
@@ -398,6 +399,7 @@ function OverviewTab({ data, patientId }: { data: OverviewData; patientId: strin
 
 function PlanTab({ data, patientId, onEditPlan, isTablet }: { data: OverviewData; patientId: string; onEditPlan: () => void; isTablet: boolean }) {
   const supabase = useContext(SupabaseContext);
+  const isPhone = useIsPhone();
 
   const { data: plan, isLoading } = useQuery({
     queryKey: ['plan', patientId],
@@ -481,7 +483,7 @@ function PlanTab({ data, patientId, onEditPlan, isTablet }: { data: OverviewData
           )}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 0.4fr 0.4fr', padding: '10px 18px', fontSize: 11, color: 'var(--nav-inactive-text)', fontWeight: 600 }}>
+        <div className="m-hide" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 0.4fr 0.4fr', padding: '10px 18px', fontSize: 11, color: 'var(--nav-inactive-text)', fontWeight: 600 }}>
           <div>תרגיל · Exercise</div><div>מרשם · Prescription</div><div>תדירות · Frequency</div><div>סטטוס · Status</div><div /><div />
         </div>
 
@@ -492,7 +494,17 @@ function PlanTab({ data, patientId, onEditPlan, isTablet }: { data: OverviewData
             <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>אין תרגילים בשלב זה</div>
           </div>
         ) : (
-          activeExercises.map((ex) => (
+          activeExercises.map((ex) => isPhone ? (
+            <PhoneRow
+              key={ex.id}
+              title={<span style={{ color: 'var(--gold-deep)' }}>{ex.name}</span>}
+              meta={[
+                ex.name_en,
+                `${ex.sets ?? '—'} × ${ex.reps ?? '—'}`,
+                ex.frequency_days_per_week ? `${ex.frequency_days_per_week}x/שבוע` : null,
+              ]}
+            />
+          ) : (
             <div key={ex.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 0.4fr 0.4fr', padding: '12px 18px', borderTop: '1px solid var(--shell-border-soft)', alignItems: 'center' }}>
               <div style={{ fontSize: 13, color: 'var(--gold-deep)', fontWeight: 600 }}>
                 {ex.name} <span style={{ fontWeight: 400, color: 'var(--nav-inactive-text)', fontSize: 11 }}>{ex.name_en}</span>
@@ -655,7 +667,18 @@ function trendSparkline(history: JointEntry['history']): { points: string; delta
   return { points, delta: Math.round((values[values.length - 1] - values[0]) * 10) / 10 };
 }
 
+/** Phone layout: a table cell with its column header shown above it. */
+function PhoneStat({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontSize: 10, color: 'var(--nav-inactive-text)', marginBottom: 3 }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
 function AssessmentsTab({ patientId, patientName, protocolSlug, isTablet }: { patientId: string; patientName: string; protocolSlug: string | null; isTablet: boolean }) {
+  const isPhone = useIsPhone();
   const supabase = useContext(SupabaseContext);
   const queryClient = useQueryClient();
   const defaultJoint = (protocolSlug && REGION_JOINT[protocolSlug]) || 'knee';
@@ -798,7 +821,7 @@ function AssessmentsTab({ patientId, patientName, protocolSlug, isTablet }: { pa
           {joint === defaultJoint && <span style={{ fontSize: 10, color: 'var(--nav-inactive-text)' }}>• מפרק הפרוטוקול</span>}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 0.8fr 0.8fr 1fr 1.2fr 0.9fr', padding: '10px 18px', fontSize: 11, color: 'var(--nav-inactive-text)', fontWeight: 600, background: 'var(--shell-content-bg)' }}>
+        <div className="m-hide" style={{ display: 'grid', gridTemplateColumns: '1.7fr 0.8fr 0.8fr 1fr 1.2fr 0.9fr', padding: '10px 18px', fontSize: 11, color: 'var(--nav-inactive-text)', fontWeight: 600, background: 'var(--shell-content-bg)' }}>
           <div>תנועה · Motion</div><div>פגוע</div><div>בריא</div><div>סימטריה</div><div>מול נורמה ויעד</div><div>מגמה</div>
         </div>
 
@@ -833,55 +856,91 @@ function AssessmentsTab({ patientId, patientName, protocolSlug, isTablet }: { pa
             const normPct = involved && def.norm ? Math.round((involved.value / def.norm) * 100) : null;
             const { points, delta } = trendSparkline(history);
 
+            const nameCell = (
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>
+                  {def.name_he}
+                  {def.protocol_tip && <span title={def.protocol_tip} style={{ fontSize: 10, color: 'var(--gold-deep)', cursor: 'help' }}> ⓘ</span>}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--nav-inactive-text)', marginTop: 2 }}>
+                  {def.name_en}{def.norm != null ? ` · נורמה ${def.norm}${unit}` : ''}
+                </div>
+              </div>
+            );
+            const involvedCell = (
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, fontWeight: 700, color: 'var(--ink)' }}>
+                {involved ? `${involved.value}${unit}` : '—'}
+              </div>
+            );
+            const healthyCell = (
+              <div style={{ fontSize: 14, color: 'var(--ink-soft)' }}>
+                {bilat ? (healthy ? `${healthy.value}${unit}` : '—') : '—'}
+              </div>
+            );
+            const symCell = (
+              <div>
+                <span style={{ display: 'inline-block', whiteSpace: 'nowrap', background: symState === 'red' ? 'var(--pill-attention-bg)' : symState === 'green' ? 'var(--pill-good-bg)' : 'var(--sand)', color: symState === 'red' ? 'var(--flag-red)' : symState === 'green' ? 'var(--flag-green)' : 'var(--nav-inactive-text)', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', padding: '4px 10px', borderRadius: 'var(--radius-pill)' }}>
+                  {symLabel}
+                </span>
+              </div>
+            );
+            const normCell = (
+              <div>
+                <div style={{ position: 'relative', height: 8, borderRadius: 'var(--radius-pill)', background: 'var(--shell-border-soft)', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', insetInlineStart: 0, top: 0, bottom: 0, width: `${barPct}%`, background: flagColor(flag) }} />
+                </div>
+                {def.target != null && <div style={{ fontSize: 10, color: 'var(--nav-inactive-text)', marginTop: 5 }}>יעד השלב {def.target}{unit}</div>}
+                {normPct != null && <div style={{ fontSize: 10, color: 'var(--gold-deep)', marginTop: 2 }}>{normPct}% מנורמה</div>}
+              </div>
+            );
+            const trendCell = (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {points ? (
+                  <>
+                    <svg viewBox="0 0 60 20" style={{ width: 60, height: 20, overflow: 'visible' }}>
+                      <polyline points={points} fill="none" stroke="var(--flag-green)" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" />
+                    </svg>
+                    {delta != null && (
+                      <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--flag-green)', whiteSpace: 'nowrap' }}>
+                        {delta >= 0 ? '↑' : '↓'} {Math.abs(delta)}{unit}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span style={{ fontSize: 11, color: 'var(--nav-inactive-text)' }}>—</span>
+                )}
+              </div>
+            );
+
+            if (isPhone) {
+              return (
+                <div
+                  key={def.code}
+                  {...clickableDivProps(() => setSelectedCode(def.code))}
+                  style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '10px 12px', padding: '13px 16px', borderTop: '1px solid var(--shell-border-soft)', alignItems: 'end', cursor: 'pointer' }}
+                >
+                  <div style={{ gridColumn: '1 / -1' }}>{nameCell}</div>
+                  <PhoneStat label="פגוע">{involvedCell}</PhoneStat>
+                  <PhoneStat label="בריא">{healthyCell}</PhoneStat>
+                  <PhoneStat label="סימטריה">{symCell}</PhoneStat>
+                  <div style={{ gridColumn: '1 / 3' }}>{normCell}</div>
+                  {trendCell}
+                </div>
+              );
+            }
+
             return (
               <div
                 key={def.code}
                 {...clickableDivProps(() => setSelectedCode(def.code))}
                 style={{ display: 'grid', gridTemplateColumns: '1.7fr 0.8fr 0.8fr 1fr 1.2fr 0.9fr', padding: '13px 18px', borderTop: '1px solid var(--shell-border-soft)', alignItems: 'center', cursor: 'pointer' }}
               >
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>
-                    {def.name_he}
-                    {def.protocol_tip && <span title={def.protocol_tip} style={{ fontSize: 10, color: 'var(--gold-deep)', cursor: 'help' }}> ⓘ</span>}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--nav-inactive-text)', marginTop: 2 }}>
-                    {def.name_en}{def.norm != null ? ` · נורמה ${def.norm}${unit}` : ''}
-                  </div>
-                </div>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: 19, fontWeight: 700, color: 'var(--ink)' }}>
-                  {involved ? `${involved.value}${unit}` : '—'}
-                </div>
-                <div style={{ fontSize: 14, color: 'var(--ink-soft)' }}>
-                  {bilat ? (healthy ? `${healthy.value}${unit}` : '—') : '—'}
-                </div>
-                <div>
-                  <span style={{ display: 'inline-block', whiteSpace: 'nowrap', background: symState === 'red' ? 'var(--pill-attention-bg)' : symState === 'green' ? 'var(--pill-good-bg)' : 'var(--sand)', color: symState === 'red' ? 'var(--flag-red)' : symState === 'green' ? 'var(--flag-green)' : 'var(--nav-inactive-text)', fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', padding: '4px 10px', borderRadius: 'var(--radius-pill)' }}>
-                    {symLabel}
-                  </span>
-                </div>
-                <div>
-                  <div style={{ position: 'relative', height: 8, borderRadius: 'var(--radius-pill)', background: 'var(--shell-border-soft)', overflow: 'hidden' }}>
-                    <div style={{ position: 'absolute', insetInlineStart: 0, top: 0, bottom: 0, width: `${barPct}%`, background: flagColor(flag) }} />
-                  </div>
-                  {def.target != null && <div style={{ fontSize: 10, color: 'var(--nav-inactive-text)', marginTop: 5 }}>יעד השלב {def.target}{unit}</div>}
-                  {normPct != null && <div style={{ fontSize: 10, color: 'var(--gold-deep)', marginTop: 2 }}>{normPct}% מנורמה</div>}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {points ? (
-                    <>
-                      <svg viewBox="0 0 60 20" style={{ width: 60, height: 20, overflow: 'visible' }}>
-                        <polyline points={points} fill="none" stroke="var(--flag-green)" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" />
-                      </svg>
-                      {delta != null && (
-                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--flag-green)', whiteSpace: 'nowrap' }}>
-                          {delta >= 0 ? '↑' : '↓'} {Math.abs(delta)}{unit}
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    <span style={{ fontSize: 11, color: 'var(--nav-inactive-text)' }}>—</span>
-                  )}
-                </div>
+                {nameCell}
+                {involvedCell}
+                {healthyCell}
+                {symCell}
+                {normCell}
+                {trendCell}
               </div>
             );
           })

@@ -15,6 +15,20 @@
     -webkit-text-size-adjust: 100%;
   }
 
+  /* iOS Safari zooms the page into any field under 16px on focus. */
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+
+  /* Any tab strip (ui Tabs) scrolls sideways instead of overflowing. */
+  [role="tablist"] {
+    overflow-x: auto;
+    scrollbar-width: none;
+    gap: 16px !important;
+  }
+  [role="tablist"]::-webkit-scrollbar { display: none; }
+  [role="tablist"] > [role="tab"] { flex: none; white-space: nowrap; }
+
   .m-hide { display: none !important; }
   .m-full { width: 100% !important; max-width: 100% !important; min-width: 0 !important; box-sizing: border-box !important; }
   .m-wrap { flex-wrap: wrap !important; }
@@ -23,6 +37,9 @@
   .m-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   .m-scroll-x { overflow-x: auto !important; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
   .m-scroll-x::-webkit-scrollbar { display: none; }
+  .m-scroll-x > * { flex: none !important; white-space: nowrap !important; }
   .m-pad { padding: 14px 16px !important; }
   .m-gap-sm { gap: 10px !important; }
+  .m-grow { flex: 1 1 auto !important; width: auto !important; min-width: 0 !important; }
+  .m-pad-card { padding: 14px !important; }
 }

@@ -2,10 +2,11 @@ import { useContext, useState, type CSSProperties } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { t } from 'shared';
-import { Badge, Button, EmptyState, Skeleton, clickableDivProps } from 'ui';
+import { Badge, Button, EmptyState, Skeleton, clickableDivProps, useIsPhone } from 'ui';
 import type { Alert } from 'shared';
 import { SupabaseContext, AuthContext } from '../App';
 import AppShell from '../components/AppShell';
+import PhoneRow from '../components/PhoneRow';
 import { enablePush } from '../lib/push';
 
 type PatientRow = {
@@ -45,6 +46,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<'all' | 'attention' | 'ready' | 'inactive'>('all');
   const [notifOpen, setNotifOpen] = useState(false);
+  const isPhone = useIsPhone();
   const queryClient = useQueryClient();
 
   const { data: kpis, isLoading: kpisLoading, error: kpisError } = useQuery({
@@ -173,9 +175,9 @@ export default function Dashboard() {
             action={<Button size="sm" onClick={() => queryClient.invalidateQueries({ queryKey: ['dashboard-kpis'] })}>{t('error.generic.action')}</Button>}
           />
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+          <div className="m-cols-2 m-gap-sm" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
             {kpiCards.map((kpi) => (
-              <div key={kpi.label} style={{ background: 'var(--shell-sidebar-bg)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-card)', padding: 18 }}>
+              <div key={kpi.label} className="m-pad-card" style={{ background: 'var(--shell-sidebar-bg)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-card)', padding: 18 }}>
                 <div style={{ fontSize: 12, color: 'var(--nav-inactive-text)' }}>
                   {kpi.label} <span style={{ opacity: 0.7 }}>{kpi.labelEn}</span>
                 </div>
@@ -188,8 +190,8 @@ export default function Dashboard() {
         )}
 
         <div style={{ background: 'var(--shell-sidebar-bg)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-panel)', overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', borderBottom: '1px solid var(--shell-border)' }}>
-            <div style={{ display: 'flex', gap: 8 }}>
+          <div className="m-stack m-gap-sm m-pad" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', borderBottom: '1px solid var(--shell-border)' }}>
+            <div className="m-scroll-x" style={{ display: 'flex', gap: 8 }}>
               {FILTERS.map(([key, label, labelEn]) => (
                 <button key={key} onClick={() => setFilter(key)} style={chipStyle(filter === key)}>
                   {label} · {labelEn}
@@ -201,7 +203,7 @@ export default function Dashboard() {
             </Button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.6fr 1fr 1fr 1fr 1.2fr', padding: '12px 18px', fontSize: 11, color: 'var(--nav-inactive-text)', fontWeight: 600 }}>
+          <div className="m-hide" style={{ display: 'grid', gridTemplateColumns: '2fr 1.6fr 1fr 1fr 1fr 1.2fr', padding: '12px 18px', fontSize: 11, color: 'var(--nav-inactive-text)', fontWeight: 600 }}>
             <div>מטופל · Patient</div>
             <div>אבחנה · Condition</div>
             <div>שלב · Phase</div>
@@ -227,7 +229,24 @@ export default function Dashboard() {
               {filter === 'all' ? t('empty.patients.title') : t('empty.patients.filtered.title')}
             </div>
           ) : (
-            patients?.map((row) => (
+            patients?.map((row) => isPhone ? (
+              <PhoneRow
+                key={row.id}
+                onClick={() => navigate({ to: '/patients/$patientId', params: { patientId: row.id } })}
+                title={row.name}
+                trailing={
+                  <Badge tone={row.status === 'pending' ? 'neutral' : row.status === 'attention' || row.status === 'inactive' ? 'attention' : 'success'}>
+                    {statusLabel[row.status]}
+                  </Badge>
+                }
+                meta={[
+                  row.injury,
+                  row.status === 'pending' ? null : row.phaseName,
+                  row.adherence == null ? null : `היענות ${row.adherence}%`,
+                  row.lastActivity,
+                ]}
+              />
+            ) : (
               <div
                 key={row.id}
                 {...clickableDivProps(() => navigate({ to: '/patients/$patientId', params: { patientId: row.id } }))}
