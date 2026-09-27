@@ -175,6 +175,8 @@ export const he = {
   'clinician.assessments.nav_en': 'Assessments',
   'clinician.settings.nav': 'הגדרות',
   'clinician.settings.nav_en': 'Settings',
+  'clinician.nav.more': 'עוד',
+  'clinician.nav.menu': 'תפריט',
   'clinician.plan.edit': 'עריכת תוכנית',
   'clinician.plan.save': 'שמור תוכנית',
   'clinician.plan.discard': 'בטל שינויים',

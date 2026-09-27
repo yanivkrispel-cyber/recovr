@@ -2,8 +2,9 @@ import { useContext, type CSSProperties, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { t } from 'shared';
 import type { User } from 'shared';
-import { Logo, useOnlineStatus } from 'ui';
+import { Logo, useIsPhone, useOnlineStatus } from 'ui';
 import { SupabaseContext } from '../App';
+import PhoneShell from './PhoneShell';
 
 interface AppShellProps {
   user: User;
@@ -53,6 +54,12 @@ function NavItem({ to, label, labelEn }: { to: string; label: string; labelEn: s
 }
 
 export default function AppShell({ user, children }: AppShellProps) {
+  const isPhone = useIsPhone();
+  if (isPhone) return <PhoneShell user={user}>{children}</PhoneShell>;
+  return <DesktopShell user={user}>{children}</DesktopShell>;
+}
+
+function DesktopShell({ user, children }: AppShellProps) {
   const supabase = useContext(SupabaseContext);
   const online = useOnlineStatus();
   const initials = user.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('');

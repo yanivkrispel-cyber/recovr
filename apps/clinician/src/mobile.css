@@ -1,0 +1,28 @@
+/* Phone layout for the clinician app.
+ *
+ * The app is styled with inline styles and designed desktop-first. Phone
+ * support is layered on with these utility classes, which do nothing outside
+ * the phone breakpoint — desktop and tablet render exactly as before.
+ * Inline styles win over classes, hence the !important on every rule.
+ *
+ * Breakpoint must match PHONE_MAX_WIDTH in packages/ui/src/hooks/useIsPhone.ts.
+ * Use useIsPhone() instead when the structure itself changes (different
+ * components), and these classes when only the layout of the same DOM does.
+ */
+
+@media (max-width: 767px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .m-hide { display: none !important; }
+  .m-full { width: 100% !important; max-width: 100% !important; min-width: 0 !important; box-sizing: border-box !important; }
+  .m-wrap { flex-wrap: wrap !important; }
+  .m-stack { flex-direction: column !important; align-items: stretch !important; }
+  .m-cols-1 { grid-template-columns: minmax(0, 1fr) !important; }
+  .m-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .m-scroll-x { overflow-x: auto !important; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .m-scroll-x::-webkit-scrollbar { display: none; }
+  .m-pad { padding: 14px 16px !important; }
+  .m-gap-sm { gap: 10px !important; }
+}
