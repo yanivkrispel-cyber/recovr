@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Skeleton, QueryError, clickableDivProps } from 'ui';
 import { t } from 'shared';
 import { secondaryLabel } from '../lib/label';
 import { TODAY_KEY, fetchToday } from '../lib/today';
+import type { ExerciseMode } from '../App';
 
 interface TodayItem {
   id: string;
@@ -25,13 +26,22 @@ interface Today {
 }
 
 interface HomeProps {
-  onStartExercise: (index: number) => void;
+  onStartExercise: (index: number, mode: ExerciseMode) => void;
+  /** Plan item just finished in single mode — its row flashes on return. */
+  justCompletedId?: string | null;
   onOpenProgress: () => void;
   onOpenEducation: () => void;
 }
 
-export default function Home({ onStartExercise, onOpenProgress, onOpenEducation }: HomeProps) {
+export default function Home({ onStartExercise, justCompletedId, onOpenProgress, onOpenEducation }: HomeProps) {
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [flashId, setFlashId] = useState<string | null>(justCompletedId ?? null);
+
+  useEffect(() => {
+    if (!flashId) return;
+    const t = setTimeout(() => setFlashId(null), 2400);
+    return () => clearTimeout(t);
+  }, [flashId]);
 
   const { data, isLoading, error, refetch } = useQuery<Today | null>({
     queryKey: TODAY_KEY,
@@ -121,7 +131,7 @@ export default function Home({ onStartExercise, onOpenProgress, onOpenEducation 
           </div>
         ) : (
           <button
-            onClick={() => onStartExercise(Math.max(0, firstIncompleteIdx))}
+            onClick={() => onStartExercise(Math.max(0, firstIncompleteIdx), 'sequence')}
             style={{ background: 'var(--patient-gold)', color: 'var(--patient-gold-ink)', border: 'none', borderRadius: 999, padding: 13, fontSize: 14, fontWeight: 700, letterSpacing: '0.03em', cursor: 'pointer', fontFamily: 'inherit', marginTop: 4, width: '100%' }}
           >
             {data.progress.done > 0 ? 'המשך' : 'התחל'} את התכנית · Start Today's Plan
@@ -154,8 +164,13 @@ export default function Home({ onStartExercise, onOpenProgress, onOpenEducation 
         {data.items.map((item, idx) => (
           <div
             key={item.id}
-            {...clickableDivProps(() => onStartExercise(idx))}
-            style={{ background: 'var(--patient-card)', border: '1px solid var(--patient-border)', borderRadius: 12, padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
+            {...clickableDivProps(() => onStartExercise(idx, 'single'))}
+            style={{
+              background: flashId === item.id ? 'rgba(127,185,140,.16)' : 'var(--patient-card)',
+              border: `1px solid ${flashId === item.id ? 'var(--patient-success)' : 'var(--patient-border)'}`,
+              transition: 'background .6s ease, border-color .6s ease',
+              borderRadius: 12, padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer',
+            }}
           >
             {item.done ? (
               <span style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--patient-success)', color: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, flex: 'none' }}>✓</span>
@@ -171,8 +186,12 @@ export default function Home({ onStartExercise, onOpenProgress, onOpenEducation 
                   </span>
                 )}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--patient-muted)' }}><bdi>{item.sets} × {item.reps}</bdi></div>
+              <div style={{ fontSize: 11, color: 'var(--patient-muted)' }}>
+                <bdi>{item.sets} × {item.reps}</bdi>
+                {flashId === item.id && <span style={{ color: 'var(--patient-success)', fontWeight: 600 }}> · בוצע ✓</span>}
+              </div>
             </div>
+            <span aria-hidden="true" style={{ color: 'var(--patient-dim)', fontSize: 16, flex: 'none' }}>‹</span>
           </div>
         ))}
       </div>

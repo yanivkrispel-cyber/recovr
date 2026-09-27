@@ -4,14 +4,19 @@ import { uuidv7 } from 'offline';
 import { sessionItemSchema, type SessionItemInput } from 'shared';
 import { YouTubeFacade, useOnlineStatus } from 'ui';
 import { secondaryLabel } from '../lib/label';
+import type { ExerciseMode } from '../App';
 import FeedbackForm from '../components/FeedbackForm';
 import { sessionQueue } from '../lib/sessionQueue';
 import { TODAY_KEY, fetchToday, markDoneLocally } from '../lib/today';
 
 interface ExerciseFlowProps {
   index: number;
+  mode: ExerciseMode;
   onAdvance: (nextIndex: number) => void;
+  /** Nothing left for today — show the completion screen. */
   onComplete: () => void;
+  /** Single mode: this one exercise is logged, back to Home. */
+  onSingleDone: (planExerciseId: string) => void;
   onCancel: () => void;
 }
 
@@ -284,7 +289,7 @@ function findNextIncomplete(
   return null;
 }
 
-export default function ExerciseFlow({ index, onAdvance, onComplete, onCancel }: ExerciseFlowProps) {
+export default function ExerciseFlow({ index, mode, onAdvance, onComplete, onSingleDone, onCancel }: ExerciseFlowProps) {
   const queryClient = useQueryClient();
 
   const { data } = useQuery<Today | null>({
@@ -375,10 +380,12 @@ export default function ExerciseFlow({ index, onAdvance, onComplete, onCancel }:
 
     const locallyDone = await sessionQueue.getQueuedPlanExerciseIds(activeSessionId);
     const nextIndex = findNextIncomplete(items, index, locallyDone);
-    if (nextIndex !== null) {
-      onAdvance(nextIndex);
-    } else {
+    if (nextIndex === null) {
       onComplete();
+    } else if (mode === 'single') {
+      onSingleDone(item.id);
+    } else {
+      onAdvance(nextIndex);
     }
   }
 
@@ -395,6 +402,12 @@ export default function ExerciseFlow({ index, onAdvance, onComplete, onCancel }:
           <div style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.01em', fontSize: 18, fontWeight: 700, color: 'var(--patient-text)' }}>
             {item.exercise.name} {secondaryLabel(item.exercise.name, item.exercise.name_en) && <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--patient-muted)' }}>{secondaryLabel(item.exercise.name, item.exercise.name_en)}</span>}
           </div>
+
+          {item.done && (
+            <div style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--patient-success)', background: 'rgba(127,185,140,.16)', borderRadius: 999, padding: '4px 10px' }}>
+              ✓ בוצע היום <span style={{ fontWeight: 400, opacity: 0.8 }}>· Done today</span>
+            </div>
+          )}
 
           <ExerciseMediaFrame media={item.exercise.media} name={item.exercise.name} />
           <ExerciseVideoSection media={item.exercise.media} name={item.exercise.name} />
@@ -438,7 +451,7 @@ export default function ExerciseFlow({ index, onAdvance, onComplete, onCancel }:
               fontFamily: 'inherit',
             }}
           >
-            Start Exercise · התחל תרגיל
+            {item.done ? 'Do it again · בצע שוב' : 'Start Exercise · התחל תרגיל'}
           </button>
         </div>
       )}

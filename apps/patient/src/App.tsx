@@ -47,15 +47,20 @@ function isPrintRoute(): boolean {
 
 const ACTIVE_EXERCISE_KEY = 'rehab:activeView';
 
+// 'sequence' walks through every exercise left today (the "start today's
+// plan" button); 'single' is one exercise picked from the list, after which
+// the patient goes straight back home.
+export type ExerciseMode = 'single' | 'sequence';
+
 // Restores the exercise flow across a reload or an app restart mid-session —
 // see T-11 "interrupting mid-session and returning restores exact position".
-function loadActiveExercise(): { view: View; index: number } | null {
+function loadActiveExercise(): { view: View; index: number; mode: ExerciseMode } | null {
   try {
     const raw = localStorage.getItem(ACTIVE_EXERCISE_KEY);
     if (!raw) return null;
     const saved = JSON.parse(raw);
     if (saved.view === 'exercise' && typeof saved.index === 'number') {
-      return { view: 'exercise', index: saved.index };
+      return { view: 'exercise', index: saved.index, mode: saved.mode === 'single' ? 'single' : 'sequence' };
     }
     return null;
   } catch {
@@ -93,6 +98,9 @@ export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined); // undefined = still loading
   const [view, setView] = useState<View>(() => loadActiveExercise()?.view ?? 'home');
   const [activeExerciseIndex, setActiveExerciseIndex] = useState(() => loadActiveExercise()?.index ?? 0);
+  const [exerciseMode, setExerciseMode] = useState<ExerciseMode>(() => loadActiveExercise()?.mode ?? 'sequence');
+  // The plan item just finished in single mode — Home flashes its row.
+  const [justCompletedId, setJustCompletedId] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -150,17 +158,22 @@ export default function App() {
     return () => navigator.serviceWorker.removeEventListener('message', onMessage);
   }, [queryClient]);
 
+  // The row flash belongs to the return from that one exercise only.
+  useEffect(() => {
+    if (view !== 'home') setJustCompletedId(null);
+  }, [view]);
+
   useEffect(() => {
     try {
       if (view === 'exercise') {
-        localStorage.setItem(ACTIVE_EXERCISE_KEY, JSON.stringify({ view, index: activeExerciseIndex }));
+        localStorage.setItem(ACTIVE_EXERCISE_KEY, JSON.stringify({ view, index: activeExerciseIndex, mode: exerciseMode }));
       } else {
         localStorage.removeItem(ACTIVE_EXERCISE_KEY);
       }
     } catch {
       // storage unavailable — position just won't be restored
     }
-  }, [view, activeExerciseIndex]);
+  }, [view, activeExerciseIndex, exerciseMode]);
 
   if (inviteToken) {
     return (
@@ -204,10 +217,13 @@ export default function App() {
         <Suspense fallback={<ViewFallback />}>
           {view === 'home' && (
             <Home
-              onStartExercise={(index) => {
+              onStartExercise={(index, mode) => {
                 setActiveExerciseIndex(index);
+                setExerciseMode(mode);
+                setJustCompletedId(null);
                 setView('exercise');
               }}
+              justCompletedId={justCompletedId}
               onOpenProgress={() => setView('progress')}
               onOpenEducation={() => setView('education')}
             />
@@ -216,8 +232,13 @@ export default function App() {
             <ExerciseFlow
               key={activeExerciseIndex}
               index={activeExerciseIndex}
+              mode={exerciseMode}
               onAdvance={(nextIndex) => setActiveExerciseIndex(nextIndex)}
               onComplete={() => setView('completion')}
+              onSingleDone={(itemId) => {
+                setJustCompletedId(itemId);
+                setView('home');
+              }}
               onCancel={() => setView('home')}
             />
           )}
