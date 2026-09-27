@@ -4,7 +4,6 @@
     "public": "firebase-public",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "cleanUrls": true,
-    "trailingSlash": false,
     "rewrites": [
       { "source": "/app/**", "destination": "/app/index.html" },
       { "source": "/m/**", "destination": "/m/index.html" }
