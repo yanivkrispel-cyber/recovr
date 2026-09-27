@@ -214,6 +214,8 @@ export const he = {
   'picker.filter.clear': 'נקה סינון',
   'picker.results': 'מוצגים {shown} מתוך {total}',
   'picker.load_more': 'טען עוד',
+  'picker.filter.toggle': 'סינון',
+  'picker.basket.back': 'חזרה לתרגילים',
   'picker.recommended.heading': 'מומלצים לשלב {phase_n}',
   'picker.recommended.heading_no_phase': 'מומלצים להקשר הזה',
   'picker.recommended.explainer': 'הדירוג מבוסס על ספריית הפרוטוקולים ועל הבחירות בקליניקה שלך. ההחלטה תמיד שלך.',

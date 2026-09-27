@@ -40,6 +40,55 @@
   .m-scroll-x > * { flex: none !important; white-space: nowrap !important; }
   .m-pad { padding: 14px 16px !important; }
   .m-gap-sm { gap: 10px !important; }
-  .m-grow { flex: 1 1 auto !important; width: auto !important; min-width: 0 !important; }
+  .m-grow { flex: 1 1 0% !important; width: auto !important; min-width: 0 !important; }
+  .m-fill { flex: 1 1 auto !important; min-height: 0 !important; }
+  /* Scrolling flex column: children keep their height instead of shrinking to fit. */
+  .m-fill > * { flex-shrink: 0; }
+
+  /* EditPlan / EditProtocol: the phase column becomes a strip on top. */
+  .m-phase-strip {
+    width: auto !important;
+    flex-direction: row !important;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 10px 12px !important;
+    border-inline-end: none !important;
+    border-bottom: 1px solid var(--shell-border);
+  }
+  .m-phase-strip::-webkit-scrollbar { display: none; }
+  .m-phase-strip > * { flex: none; white-space: nowrap; padding: 8px 16px !important; }
+
+  /* Criteria editor rows: description on its own line, the rest below. */
+  .m-crit { flex-wrap: wrap !important; }
+  .m-crit > :first-child { flex: 1 1 100% !important; }
+
+  /* ExercisePicker: search on its own row, views as chips, basket as a
+     full-screen pane opened from the bottom bar. */
+  .m-picker-header { padding: calc(10px + env(safe-area-inset-top)) 12px 10px !important; }
+  .m-picker-search { order: 3; flex: 1 1 100% !important; max-width: none !important; margin-inline: 0 !important; }
+  .m-picker-nav {
+    width: auto !important;
+    flex-direction: row !important;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px !important;
+    padding: 8px 12px !important;
+    border-inline-end: none !important;
+    border-bottom: 1px solid var(--shell-border);
+    max-height: 45vh;
+    flex: none !important;
+  }
+  .m-picker-nav > .m-full { margin-block-start: 6px !important; padding-block-start: 10px !important; }
+  .m-basket { display: none !important; }
+  .m-basket.is-open {
+    display: flex !important;
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    width: auto !important;
+    border: none !important;
+  }
+  .m-safe-bottom { padding-bottom: calc(14px + env(safe-area-inset-bottom)) !important; }
+
   .m-pad-card { padding: 14px !important; }
 }

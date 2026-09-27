@@ -3,7 +3,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import {
   EXERCISE_CATEGORIES, equipmentLabel, exerciseCategoryLabel, formatRecommendReason, t, type BodyRegion, type I18nKey,
 } from 'shared';
-import { Button, Checkbox, EmptyState, QueryError, Select, Skeleton } from 'ui';
+import { Button, Checkbox, EmptyState, QueryError, Select, Skeleton, useIsPhone } from 'ui';
 import { SupabaseContext } from '../App';
 import ExerciseDetailDrawer from './ExerciseDetailDrawer';
 import ExercisePickerCard, { formatPrescription, type PickerCardData } from './ExercisePickerCard';
@@ -107,6 +107,14 @@ export default function ExercisePicker({ open, onClose, context, existingIds, do
   const supabase = useContext(SupabaseContext);
   const queryClient = useQueryClient();
   const searchRef = useRef<HTMLInputElement>(null);
+  const isPhone = useIsPhone();
+  // Read inside the open-reset effect without making a breakpoint change
+  // (e.g. rotating a phone) reset the picker session.
+  const isPhoneRef = useRef(isPhone);
+  isPhoneRef.current = isPhone;
+  // Phone: one pane at a time — results, or the basket over them.
+  const [basketOpen, setBasketOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [view, setView] = useState<View>('recommended');
   const [query, setQuery] = useState('');
@@ -140,6 +148,10 @@ export default function ExercisePicker({ open, onClose, context, existingIds, do
     setSelected([]);
     setFavOverrides({});
     setDetailId(null);
+    setBasketOpen(false);
+    setFiltersOpen(false);
+    // On a phone, focusing would throw the keyboard over the recommendations.
+    if (isPhoneRef.current) return;
     const h = setTimeout(() => searchRef.current?.focus(), 50);
     return () => clearTimeout(h);
   }, [open]);
@@ -367,7 +379,7 @@ export default function ExercisePicker({ open, onClose, context, existingIds, do
 
   function renderGrid(cards: PickerCardData[], source: PickSource, showReasons: boolean) {
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(196px, 1fr))', gap: 12 }}>
+      <div className="m-cols-2 m-gap-sm" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(196px, 1fr))', gap: 12 }}>
         {cards.map((card) => (
           <ExercisePickerCard
             key={card.id}
@@ -387,7 +399,7 @@ export default function ExercisePicker({ open, onClose, context, existingIds, do
 
   function renderLoadingGrid() {
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(196px, 1fr))', gap: 12 }}>
+      <div className="m-cols-2 m-gap-sm" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(196px, 1fr))', gap: 12 }}>
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} style={{ background: 'var(--white)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-card)', padding: 12 }}>
             <Skeleton height={120} />
@@ -506,8 +518,8 @@ export default function ExercisePicker({ open, onClose, context, existingIds, do
       aria-label={t('picker.title')}
       style={{ position: 'fixed', inset: 0, zIndex: 'var(--z-modal)', background: 'var(--shell-content-bg)', display: 'flex', flexDirection: 'column', fontFamily: 'var(--font-ui)' }}
     >
-      <header style={{ display: 'flex', alignItems: 'center', gap: 18, padding: '14px 22px', borderBottom: '1px solid var(--shell-border)', background: 'var(--shell-sidebar-bg)' }}>
-        <div style={{ flexShrink: 0 }}>
+      <header className="m-wrap m-gap-sm m-picker-header" style={{ display: 'flex', alignItems: 'center', gap: 18, padding: '14px 22px', borderBottom: '1px solid var(--shell-border)', background: 'var(--shell-sidebar-bg)' }}>
+        <div className="m-grow" style={{ flexShrink: 0 }}>
           <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--ink)' }}>
             {t('picker.title')} <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--muted-2)' }}>· Add Exercises</span>
           </div>
@@ -519,6 +531,7 @@ export default function ExercisePicker({ open, onClose, context, existingIds, do
         </div>
         <input
           ref={searchRef}
+          className="m-picker-search"
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder={t('picker.search.placeholder')}
@@ -528,9 +541,9 @@ export default function ExercisePicker({ open, onClose, context, existingIds, do
         <button onClick={requestClose} aria-label={t('picker.close')} style={closeBtnStyle}>✕</button>
       </header>
 
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div className="m-stack" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {/* Views + filters */}
-        <nav style={{ width: 216, flex: 'none', padding: '16px 12px', borderInlineEnd: '1px solid var(--shell-border)', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <nav className="m-picker-nav" style={{ width: 216, flex: 'none', padding: '16px 12px', borderInlineEnd: '1px solid var(--shell-border)', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
           {([
             ['recommended', `✦ ${t('picker.view.recommended')}`],
             ['all', t('picker.view.all')],
@@ -542,8 +555,18 @@ export default function ExercisePicker({ open, onClose, context, existingIds, do
             </button>
           ))}
 
-          {searchView && (
-            <div style={{ marginBlockStart: 14, paddingBlockStart: 14, borderBlockStart: '1px solid var(--shell-border)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {isPhone && searchView && (
+            <button
+              onClick={() => setFiltersOpen((o) => !o)}
+              aria-expanded={filtersOpen}
+              style={{ ...viewBtnStyle(filtersOpen || filtersActive), marginInlineStart: 'auto' }}
+            >
+              {t('picker.filter.toggle')}{filtersActive ? ' •' : ''} {filtersOpen ? '▴' : '▾'}
+            </button>
+          )}
+
+          {searchView && (!isPhone || filtersOpen) && (
+            <div className="m-full" style={{ marginBlockStart: 14, paddingBlockStart: 14, borderBlockStart: '1px solid var(--shell-border)', display: 'flex', flexDirection: 'column', gap: 12 }}>
               <Select
                 label={t('picker.filter.region')}
                 value={regionId}
@@ -582,12 +605,18 @@ export default function ExercisePicker({ open, onClose, context, existingIds, do
         </nav>
 
         {/* Results */}
-        <main style={{ flex: 1, overflowY: 'auto', padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <main className="m-pad m-fill" style={{ flex: 1, overflowY: 'auto', padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
           {renderMain()}
         </main>
 
         {/* Basket */}
-        <aside style={{ width: 340, flex: 'none', borderInlineStart: '1px solid var(--shell-border)', background: 'var(--shell-sidebar-bg)', display: 'flex', flexDirection: 'column' }}>
+        <aside className={`m-basket${basketOpen ? ' is-open' : ''}`} style={{ width: 340, flex: 'none', borderInlineStart: '1px solid var(--shell-border)', background: 'var(--shell-sidebar-bg)', display: 'flex', flexDirection: 'column' }}>
+          {isPhone && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 'calc(8px + env(safe-area-inset-top)) 12px 8px', borderBottom: '1px solid var(--shell-border)' }}>
+              <button onClick={() => setBasketOpen(false)} aria-label={t('picker.basket.back')} style={{ ...closeBtnStyle, fontSize: 18 }}>›</button>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--ink)' }}>{t('picker.basket.back')}</div>
+            </div>
+          )}
           <div style={{ padding: '16px 16px 10px', borderBottom: '1px solid var(--shell-border-soft)' }}>
             <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)' }}>{t('picker.basket.title', { n: selected.length })}</div>
             <div style={{ fontSize: 11, color: 'var(--muted)', marginBlockStart: 2 }}>{t('picker.basket.in_phase', { n: existingIds.length })}</div>
@@ -624,6 +653,7 @@ export default function ExercisePicker({ open, onClose, context, existingIds, do
                       {t(DOSE_LABEL_KEY[f])}
                       <input
                         type="number"
+                        inputMode="numeric"
                         min={0}
                         value={s[f] ?? ''}
                         onChange={(e) => updateDose(s.card.id, f, e.target.value)}
@@ -656,14 +686,25 @@ export default function ExercisePicker({ open, onClose, context, existingIds, do
             )}
           </div>
 
-          <div style={{ padding: 14, borderBlockStart: '1px solid var(--shell-border)' }}>
+          <div className="m-safe-bottom" style={{ padding: 14, borderBlockStart: '1px solid var(--shell-border)' }}>
             <Button onClick={commit} disabled={selected.length === 0} style={{ width: '100%', justifyContent: 'center' }}>
               {t('picker.add', { n: selected.length })}
             </Button>
-            <div style={{ fontSize: 10, color: 'var(--muted-2)', textAlign: 'center', marginBlockStart: 6 }}>{t('picker.add.hint')}</div>
+            <div className="m-hide" style={{ fontSize: 10, color: 'var(--muted-2)', textAlign: 'center', marginBlockStart: 6 }}>{t('picker.add.hint')}</div>
           </div>
         </aside>
       </div>
+
+      {isPhone && !basketOpen && (
+        <div style={{ flex: 'none', display: 'flex', gap: 8, padding: '10px 12px calc(10px + env(safe-area-inset-bottom))', borderTop: '1px solid var(--shell-border)', background: 'var(--shell-sidebar-bg)' }}>
+          <Button variant="secondary" onClick={() => setBasketOpen(true)} style={{ flex: 1, justifyContent: 'center' }}>
+            {t('picker.basket.title', { n: selected.length })}
+          </Button>
+          <Button onClick={commit} disabled={selected.length === 0} style={{ flex: 1, justifyContent: 'center' }}>
+            {t('picker.add', { n: selected.length })}
+          </Button>
+        </div>
+      )}
 
       <ExerciseDetailDrawer
         exerciseId={detailId}

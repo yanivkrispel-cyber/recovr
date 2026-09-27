@@ -98,9 +98,13 @@ export default function PatientOverview() {
   const navigate = useNavigate();
   const { patientId } = useParams({ from: '/patients/$patientId' });
   const { tab: initialTab } = useSearch({ from: '/patients/$patientId' });
-  const isPhone = useIsPhone();
   const [editOpen, setEditOpen] = useState(false);
   const isTablet = useIsTablet(); // T-22: tablet is view-only for v1
+  const isPhone = useIsPhone();
+  // T-22 keeps the tablet band view-only, but a phone has its own plan-editor
+  // layout, so plan changes (and discharge/reactivate) are allowed there.
+  // Recording measurements stays desktop-only (AssessmentsTab still gets isTablet).
+  const canEditPlan = !isTablet || isPhone;
   const toast = useToast();
 
   const { data, isLoading, error } = useQuery({
@@ -224,8 +228,8 @@ export default function PatientOverview() {
                 </>
               )}
             </div>
-            {!isTablet && (
-              <div style={{ display: 'flex', gap: 8 }}>
+            {canEditPlan && (
+              <div className="m-wrap" style={{ display: 'flex', gap: 8 }}>
                 {data.patient.status === 'discharged' ? (
                   <Button
                     variant="secondary"
@@ -266,7 +270,7 @@ export default function PatientOverview() {
               <OverviewTab data={data} patientId={patientId} />
             </Tab>
             <Tab value="plan" label="תכנית · Plan">
-              <PlanTab data={data} patientId={patientId} onEditPlan={() => setEditOpen(true)} isTablet={isTablet} />
+              <PlanTab data={data} patientId={patientId} onEditPlan={() => setEditOpen(true)} isTablet={!canEditPlan} />
             </Tab>
             <Tab value="progress" label="התקדמות · Progress">
               <ProgressTab data={data} patientId={patientId} />
@@ -505,6 +509,7 @@ function PlanTab({ data, patientId, onEditPlan, isTablet }: { data: OverviewData
           activeExercises.map((ex) => isPhone ? (
             <PhoneRow
               key={ex.id}
+              onClick={!isTablet ? onEditPlan : undefined}
               title={<span style={{ color: 'var(--gold-deep)' }}>{ex.name}</span>}
               meta={[
                 ex.name_en,

@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState, type CSSProperties } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { t } from 'shared';
-import { Button, Input, Select, Skeleton, Textarea } from 'ui';
+import { Button, Input, Select, Skeleton, Textarea, useIsPhone } from 'ui';
 import { SupabaseContext } from '../App';
 import ExercisePicker, { type PickedExercise } from './ExercisePicker';
 
@@ -76,6 +76,7 @@ const DRAFT_KEY_PREFIX = 'recoveryos:plan-draft:';
 export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlanProps) {
   const supabase = useContext(SupabaseContext);
   const queryClient = useQueryClient();
+  const isPhone = useIsPhone();
 
   const { data: plan, isLoading } = useQuery({
     queryKey: ['plan', patientId],
@@ -396,6 +397,15 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 'var(--z-modal)', background: 'var(--shell-content-bg)', display: 'flex', flexDirection: 'column' }}>
+      {isPhone ? (
+        <header style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 'calc(8px + env(safe-area-inset-top)) 12px 8px', borderBottom: '1px solid var(--shell-border)', background: 'var(--shell-sidebar-bg)' }}>
+          <button onClick={onClose} aria-label="ביטול · Cancel" style={phoneCloseBtnStyle}>✕</button>
+          <div style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 16, color: 'var(--ink)' }}>{t('clinician.plan.edit')}</div>
+          <Button size="sm" loading={saving} onClick={handleSaveAndClose} disabled={!plan || !!conflict}>
+            {t('clinician.plan.save')}
+          </Button>
+        </header>
+      ) : (
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 26px', borderBottom: '1px solid var(--shell-border)', background: 'var(--shell-sidebar-bg)' }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--ink)' }}>{t('clinician.plan.edit')} · Edit Plan</div>
@@ -412,12 +422,13 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
           </Button>
         </div>
       </header>
+      )}
 
       {dirty && (
-        <div style={{ position: 'sticky', top: 0, zIndex: 5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, background: 'var(--navy)', color: 'var(--cream)', padding: '11px 26px' }}>
+        <div className="m-pad m-gap-sm" style={{ position: 'sticky', top: 0, zIndex: 5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, background: 'var(--navy)', color: 'var(--cream)', padding: '11px 26px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12 }}>
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)', flex: 'none' }} />
-            <span>יש שינויים שלא נשמרו <span style={{ opacity: 0.7 }}>· Unsaved changes</span></span>
+            <span>יש שינויים שלא נשמרו <span className="m-hide" style={{ opacity: 0.7 }}>· Unsaved changes</span></span>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button
@@ -437,12 +448,12 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
       )}
 
       {savedFlash && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--pill-good-bg)', color: 'var(--flag-green)', padding: '10px 26px', fontSize: 12, fontWeight: 600 }}>
+        <div className="m-pad" style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--pill-good-bg)', color: 'var(--flag-green)', padding: '10px 26px', fontSize: 12, fontWeight: 600 }}>
           ✓ כל השינויים נשמרו <span style={{ opacity: 0.75, fontWeight: 400 }}>· All changes saved</span>
         </div>
       )}
 
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div className="m-stack" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {isLoading || !plan ? (
           <div style={{ flex: 1, padding: 28 }}><Skeleton count={6} height={20} /></div>
         ) : conflict ? (
@@ -458,7 +469,7 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
           </div>
         ) : (
           <>
-            <div style={{ width: 160, flex: 'none', padding: '18px 12px', display: 'flex', flexDirection: 'column', gap: 6, borderInlineEnd: '1px solid var(--shell-border)' }}>
+            <div className="m-phase-strip" style={{ width: 160, flex: 'none', padding: '18px 12px', display: 'flex', flexDirection: 'column', gap: 6, borderInlineEnd: '1px solid var(--shell-border)' }}>
               {plan.protocol_phases.map((p) => (
                 <button
                   key={p.n}
@@ -470,7 +481,7 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
               ))}
             </div>
 
-            <div style={{ flex: 1, overflow: 'auto', padding: '22px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div className="m-pad m-fill" style={{ flex: 1, overflow: 'auto', padding: '22px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }}>
                 <div style={{ flex: 1, maxWidth: 420 }}>
                   <Input
@@ -537,7 +548,7 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
                 )}
               </div>
 
-              <div style={{ display: 'flex', gap: 20, borderBottom: '1px solid var(--shell-border)' }}>
+              <div className="m-scroll-x" style={{ display: 'flex', gap: 20, borderBottom: '1px solid var(--shell-border)' }}>
                 <button onClick={() => setEditTab('goals')} style={editTabStyle(editTab === 'goals')}>מטרות · Goals</button>
                 <button onClick={() => setEditTab('exercises')} style={editTabStyle(editTab === 'exercises')}>תרגילים · Exercises</button>
                 <button onClick={() => setEditTab('assessments')} style={editTabStyle(editTab === 'assessments')}>הערכות · Assessments</button>
@@ -580,12 +591,53 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
                       <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>תרגילים · Exercises</div>
                       <button onClick={() => setAddOpen(true)} style={ghostPillStyle}>+ הוסף תרגיל · Add Exercise</button>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 0.5fr', padding: '10px 18px', fontSize: 11, color: 'var(--nav-inactive-text)', fontWeight: 600 }}>
+                    <div className="m-hide" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 0.5fr', padding: '10px 18px', fontSize: 11, color: 'var(--nav-inactive-text)', fontWeight: 600 }}>
                       <div>תרגיל · Exercise</div><div>סטים</div><div>חזרות</div><div>מנוחה (שנ׳)</div><div />
                     </div>
                     {draft.length === 0 ? (
                       <div style={{ padding: 20, textAlign: 'center', color: 'var(--nav-inactive-text)', fontSize: 13, borderTop: '1px solid var(--shell-border-soft)' }}>אין תרגילים בשלב זה</div>
-                    ) : draft.map((row, i) => (
+                    ) : draft.map((row, i) => isPhone ? (
+                      <div key={row.id ?? `new-${i}`} style={{ padding: '12px 14px', borderTop: '1px solid var(--shell-border-soft)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 15, color: 'var(--gold-deep)', fontWeight: 600 }}>{row.name}</div>
+                            {row.name_en && <div style={{ fontSize: 11, color: 'var(--nav-inactive-text)' }}>{row.name_en}</div>}
+                          </div>
+                          <button onClick={() => moveExercise(i, -1)} disabled={i === 0} aria-label="הזז למעלה · Move up" style={phoneIconBtnStyle}>↑</button>
+                          <button onClick={() => moveExercise(i, 1)} disabled={i === draft.length - 1} aria-label="הזז למטה · Move down" style={phoneIconBtnStyle}>↓</button>
+                          <button onClick={() => removeExercise(row)} aria-label="הסר תרגיל · Remove exercise" style={{ ...phoneIconBtnStyle, color: 'var(--flag-red)' }}>✕</button>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
+                          {PHONE_DOSE_FIELDS.map(([field, label]) => (
+                            <label key={field} style={phoneFieldLabelStyle}>
+                              {label}
+                              <input type="number" inputMode="numeric" min={0} value={row[field] ?? ''} onChange={(e) => updateField(i, field, e.target.value)} style={phoneNumInputStyle} />
+                            </label>
+                          ))}
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <select
+                            value={row.side ?? ''}
+                            onChange={(e) => updateRow(i, { side: (e.target.value || null) as PlanExercise['side'] })}
+                            aria-label="צד"
+                            style={{ ...phoneNumInputStyle, width: 'auto', flex: 'none', textAlign: 'start' }}
+                          >
+                            <option value="">צד: —</option>
+                            <option value="right">ימין</option>
+                            <option value="left">שמאל</option>
+                            <option value="bilateral">שני הצדדים</option>
+                          </select>
+                          <input
+                            value={row.clinician_note ?? ''}
+                            onChange={(e) => updateRow(i, { clinician_note: e.target.value })}
+                            placeholder="הערה למטופל"
+                            aria-label="הערה למטופל · Note to patient"
+                            maxLength={280}
+                            style={{ ...phoneNumInputStyle, flex: 1, minWidth: 0, textAlign: 'start' }}
+                          />
+                        </div>
+                      </div>
+                    ) : (
                       <div key={row.id ?? `new-${i}`} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 0.5fr', padding: '12px 18px', borderTop: '1px solid var(--shell-border-soft)', alignItems: 'center' }}>
                         <div style={{ fontSize: 13, color: 'var(--gold-deep)', fontWeight: 600 }}>
                           {row.name} <span style={{ fontWeight: 400, color: 'var(--nav-inactive-text)', fontSize: 11 }}>{row.name_en}</span>
@@ -658,7 +710,7 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
                     <div style={{ fontSize: 13, color: 'var(--nav-inactive-text)' }}>אין קריטריונים לשלב זה</div>
                   ) : (
                     criteriaDraft.map((c, i) => (
-                      <div key={c.id ?? `new-crit-${i}`} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <div key={c.id ?? `new-crit-${i}`} className="m-crit" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         <div style={{ flex: 2 }}>
                           <Input placeholder="תיאור הקריטריון" value={c.label} onChange={(e) => updateCriterionText(i, 'label', e.target.value)} />
                         </div>
@@ -765,4 +817,34 @@ const iconBtnStyle: CSSProperties = {
   width: 26,
   height: 26,
   fontSize: 12,
+};
+
+// Phone layout (see useIsPhone): larger touch targets, 16px fields so iOS
+// doesn't zoom on focus.
+const PHONE_DOSE_FIELDS = [
+  ['sets', 'סטים'],
+  ['reps', 'חזרות'],
+  ['rest_sec', 'מנוחה (שנ׳)'],
+  ['hold_sec', 'החזקה (שנ׳)'],
+] as const;
+
+const phoneCloseBtnStyle: CSSProperties = {
+  width: 36, height: 36, flex: 'none', borderRadius: '50%', border: '1px solid var(--shell-border)',
+  background: 'transparent', color: 'var(--ink-soft)', fontSize: 15, cursor: 'pointer', fontFamily: 'inherit',
+};
+
+const phoneIconBtnStyle: CSSProperties = {
+  ...iconBtnStyle,
+  width: 36,
+  height: 36,
+  borderRadius: 8,
+  fontSize: 15,
+  flex: 'none',
+};
+
+const phoneFieldLabelStyle: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: 'var(--nav-inactive-text)', minWidth: 0 };
+
+const phoneNumInputStyle: CSSProperties = {
+  width: '100%', boxSizing: 'border-box', height: 40, padding: '0 8px', border: 'var(--border-input)', borderRadius: 8,
+  fontFamily: 'inherit', fontSize: 16, textAlign: 'center', background: 'var(--white)', color: 'var(--ink)',
 };
