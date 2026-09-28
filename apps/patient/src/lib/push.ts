@@ -50,6 +50,48 @@ async function register(sub: PushSubscription) {
   });
 }
 
+/**
+ * Whether this browser can turn on push right now, and if not, why.
+ *
+ * iOS only exposes Web Push (PushManager / Notification) to a PWA launched
+ * from the Home Screen, on iOS 16.4+. In a Safari tab the APIs are simply
+ * absent, so a plain feature check reads "unsupported" — the patient needs
+ * install steps instead. In-app browsers (links opened from Instagram,
+ * Facebook, Gmail…) can't add to the Home Screen at all; they have to go to
+ * Safari first.
+ */
+export type PushSupport = 'supported' | 'ios-install' | 'ios-in-app' | 'ios-old' | 'unsupported';
+
+function iosVersion(): number | null {
+  const ua = navigator.userAgent;
+  // iPadOS 13+ reports as desktop Safari ("Macintosh"); touch points give it away.
+  const isIos = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (!isIos) return null;
+  const m = ua.match(/OS (\d+)_(\d+)/) ?? ua.match(/Version\/(\d+)\.(\d+)/);
+  // major*100+minor, so 16.4 -> 1604 and 16.10 -> 1610 compare correctly; 0 = unknown.
+  return m ? Number(m[1]) * 100 + Number(m[2]) : 0;
+}
+
+export function isStandalone(): boolean {
+  return (
+    (navigator as Navigator & { standalone?: boolean }).standalone === true ||
+    window.matchMedia?.('(display-mode: standalone)').matches === true
+  );
+}
+
+export function pushSupport(): PushSupport {
+  const ios = iosVersion();
+  if (ios !== null && !isStandalone()) {
+    if (ios > 0 && ios < 1604) return 'ios-old';
+    // Safari and Chrome/Firefox/Edge on iOS carry a "Safari/" token and can
+    // all add to the Home Screen (16.4+); embedded webviews don't.
+    return /Safari\//.test(navigator.userAgent) ? 'ios-install' : 'ios-in-app';
+  }
+  if ('serviceWorker' in navigator && 'PushManager' in window && typeof Notification !== 'undefined') return 'supported';
+  if (ios !== null && ios > 0 && ios < 1604) return 'ios-old';
+  return 'unsupported';
+}
+
 /** Ask for permission, subscribe to Web Push, and register the subscription. */
 export async function enablePush(): Promise<EnablePushResult> {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return 'unsupported';

@@ -6,7 +6,8 @@ import AppShell, { type PatientTab } from './components/AppShell';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { enablePush, syncPushSubscription, type EnablePushResult } from './lib/push';
+import { enablePush, pushSupport, syncPushSubscription, type EnablePushResult } from './lib/push';
+import PushBanner, { IosPushHelp } from './components/PushBanner';
 import { supabase } from './lib/supabase';
 import { onQueueFlushed, sessionQueue } from './lib/sessionQueue';
 import { TODAY_KEY } from './lib/today';
@@ -45,27 +46,24 @@ function isPrintRoute(): boolean {
   return /\/program\/print\/?$/.test(window.location.pathname);
 }
 
-const ACTIVE_EXERCISE_KEY = 'rehab:activeView';
-
 // 'sequence' walks through every exercise left today (the "start today's
 // plan" button); 'single' is one exercise picked from the list, after which
 // the patient goes straight back home.
 export type ExerciseMode = 'single' | 'sequence';
 
-// Restores the exercise flow across a reload or an app restart mid-session —
-// see T-11 "interrupting mid-session and returning restores exact position".
-function loadActiveExercise(): { view: View; index: number; mode: ExerciseMode } | null {
-  try {
-    const raw = localStorage.getItem(ACTIVE_EXERCISE_KEY);
-    if (!raw) return null;
-    const saved = JSON.parse(raw);
-    if (saved.view === 'exercise' && typeof saved.index === 'number') {
-      return { view: 'exercise', index: saved.index, mode: saved.mode === 'single' ? 'single' : 'sequence' };
-    }
-    return null;
-  } catch {
-    return null;
-  }
+// Opening the app always lands on Home — a cold launch starts there, and so
+// does coming back after the app sat in the background this long. A shorter
+// switch away (a text, a call mid-exercise) returns to where the patient was.
+// Home's "continue" button picks up at the first unfinished exercise, so the
+// old restore-exact-position behaviour (T-11) isn't needed.
+const BACKGROUND_RESET_MS = 10 * 60_000;
+
+// Where earlier builds saved the open exercise to restore it on launch.
+const LEGACY_ACTIVE_EXERCISE_KEY = 'rehab:activeView';
+try {
+  localStorage.removeItem(LEGACY_ACTIVE_EXERCISE_KEY);
+} catch {
+  // storage unavailable — nothing to clean up
 }
 
 const CACHE_OWNER_KEY = 'rehab:cacheOwner';
@@ -96,9 +94,9 @@ async function claimCachesFor(userId: string | null): Promise<boolean> {
 export default function App() {
   const [inviteToken, setInviteToken] = useState<string | null>(getInviteToken);
   const [session, setSession] = useState<Session | null | undefined>(undefined); // undefined = still loading
-  const [view, setView] = useState<View>(() => loadActiveExercise()?.view ?? 'home');
-  const [activeExerciseIndex, setActiveExerciseIndex] = useState(() => loadActiveExercise()?.index ?? 0);
-  const [exerciseMode, setExerciseMode] = useState<ExerciseMode>(() => loadActiveExercise()?.mode ?? 'sequence');
+  const [view, setView] = useState<View>('home');
+  const [activeExerciseIndex, setActiveExerciseIndex] = useState(0);
+  const [exerciseMode, setExerciseMode] = useState<ExerciseMode>('sequence');
   // The plan item just finished in single mode — Home flashes its row.
   const [justCompletedId, setJustCompletedId] = useState<string | null>(null);
 
@@ -163,17 +161,21 @@ export default function App() {
     if (view !== 'home') setJustCompletedId(null);
   }, [view]);
 
+  // iOS keeps an installed PWA alive in the background, so reopening it from
+  // the home screen is often a resume, not a fresh launch.
   useEffect(() => {
-    try {
-      if (view === 'exercise') {
-        localStorage.setItem(ACTIVE_EXERCISE_KEY, JSON.stringify({ view, index: activeExerciseIndex, mode: exerciseMode }));
-      } else {
-        localStorage.removeItem(ACTIVE_EXERCISE_KEY);
+    let hiddenAt: number | null = null;
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+      } else if (hiddenAt !== null) {
+        if (Date.now() - hiddenAt >= BACKGROUND_RESET_MS) setView('home');
+        hiddenAt = null;
       }
-    } catch {
-      // storage unavailable — position just won't be restored
-    }
-  }, [view, activeExerciseIndex, exerciseMode]);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
 
   if (inviteToken) {
     return (
@@ -215,6 +217,7 @@ export default function App() {
     <div style={{ direction: 'rtl' }}>
       <AppShell activeTab={activeTab} onTabChange={handleTabChange} messagesUnread={unread?.unread} onBellClick={() => setView('notifications')}>
         <Suspense fallback={<ViewFallback />}>
+          {view === 'home' && <PushBanner onOpenSettings={() => setView('notifications')} />}
           {view === 'home' && (
             <Home
               onStartExercise={(index, mode) => {
@@ -254,8 +257,9 @@ export default function App() {
 }
 
 function NotificationsView({ onBack }: { onBack: () => void }) {
+  const support = pushSupport();
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(
-    typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
+    support !== 'supported' ? 'unsupported' : Notification.permission,
   );
   const [status, setStatus] = useState<EnablePushResult | null>(null);
   const [busy, setBusy] = useState(false);
@@ -321,7 +325,9 @@ function NotificationsView({ onBack }: { onBack: () => void }) {
       <p style={{ fontSize: 13, color: 'var(--patient-muted)', lineHeight: 1.6, margin: 0 }}>
         {t('push.hint')}
       </p>
-      {permission === 'granted' ? (
+      {support !== 'supported' && support !== 'unsupported' ? (
+        <IosPushHelp support={support} />
+      ) : permission === 'granted' ? (
         <div style={{ fontSize: 13, color: 'var(--patient-success)' }}>✓ {t('push.on')}</div>
       ) : (
         <button
@@ -331,6 +337,9 @@ function NotificationsView({ onBack }: { onBack: () => void }) {
         >
           {t('push.enable')}
         </button>
+      )}
+      {support === 'unsupported' && (
+        <div style={{ fontSize: 12, color: 'var(--patient-muted)' }}>{messages.unsupported}</div>
       )}
       {status && status !== 'ok' && (
         <div style={{ fontSize: 12, color: 'var(--patient-danger)' }}>{messages[status]}</div>

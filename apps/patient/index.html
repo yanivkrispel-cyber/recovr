@@ -7,7 +7,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="ReCOVR" />
-    <link rel="apple-touch-icon" href="/m/icons/icon.svg" />
+    <!-- iOS ignores SVG touch icons and needs an opaque square PNG (it applies
+         its own mask; transparent corners would render black). -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/m/icons/apple-touch-icon.png" />
     <link rel="icon" type="image/svg+xml" href="/m/icons/icon.svg" />
     <title>ReCOVR</title>
     <meta name="description" content="תוכנית השיקום היומית שלי · ReCOVR by krispel" />
@@ -32,6 +34,12 @@
     <link rel="preload" href="/m/fonts/frank-ruhl-libre-1.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/m/fonts/heebo.css" />
     <link rel="stylesheet" href="/m/fonts/frank-ruhl-libre.css" />
+    <!-- The page behind the app shell shows for a frame while iOS animates a
+         rotation (and on launch before JS); navy like the shell, not white.
+         No rubber-band on the page itself — only the content pane scrolls. -->
+    <style>
+      html, body { background: #1B2140; overscroll-behavior: none; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

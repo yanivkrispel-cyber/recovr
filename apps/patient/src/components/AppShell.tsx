@@ -11,6 +11,10 @@ const TABS: { v: PatientTab; icon: string; label: string }[] = [
   { v: 'education', icon: 'ℹ', label: 'מידע' },
 ];
 
+const SAFE_TOP = 'env(safe-area-inset-top, 0px)';
+const SAFE_LEFT = 'env(safe-area-inset-left, 0px)';
+const SAFE_RIGHT = 'env(safe-area-inset-right, 0px)';
+
 interface AppShellProps {
   activeTab: PatientTab;
   onTabChange: (tab: PatientTab) => void;
@@ -23,7 +27,11 @@ interface AppShellProps {
 export default function AppShell({ activeTab, onTabChange, unreadCount, messagesUnread, onBellClick, children }: AppShellProps) {
   const online = useOnlineStatus();
   return (
-    <div style={{ height: '100dvh', background: 'var(--patient-bg)', display: 'flex', flexDirection: 'column', fontFamily: 'var(--font-ui)' }}>
+    // Pinned to the screen rather than sized with 100dvh: on iOS a dvh box is
+    // re-measured a beat after a rotation, so the page briefly overflows,
+    // scrolls, and snaps back. A fixed box also leaves the document with
+    // nothing to scroll, so no stale offset survives the turn back to portrait.
+    <div style={{ position: 'fixed', inset: 0, background: 'var(--patient-bg)', display: 'flex', flexDirection: 'column', fontFamily: 'var(--font-ui)' }}>
       {!online && (
         <div
           role="status"
@@ -35,7 +43,9 @@ export default function AppShell({ activeTab, onTabChange, unreadCount, messages
           {t('offline.banner')}
         </div>
       )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 20px 2px' }}>
+      {/* The status bar is translucent over the app (viewport-fit=cover), and in
+          landscape the notch sits on a side — keep content clear of both. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: `calc(${SAFE_TOP} + 16px) calc(${SAFE_RIGHT} + 20px) 2px calc(${SAFE_LEFT} + 20px)` }}>
         <div style={{ flex: 1 }}>
           <Logo tone="light" height={30} />
         </div>
@@ -59,11 +69,11 @@ export default function AppShell({ activeTab, onTabChange, unreadCount, messages
         </button>
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '18px 20px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ flex: 1, overflow: 'auto', overscrollBehavior: 'contain', padding: `18px calc(${SAFE_RIGHT} + 20px) 20px calc(${SAFE_LEFT} + 20px)`, display: 'flex', flexDirection: 'column', gap: 18 }}>
         {children}
       </div>
 
-      <div style={{ flex: 'none', display: 'flex', background: 'var(--patient-tabbar-bg)', borderTop: '1px solid rgba(201,162,75,.28)', padding: '10px 8px calc(env(safe-area-inset-bottom, 0px) + 10px)' }}>
+      <div style={{ flex: 'none', display: 'flex', background: 'var(--patient-tabbar-bg)', borderTop: '1px solid rgba(201,162,75,.28)', padding: `10px calc(${SAFE_RIGHT} + 8px) calc(env(safe-area-inset-bottom, 0px) + 10px) calc(${SAFE_LEFT} + 8px)` }}>
         {TABS.map((tab) => {
           const on = tab.v === activeTab;
           const badge = tab.v === 'messages' ? messagesUnread : undefined;

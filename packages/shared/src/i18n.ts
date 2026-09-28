@@ -588,6 +588,17 @@ export const he = {
   'push.result.unsupported': 'הדפדפן אינו תומך בהתראות',
   'push.result.no_key': 'התראות אינן מוגדרות בשרת',
   'push.result.error': 'שגיאה בהפעלת התראות — נסה שוב',
+  'push.ios.install.title': 'באייפון, התראות פועלות רק מהאפליקציה במסך הבית',
+  'push.ios.install.step1': 'לחצ/י על כפתור השיתוף (ריבוע עם חץ למעלה) בסרגל של Safari',
+  'push.ios.install.step2': 'בחר/י "הוספה למסך הבית" ואשר/י',
+  'push.ios.install.step3': 'פתח/י את ReCOVR מהאייקון במסך הבית — ולחצ/י כאן על "הפעל התראות"',
+  'push.ios.in_app': 'הקישור נפתח בתוך אפליקציה אחרת. פתח/י אותו ב-Safari (תפריט ⋯ ← "פתח ב-Safari"), ואז הוסף/י למסך הבית.',
+  'push.ios.old': 'התראות באייפון דורשות iOS 16.4 ומעלה. יש לעדכן את מערכת ההפעלה בהגדרות ← כללי ← עדכון תוכנה.',
+  'push.banner.install': 'רוצה תזכורות לאימון? הוסף/י את ReCOVR למסך הבית',
+  'push.banner.enable': 'הפעל/י התראות כדי לקבל תזכורות ועדכוני תוכנית',
+  'push.banner.action': 'איך?',
+  'push.banner.enable_action': 'הפעלה',
+  'push.banner.dismiss': 'סגור',
 
   // Privacy (T-23)
   'privacy.title': 'פרטיות',
