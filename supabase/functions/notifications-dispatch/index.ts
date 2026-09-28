@@ -97,7 +97,10 @@ function digestEmail(v: NotifVars): { subject: string; text: string; html: strin
     ['מתחת לסף היענות', n('attention_count')],
     ['הערכות שמועדן עבר', n('overdue_count')],
   ];
-  const url = String(v.app_url ?? APP_BASE_URL);
+  // Built from the function's APP_BASE_URL, not the payload: the SQL side
+  // stamps app_url from the `app.base_url` DB setting, which is unset on
+  // hosted Supabase and falls back to localhost.
+  const url = `${APP_BASE_URL.replace(/\/+$/, '')}/app/dashboard`;
   const text =
     `${subject}\n\n` +
     rows.map(([k, val]) => `${k}: ${val}`).join('\n') +
