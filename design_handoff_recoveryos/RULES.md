@@ -44,8 +44,17 @@ advances a phase automatically.
 - Only changes to the patient's **current** phase notify the patient (`plan_updated`); edits to
   other phases are silent until the patient reaches them.
 - A plan records the protocol version it was built from (`base_protocol_version_id`). Template
-  edits never change existing plans on their own — they are offered per patient for review
-  (planned), and advancing a phase never pulls in template changes.
+  edits never change existing plans on their own, and advancing a phase never pulls in template
+  changes. They are offered **per patient for review**: a 3-way diff (base version / current
+  template / this plan), matched by (phase n, exercise), over the **current and future** phases
+  only — completed phases are never rewritten. A template change where the plan still matches
+  the base is pre-selected; where the plan was changed for this patient it is a **conflict** and
+  the personal edit wins unless the clinician picks the template value. Accepted changes become
+  one new `plan_version` (removals carry the reason "Protocol update"; the current phase follows
+  the usual `plan_updated` rule). Reviewing — even skipping everything — moves the plan's base to
+  the reviewed version, so skipped changes are not offered again. Template phase renames/duration
+  changes and removed phases are not propagated; a phase the template added is offered whole.
+- After a protocol save, the editor lists this clinic's patients still on an older version.
 - **Protocol templates:** a clinic edits and archives its own protocols. A **system** protocol
   can be edited in the full editor by any clinic **admin** (the change applies to every clinic;
   clinicians see it read-only and can Duplicate it). A system protocol may only contain approved

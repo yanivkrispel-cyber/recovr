@@ -88,8 +88,8 @@ Clinical rows are **soft-deleted** (`deleted_at`) — never hard delete.
   learning stays within the clinic and never reads patient records.
 
 ## Patient plan
-- **plan** — id, patient_id, protocol_id, base_protocol_version_id → app.protocol_version,
-  started_at, current_phase_n, status
+- **plan** — id, patient_id, protocol_id, base_protocol_version_id → app.protocol_version
+  (the version it was built from, or last reviewed against — RULES §3), started_at, current_phase_n, status
 - **plan_version** — id, plan_id, version, created_by, created_at, note, is_current
 - **plan_phase** — id, plan_version_id, n, name, duration_days, started_at (null = not reached
   yet; every protocol phase is copied in at plan creation), completed_at

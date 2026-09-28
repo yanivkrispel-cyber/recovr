@@ -28,6 +28,8 @@ patient's timezone · cursor pagination (`?cursor=&limit=`) · `Idempotency-Key`
 | POST | `/patients/:id/reactivate` | undo a discharge: `status='active'` |
 | GET | `/patients/:id/plan?version=N` | current or specific `plan_version` |
 | POST | `/patients/:id/plan/versions` | `{base_version, phases:[{phase_n, exercises, removal_reasons, criteria}], note?}` → one new version atomically, any number of phases. 409 `plan_version_conflict` on a stale `base_version`; 422 on an unknown phase or a removal without a reason. The single-phase body `{base_version, phase_n, exercises, …}` is still accepted. |
+| GET | `/patients/:id/plan/template-diff` | `{plan_version, current_phase_n, base:{id,version}\|null, latest:{id,version}, up_to_date, changes:[{key, phase_n, phase_name, is_current, type: exercise\|criteria\|phase, kind: add\|remove\|update\|replace, exercise_id?, name?, template_before, template_after, plan, plan_exercise_id?, conflict, default_accept}]}`. Audited read. |
+| POST | `/patients/:id/plan/template-update` | `{base_version, protocol_version_id, accept:[change keys], note?}` → `{ok, version, applied, skipped}`; the plan is marked reviewed against that version even with `accept: []`. 409 `plan_version_conflict` / `template_changed`; 422 `unknown_change`. |
 | POST | `/patients/:id/phase-transitions` | `{to_phase_n, override_reason?}` → approve/regress |
 | GET | `/patients/:id/sessions?limit=N` | last N sessions (default 30, max 120), each with its items' patient feedback: sets/reps/load done, pain, difficulty, note, skipped + reason; plus `feedback_seen_at`. Audited read. |
 | POST | `/patients/:id/feedback/seen` | mark this patient's notes as seen (clears the new-note badge) |
@@ -39,6 +41,7 @@ patient's timezone · cursor pagination (`?cursor=&limit=`) · `Idempotency-Key`
 | GET | `/alerts?state=open` · POST `/alerts/:id/review` | alert inbox |
 | GET | `/protocols` · `/protocols/:slug` | library + phases + criteria |
 | GET | `/protocols/manage` · `/protocols/:id` | management list / editor detail. Each carries `is_editable` (the clinic's own protocol: archive/restore allowed) and `can_edit` (may save content: own protocol, or a system protocol for an admin) |
+| GET | `/protocols/:id/outdated-plans` | `{latest:{id,version}, patients:[{patient_id, name, current_phase_n, base_version}]}` — this clinic's active patients not yet reviewed against the current version |
 | PATCH | `/protocols/:id` | replace-all update → `{ok, id, version, protocol_version_id}`. System protocol: admins only (403 otherwise), applies to every clinic; 422 `private_exercise` `{exercises:[names]}` if it would contain a clinic-private or unapproved exercise |
 | POST | `/protocols/:id/exercises` | attach an approved exercise to a phase `{exercise_id, phase_n}` → `{ok, protocol_id, copied, scope, already_attached?}`. System protocol: curators change it for all clinics; others get a clinic copy (T-32) |
 | GET | `/exercises?q=&category=&region_id=&protocol=&phase=&equipment=&favorites=1&media=1&limit=&offset=` | library search (used by the exercise picker) → `{items:[Exercise], total}`. `region_id` is a `body_region` id (T-28), not free text. `limit` defaults to 60, capped at 200. Items carry picker card fields (T-29): `equipment`, `is_favorite`, `thumb_url`/`gif_url` (signed, API-origin-relative), `media_verified`. |

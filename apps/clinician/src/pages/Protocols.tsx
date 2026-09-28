@@ -1,7 +1,8 @@
 import { useContext, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { t, type BodyRegion } from 'shared';
-import { Badge, Button, EmptyState, Skeleton, useIsPhone, useIsTablet } from 'ui';
+import { Badge, Button, EmptyState, Modal, Skeleton, useIsPhone, useIsTablet } from 'ui';
+import { useNavigate } from '@tanstack/react-router';
 import { AuthContext, SupabaseContext } from '../App';
 import AppShell from '../components/AppShell';
 import PhoneRow from '../components/PhoneRow';
@@ -21,6 +22,11 @@ interface ProtocolRow {
   phase_count: number;
 }
 
+interface OutdatedPlans {
+  latest: { id: string; version: string };
+  patients: { patient_id: string; name: string; current_phase_n: number; base_version: string }[];
+}
+
 export default function Protocols() {
   const { user } = useContext(AuthContext);
   const supabase = useContext(SupabaseContext);
@@ -31,6 +37,17 @@ export default function Protocols() {
   const [editorId, setEditorId] = useState<string | null | 'new'>(null);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [outdated, setOutdated] = useState<OutdatedPlans | null>(null);
+  const navigate = useNavigate();
+
+  // After a template save: which of this clinic's patients are on an older
+  // version (each is reviewed from the patient's Plan tab, never automatic).
+  async function checkOutdated(protocolId: string) {
+    const { data, error } = await supabase.functions.invoke(`protocols/${protocolId}/outdated-plans`, { method: 'GET' });
+    if (error || data?.error) return;
+    const result = data as OutdatedPlans;
+    if (result.patients.length > 0) setOutdated(result);
+  }
 
   const { data: protocols, isLoading, error } = useQuery({
     queryKey: ['protocol-library'],
@@ -179,10 +196,36 @@ export default function Protocols() {
         open={editorId !== null}
         onClose={() => setEditorId(null)}
         onSaved={() => {
+          const savedId = editorId !== 'new' ? editorId : null;
           invalidate();
           setEditorId(null);
+          if (savedId) void checkOutdated(savedId);
         }}
       />
+
+      <Modal
+        open={outdated !== null}
+        onClose={() => setOutdated(null)}
+        title={`${outdated?.patients.length ?? 0} מטופלים על גרסה קודמת · on an older version`}
+        footer={<Button variant="ghost" onClick={() => setOutdated(null)}>אחר כך · Later</Button>}
+      >
+        <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 12 }}>
+          הפרוטוקול נשמר כגרסה v{outdated?.latest.version}. התכניות של המטופלים לא שונו — בדוק כל מטופל בלשונית התכנית שלו.
+          <span style={{ color: 'var(--nav-inactive-text)' }}> · Existing plans were not changed; review each patient from their Plan tab.</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {outdated?.patients.map((p) => (
+            <button
+              key={p.patient_id}
+              onClick={() => navigate({ to: '/patients/$patientId', params: { patientId: p.patient_id }, search: { tab: 'plan' } })}
+              style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '10px 4px', background: 'none', border: 'none', borderTop: '1px solid var(--shell-border-soft)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: 'var(--ink)', textAlign: 'start' }}
+            >
+              <span style={{ fontWeight: 600 }}>{p.name}</span>
+              <span style={{ color: 'var(--nav-inactive-text)' }}>שלב {p.current_phase_n} · v{p.base_version} ←</span>
+            </button>
+          ))}
+        </div>
+      </Modal>
     </AppShell>
   );
 }

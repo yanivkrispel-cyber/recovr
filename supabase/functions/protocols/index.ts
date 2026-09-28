@@ -8,6 +8,7 @@
 //   POST   /protocols/:id/restore      -> unarchive
 //   POST   /protocols/:id/duplicate    -> clone into an editable clinic copy
 //   POST   /protocols/:id/exercises    -> "quick attach" an exercise to one phase
+//   GET    /protocols/:id/outdated-plans -> this clinic's patients not yet reviewed against the current version
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -69,6 +70,16 @@ Deno.serve(withCors(async (req) => {
 
   if (req.method === 'GET' && rest.length === 1 && UUID_RE.test(rest[0])) {
     const { data: result, error } = await service.schema('app').rpc('protocol_detail', {
+      p_clinician_id: user.id,
+      p_protocol_id: rest[0],
+    });
+    if (error) return new Response(JSON.stringify({ error: 'internal_error', details: error.message }), { status: 500 });
+    if (result?.error) return new Response(JSON.stringify(result), { status: errorStatus(result.error) });
+    return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (req.method === 'GET' && rest.length === 2 && UUID_RE.test(rest[0]) && rest[1] === 'outdated-plans') {
+    const { data: result, error } = await service.schema('app').rpc('protocol_outdated_plans', {
       p_clinician_id: user.id,
       p_protocol_id: rest[0],
     });

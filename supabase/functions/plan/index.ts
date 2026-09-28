@@ -4,6 +4,9 @@
 //         body {base_version, phases: [{phase_n, exercises, removal_reasons?, criteria?}], note?};
 //         the older single-phase body {base_version, phase_n, exercises, ...} is still accepted
 //   PATCH /patients/:id/plan             -> app.rename_patient_pathology and/or app.update_patient_note
+//   GET   /patients/:id/plan/template-diff   -> app.plan_template_diff (protocol changes since the plan's base version)
+//   POST  /patients/:id/plan/template-update -> app.apply_plan_template_update
+//         body {base_version, protocol_version_id, accept: [change keys], note?}
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
 import { withCors } from '../_shared/cors.ts';
@@ -26,6 +29,10 @@ interface SaveInput extends Partial<PhaseEdit> {
   note?: string;
 }
 
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+}
+
 Deno.serve(withCors(async (req) => {
   const user = await getAuthUser(req);
   if (!user) {
@@ -37,6 +44,57 @@ Deno.serve(withCors(async (req) => {
   const url = new URL(req.url);
   const parts = url.pathname.split('/').filter(Boolean);
   const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+  const last = parts[parts.length - 1];
+
+  if (req.method === 'GET' && last === 'template-diff') {
+    const patientId = parts[parts.length - 3];
+    const { data: result, error } = await service.schema('app').rpc('plan_template_diff', {
+      p_clinician_id: user.id,
+      p_patient_id: patientId,
+    });
+    if (error) return json({ error: 'internal_error', details: error.message }, 500);
+    if (result?.error) return json(result, result.error === 'forbidden' ? 403 : 404);
+    // RULES §7: shows plan contents, audited like GET /plan.
+    await service.schema('app').rpc('audit_read', {
+      p_actor_type: 'clinician',
+      p_actor_id: user.id,
+      p_entity_type: 'plan',
+      p_entity_id: patientId,
+    });
+    return json(result);
+  }
+
+  if (req.method === 'POST' && last === 'template-update') {
+    const patientId = parts[parts.length - 3];
+    const body = await req.json().catch(() => ({})) as {
+      base_version?: unknown; protocol_version_id?: unknown; accept?: unknown; note?: unknown;
+    };
+    if (
+      typeof body.base_version !== 'number' ||
+      typeof body.protocol_version_id !== 'string' ||
+      !Array.isArray(body.accept) || body.accept.some((k) => typeof k !== 'string')
+    ) {
+      return json({ error: 'validation_failed' }, 422);
+    }
+    const { data: result, error } = await service.schema('app').rpc('apply_plan_template_update', {
+      p_clinician_id: user.id,
+      p_patient_id: patientId,
+      p_base_version: body.base_version,
+      p_target_version_id: body.protocol_version_id,
+      p_accept: body.accept,
+      p_note: typeof body.note === 'string' ? body.note : null,
+    });
+    if (error) return json({ error: 'internal_error', details: error.message }, 500);
+    if (result?.error) {
+      const status = result.error === 'forbidden' ? 403
+        : result.error === 'not_found' ? 404
+        : result.error === 'plan_version_conflict' || result.error === 'template_changed' ? 409
+        : 422;
+      return json(result, status);
+    }
+    return json(result);
+  }
 
   if (req.method === 'GET') {
     // .../patients/:id/plan — id is second-to-last segment.

@@ -8,6 +8,7 @@ import AppShell from '../components/AppShell';
 import PhoneRow from '../components/PhoneRow';
 import { MessagesTab } from '../components/MessageThread';
 import EditPlan from '../components/EditPlan';
+import TemplateUpdateReview from '../components/TemplateUpdateReview';
 import { NewNotePill, SessionItemsDetail, isNewNote, usePatientSessions, type PatientSessions } from '../components/SessionFeedback';
 import MeasurementPanel, { type JointEntry } from '../components/MeasurementPanel';
 import { computeFlag, flagColor, gapFlag, REGION_JOINT, ROM_JOINT_HE, ROM_JOINT_ORDER, sideGap, type FlagState } from '../lib/romFlags';
@@ -72,6 +73,8 @@ interface PlanPhaseData {
 interface PlanData {
   phases: PlanPhaseData[];
   protocol_phases: { n: number; name: string }[];
+  /** The protocol has a version this plan hasn't been reviewed against. */
+  template_update: { base_version: string; latest_version: string } | null;
 }
 
 const sessionStatusLabel: Record<string, string> = {
@@ -448,6 +451,7 @@ function OverviewTab({
 function PlanTab({ data, patientId, onEditPlan, isTablet }: { data: OverviewData; patientId: string; onEditPlan: () => void; isTablet: boolean }) {
   const supabase = useContext(SupabaseContext);
   const isPhone = useIsPhone();
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   const { data: plan, isLoading } = useQuery({
     queryKey: ['plan', patientId],
@@ -478,6 +482,16 @@ function PlanTab({ data, patientId, onEditPlan, isTablet }: { data: OverviewData
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18, paddingTop: 18 }}>
+      {plan?.template_update && (
+        <div className="m-stack m-gap-sm" style={{ background: 'var(--nav-active-bg)', border: '1px solid rgba(140,100,35,0.4)', borderRadius: 'var(--radius-card)', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ fontSize: 13, color: 'var(--ink)' }}>
+            הפרוטוקול עודכן (v{plan.template_update.base_version} → v{plan.template_update.latest_version}). בדוק אילו שינויים להחיל על המטופל.
+            <span style={{ color: 'var(--nav-inactive-text)' }}> · The protocol was updated — review what applies to this patient.</span>
+          </div>
+          {!isTablet && <Button size="sm" onClick={() => setReviewOpen(true)}>בדוק שינויים · Review</Button>}
+        </div>
+      )}
+      <TemplateUpdateReview patientId={patientId} open={reviewOpen} onClose={() => setReviewOpen(false)} onDone={() => setReviewOpen(false)} />
       <div style={kpiCardStyle()}>
         {isLoading ? (
           <Skeleton count={1} height={26} />
