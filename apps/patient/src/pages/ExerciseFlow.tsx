@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { uuidv7 } from 'offline';
-import { sessionItemSchema, type SessionItemInput } from 'shared';
+import { pickPatientMedia, sessionItemSchema, type SessionItemInput } from 'shared';
 import { YouTubeFacade, useOnlineStatus } from 'ui';
 import { secondaryLabel } from '../lib/label';
 import type { ExerciseMode } from '../App';
@@ -57,9 +57,12 @@ function mediaSrc(u: string): string {
   return u.startsWith('http') ? u : `${SUPABASE_URL}${u}`;
 }
 
-// Verified media only reaches here (the me-today RPC filters on verified_at);
-// with nothing verified yet the array is empty and this renders the labeled
-// placeholder frame.
+// The exercise's single media slot — same place and same size on every
+// exercise, so the screen never shifts. What fills it is pickPatientMedia's
+// rule: YouTube (kind='video', url is an id — see packages/shared/src/youtube.ts)
+// when online, else the first GIF/clip in the clinic's order (T-31), else a
+// photo, else the slot stays an empty box. Verified media only reaches here
+// (the me-today RPC filters on verified_at).
 function ExerciseMediaFrame({
   media,
   name,
@@ -69,53 +72,34 @@ function ExerciseMediaFrame({
   name: string;
   compact?: boolean;
 }) {
-  // The rep-loop visual is the first non-YouTube item — the API returns media
-  // in the clinic's chosen order (T-31), so the clinician picks what shows
-  // here (GIF, photo, or an uploaded clip). A YouTube video (kind='video', url
-  // is an id — see packages/shared/src/youtube.ts) is supplementary
-  // instructional content, surfaced separately below, never as this frame.
-  const primary = media?.find((m) => m.kind !== 'video') ?? null;
-
-  if (!primary) {
-    return (
-      <div
-        style={{
-          width: '100%',
-          height: compact ? 96 : 160,
-          background: 'var(--patient-card-light)',
-          borderRadius: 12,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--patient-dim)',
-          fontSize: 13,
-        }}
-      >
-        וידאו · VIDEO
-      </div>
-    );
-  }
+  const online = useOnlineStatus();
+  const shown = pickPatientMedia(media, online);
+  const height = compact ? 128 : 200;
 
   return (
     <div
       style={{
         width: '100%',
+        height,
         background: 'var(--patient-card-light)',
         borderRadius: 12,
         overflow: 'hidden',
         display: 'flex',
+        alignItems: 'center',
         justifyContent: 'center',
       }}
     >
-      {primary.kind === 'clip' ? (
-        <ClipLoop media={primary} name={name} height={compact ? 128 : 200} />
-      ) : primary.kind === 'gif' && primary.loop_url ? (
-        <GifLoop media={primary} name={name} height={compact ? 128 : 200} />
+      {!shown ? null : shown.kind === 'video' ? (
+        <YouTubeFacade youtubeId={shown.url} title={name} height={height} startSec={shown.start_sec} endSec={shown.end_sec} style={{ borderRadius: 0 }} />
+      ) : shown.kind === 'clip' ? (
+        <ClipLoop media={shown} name={name} height={height} />
+      ) : shown.kind === 'gif' && shown.loop_url ? (
+        <GifLoop media={shown} name={name} height={height} />
       ) : (
         <img
-          src={mediaSrc(primary.url)}
+          src={mediaSrc(shown.url)}
           alt={name}
-          style={{ height: compact ? 128 : 200, width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }}
+          style={{ height, width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }}
         />
       )}
     </div>
@@ -197,44 +181,6 @@ function ClipLoop({ media, name, height }: { media: ExerciseMedia; name: string;
       style={{ height, width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }}
     />
   );
-}
-
-// Supplementary instructional video — shown collapsed as a labeled toggle so
-// it never costs a network request unless the patient actually wants it, and
-// hidden entirely offline since a YouTube embed can't load without a
-// connection (the GIF above already covers the offline case).
-function ExerciseVideoSection({ media, name }: { media?: ExerciseMedia[]; name: string }) {
-  const [open, setOpen] = useState(false);
-  const online = useOnlineStatus();
-  const video = media?.find((m) => m.kind === 'video');
-  if (!video || !online) return null;
-
-  if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          background: 'transparent',
-          border: '1px solid var(--patient-card-light)',
-          borderRadius: 999,
-          padding: '8px 14px',
-          color: 'var(--patient-text)',
-          fontSize: 13,
-          fontWeight: 600,
-          cursor: 'pointer',
-          fontFamily: 'inherit',
-          alignSelf: 'flex-start',
-        }}
-      >
-        ▶ צפו בסרטון ההדרכה · Watch tutorial video
-      </button>
-    );
-  }
-
-  return <YouTubeFacade youtubeId={video.url} title={name} height={200} startSec={video.start_sec} endSec={video.end_sec} />;
 }
 
 interface Today {
@@ -422,7 +368,6 @@ export default function ExerciseFlow({ index, mode, onAdvance, onComplete, onSin
           )}
 
           <ExerciseMediaFrame media={item.exercise.media} name={item.exercise.name} />
-          <ExerciseVideoSection media={item.exercise.media} name={item.exercise.name} />
 
           <Dosage item={item} />
           {item.clinician_note && <ClinicianNote note={item.clinician_note} />}

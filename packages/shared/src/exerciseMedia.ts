@@ -76,6 +76,22 @@ export function validTrim(start: number | null, end: number | null): boolean {
   return true;
 }
 
+/**
+ * The one media item the patient sees in the exercise's fixed media slot:
+ * a YouTube video (kind='video') when there is one and we're online, else the
+ * first GIF or uploaded clip in the clinic's order, else a still photo, else
+ * nothing. Offline a YouTube embed can't load, so it falls through to the GIF.
+ * Callers pass verified media only.
+ */
+export function pickPatientMedia<T extends { kind: string }>(media: readonly T[] | null | undefined, online: boolean): T | null {
+  if (!media?.length) return null;
+  if (online) {
+    const video = media.find((m) => m.kind === 'video');
+    if (video) return video;
+  }
+  return media.find((m) => m.kind === 'gif' || m.kind === 'clip') ?? media.find((m) => m.kind === 'image') ?? null;
+}
+
 export function formatBytes(bytes: number | null | undefined): string {
   if (bytes == null) return '';
   if (bytes < 1024) return `${bytes} B`;

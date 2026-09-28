@@ -1,8 +1,34 @@
 import { describe, expect, it } from 'vitest';
 import {
   MEDIA_RIGHTS, checkUpload, formatBytes, formatTimecode, mediaKindLabel, mediaRightsLabel, normalizeMediaFilename,
-  parseTimecode, validTrim,
+  parseTimecode, pickPatientMedia, validTrim,
 } from './exerciseMedia';
+
+describe('pickPatientMedia', () => {
+  const yt = { kind: 'video', url: 'abc' };
+  const gif = { kind: 'gif', url: 'g' };
+  const clip = { kind: 'clip', url: 'c' };
+  const img = { kind: 'image', url: 'i' };
+
+  it('prefers YouTube online, whatever the order', () => {
+    expect(pickPatientMedia([img, gif, yt], true)).toBe(yt);
+  });
+  it('falls back to the GIF offline', () => {
+    expect(pickPatientMedia([yt, gif], false)).toBe(gif);
+  });
+  it('takes the first GIF or clip in list order', () => {
+    expect(pickPatientMedia([img, clip, gif], true)).toBe(clip);
+    expect(pickPatientMedia([gif, clip], true)).toBe(gif);
+  });
+  it('uses a photo only when nothing else', () => {
+    expect(pickPatientMedia([img], true)).toBe(img);
+  });
+  it('returns null for nothing to show', () => {
+    expect(pickPatientMedia([], true)).toBeNull();
+    expect(pickPatientMedia(undefined, true)).toBeNull();
+    expect(pickPatientMedia([yt], false)).toBeNull();
+  });
+});
 
 describe('normalizeMediaFilename', () => {
   it.each([
