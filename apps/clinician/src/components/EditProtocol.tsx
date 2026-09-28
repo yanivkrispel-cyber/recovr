@@ -1,5 +1,6 @@
 import { useContext, useEffect, useState, type CSSProperties } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import { t, type BodyRegion } from 'shared';
 import { Button, Input, Select, Skeleton } from 'ui';
 import { SupabaseContext } from '../App';
@@ -50,6 +51,8 @@ interface ProtocolDetail {
   source: 'system' | 'clinic';
   version: string;
   is_editable: boolean;
+  /** May save content: the clinic's own protocol, or a system protocol for an admin. */
+  can_edit: boolean;
   phases: {
     name: string;
     name_en: string | null;
@@ -158,7 +161,7 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
       })),
     );
     setActivePhase(0);
-    setReadOnly(!detail.is_editable);
+    setReadOnly(!detail.can_edit);
     setSaveError(null);
     setNameTouched(false);
   }, [open, protocolId, detail]);
@@ -269,12 +272,14 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
   }
 
   const nameValid = name.trim().length > 0;
+  const isSystem = protocolId !== null && detail?.source === 'system';
 
   async function handleSave() {
     if (!nameValid) {
       setNameTouched(true);
       return;
     }
+    if (isSystem && !window.confirm('זהו פרוטוקול מערכת. השינוי יחול על כל הקליניקות (מטופלים קיימים לא יושפעו). לשמור?')) return;
     setSaving(true);
     setSaveError(null);
 
@@ -311,7 +316,12 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
     setSaving(false);
 
     if (error || data?.error) {
-      setSaveError(t('error.save.body'));
+      const body = data ?? (await readErrorBody(error));
+      setSaveError(
+        body?.message === 'private_exercise'
+          ? `פרוטוקול מערכת יכול לכלול רק תרגילי מערכת מאושרים. הסר: ${(body.exercises ?? []).join(', ')}`
+          : t('error.save.body'),
+      );
       return;
     }
 
@@ -369,6 +379,12 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
             </div>
 
             <div style={{ flex: 1, overflow: 'auto', padding: '22px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+              {isSystem && !readOnly && (
+                <div role="note" style={{ background: 'var(--nav-active-bg)', border: '1px solid rgba(140,100,35,0.4)', borderRadius: 'var(--radius-card)', padding: '10px 14px', fontSize: 13, color: 'var(--ink)' }}>
+                  פרוטוקול מערכת — שינויים יחולו על כל הקליניקות. מטופלים שכבר משויכים לא יושפעו.
+                  <span style={{ color: 'var(--nav-inactive-text)' }}> · System protocol — edits apply to every clinic; patients already on it are unaffected.</span>
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 200 }}>
                   <Input
@@ -552,6 +568,13 @@ export default function EditProtocol({ protocolId, open, onClose, onSaved }: Edi
       />
     </div>
   );
+}
+
+// A non-2xx function response arrives as FunctionsHttpError with the JSON body
+// still unread on its Response.
+async function readErrorBody(error: unknown): Promise<{ error?: string; message?: string; exercises?: string[] } | null> {
+  if (!(error instanceof FunctionsHttpError)) return null;
+  return (error.context as Response).json().catch(() => null);
 }
 
 function pillStyle(active: boolean): CSSProperties {

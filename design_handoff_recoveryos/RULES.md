@@ -46,6 +46,10 @@ advances a phase automatically.
 - A plan records the protocol version it was built from (`base_protocol_version_id`). Template
   edits never change existing plans on their own — they are offered per patient for review
   (planned), and advancing a phase never pulls in template changes.
+- **Protocol templates:** a clinic edits and archives its own protocols. A **system** protocol
+  can be edited in the full editor by any clinic **admin** (the change applies to every clinic;
+  clinicians see it read-only and can Duplicate it). A system protocol may only contain approved
+  system exercises. System protocols are never archived from a clinic. Every system edit is audited.
 
 ## 4. Alerts (clinician, in-app + push)
 | Alert | Condition | Dedupe |

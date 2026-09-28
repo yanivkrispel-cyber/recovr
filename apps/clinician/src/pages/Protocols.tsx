@@ -17,6 +17,7 @@ interface ProtocolRow {
   version: string;
   is_active: boolean;
   is_editable: boolean;
+  can_edit: boolean;
   phase_count: number;
 }
 
@@ -141,7 +142,7 @@ export default function Protocols() {
                     onClick={() => setEditorId(p.id)}
                     style={{ background: 'transparent', color: 'var(--ink-soft)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-pill)', padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
                   >
-                    {p.is_editable ? 'ערוך · Edit' : 'פרטים · Details'}
+                    {p.can_edit ? 'ערוך · Edit' : 'פרטים · Details'}
                   </button>
                   {!isTablet && (
                     <button
