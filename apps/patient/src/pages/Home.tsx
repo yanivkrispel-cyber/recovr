@@ -4,6 +4,7 @@ import { Skeleton, QueryError, clickableDivProps } from 'ui';
 import { t } from 'shared';
 import { secondaryLabel } from '../lib/label';
 import { TODAY_KEY, fetchToday } from '../lib/today';
+import { supabase } from '../lib/supabase';
 import type { ExerciseMode } from '../App';
 
 interface TodayItem {
@@ -56,6 +57,19 @@ export default function Home({ onStartExercise, justCompletedId, onOpenProgress,
         <Skeleton height={150} radius={16} />
         <Skeleton count={4} height={52} radius={12} />
       </div>
+    );
+  }
+
+  // me-today 404s when the signed-in account has no patient record (e.g. a
+  // clinician login) — retrying can't help, so offer to sign out instead.
+  if (error && (error as { context?: Response }).context?.status === 404) {
+    return (
+      <QueryError
+        title="החשבון המחובר אינו חשבון מטופל"
+        body="התנתקו והיכנסו עם פרטי המטופל. · This isn't a patient account — sign out and sign in as the patient."
+        retryLabel="התנתקות · Sign out"
+        onRetry={() => void supabase.auth.signOut()}
+      />
     );
   }
 

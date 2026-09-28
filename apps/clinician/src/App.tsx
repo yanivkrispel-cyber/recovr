@@ -9,9 +9,28 @@ import { MfaChallenge, MfaEnroll } from './components/Mfa';
 import { router } from './router';
 import { syncPushSubscription } from './lib/push';
 
+// The clinician (/app/) and patient (/m/) apps share one origin, so they'd
+// share supabase-js's default auth key `sb-<ref>-auth-token` — and the patient
+// app would pick up a clinician's login and 404 on every me-* call. This app
+// keeps its session under its own key; an existing login is moved over once,
+// so nobody is signed out by the switch.
+const authRef = new URL(import.meta.env.VITE_SUPABASE_URL).hostname.split('.')[0];
+const AUTH_STORAGE_KEY = `sb-${authRef}-clinician-auth-token`;
+try {
+  const sharedKey = `sb-${authRef}-auth-token`;
+  const shared = localStorage.getItem(sharedKey);
+  if (shared && !localStorage.getItem(AUTH_STORAGE_KEY)) {
+    localStorage.setItem(AUTH_STORAGE_KEY, shared);
+    localStorage.removeItem(sharedKey);
+  }
+} catch {
+  // storage unavailable — nothing to move
+}
+
 export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY,
+  { auth: { storageKey: AUTH_STORAGE_KEY } },
 );
 
 /** The signed-in clinician, as returned by the clinician-me edge function. */
