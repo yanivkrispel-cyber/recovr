@@ -60,8 +60,14 @@ const patientOverviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/patients/$patientId',
   component: PatientOverview,
-  validateSearch: (search: Record<string, unknown>): { tab?: PatientTab } => ({
+  // session: a session date (YYYY-MM-DD) or 'latest' — the History tab opens
+  // with that session's exercise feedback expanded (pain alert deep link).
+  validateSearch: (search: Record<string, unknown>): { tab?: PatientTab; session?: string } => ({
     tab: PATIENT_TABS.includes(search.tab as PatientTab) ? (search.tab as PatientTab) : undefined,
+    session:
+      search.session === 'latest' || (typeof search.session === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(search.session))
+        ? (search.session as string)
+        : undefined,
   }),
 });
 

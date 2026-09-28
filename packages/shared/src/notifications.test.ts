@@ -117,7 +117,7 @@ describe('deep links', () => {
     ['phase_approved', {}, '/today'],
     ['plan_updated', {}, '/plan?diff=last'],
     ['adherence_drop', { patient_id: 'p1' }, '/patients/p1'],
-    ['pain_spike', { patient_id: 'p1' }, '/patients/p1'],
+    ['pain_spike', { patient_id: 'p1' }, '/patients/p1?tab=history&session=latest'],
     ['weekly_digest', {}, '/dashboard'],
     ['new_message', { patient_id: 'p1' }, '/patients/p1'],
     ['new_message', {}, '/messages'],

@@ -7,6 +7,7 @@ import type { Alert } from 'shared';
 import { SupabaseContext, AuthContext } from '../App';
 import AppShell from '../components/AppShell';
 import PhoneRow from '../components/PhoneRow';
+import { NewNotePill, useUnseenFeedback } from '../components/SessionFeedback';
 import { enablePush } from '../lib/push';
 
 type PatientRow = {
@@ -72,6 +73,8 @@ export default function Dashboard() {
       return data as PatientRow[];
     },
   });
+
+  const unseenNotes = useUnseenFeedback();
 
   const { data: alerts } = useQuery({
     queryKey: ['alerts'],
@@ -155,7 +158,16 @@ export default function Dashboard() {
                   alerts!.slice(0, 6).map((alert) => (
                     <div
                       key={alert.id}
-                      {...clickableDivProps(() => reviewAlert.mutate(alert.id))}
+                      {...clickableDivProps(() => {
+                        reviewAlert.mutate(alert.id);
+                        if (alert.type === 'pain_spike') {
+                          navigate({
+                            to: '/patients/$patientId',
+                            params: { patientId: alert.patient_id },
+                            search: { tab: 'history', session: 'latest' },
+                          });
+                        }
+                      })}
                       style={{ padding: '10px 12px', borderRadius: 8, fontSize: 12, color: 'var(--ink-soft)', cursor: 'pointer', display: 'flex', gap: 9, alignItems: 'flex-start' }}
                     >
                       <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--flag-red)', marginTop: 4, flex: 'none' }} />
@@ -235,9 +247,12 @@ export default function Dashboard() {
                 onClick={() => navigate({ to: '/patients/$patientId', params: { patientId: row.id } })}
                 title={row.name}
                 trailing={
-                  <Badge tone={row.status === 'pending' ? 'neutral' : row.status === 'attention' || row.status === 'inactive' ? 'attention' : 'success'}>
-                    {statusLabel[row.status]}
-                  </Badge>
+                  <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                    {unseenNotes.has(row.id) && <NewNotePill count={unseenNotes.get(row.id)} />}
+                    <Badge tone={row.status === 'pending' ? 'neutral' : row.status === 'attention' || row.status === 'inactive' ? 'attention' : 'success'}>
+                      {statusLabel[row.status]}
+                    </Badge>
+                  </span>
                 }
                 meta={[
                   row.injury,
@@ -255,7 +270,10 @@ export default function Dashboard() {
                   borderTop: '1px solid var(--shell-border-soft)', cursor: 'pointer', alignItems: 'center',
                 }}
               >
-                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>{row.name}</div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {row.name}
+                  {unseenNotes.has(row.id) && <NewNotePill count={unseenNotes.get(row.id)} />}
+                </div>
                 <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{row.injury}</div>
                 <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{row.status === 'pending' ? '—' : row.phaseName}</div>
                 <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{row.adherence == null ? '—' : `${row.adherence}%`}</div>

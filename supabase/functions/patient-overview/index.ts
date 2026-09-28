@@ -4,6 +4,9 @@
 // `measurements` function (T-09b) — this no longer serves that.
 //   POST /patients/:id/discharge  -> archive (non-destructive, reversible)
 //   POST /patients/:id/reactivate -> undo a discharge
+//   GET  /patients/:id/sessions?limit=N -> app.patient_sessions (per-exercise feedback)
+//   POST /patients/:id/feedback/seen    -> app.mark_feedback_seen
+//   GET  /feedback/unseen               -> app.unseen_feedback (new-note badges)
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
 import { withCors } from '../_shared/cors.ts';
@@ -24,6 +27,44 @@ Deno.serve(withCors(async (req) => {
   const url = new URL(req.url);
   const parts = url.pathname.split('/').filter(Boolean);
   const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  const last = parts[parts.length - 1];
+  const secondLast = parts[parts.length - 2];
+
+  const reply = (result: { error?: string } | null, error: { message: string } | null) => {
+    if (error) {
+      return new Response(JSON.stringify({ error: 'internal_error', details: error.message }), { status: 500 });
+    }
+    if (result?.error === 'forbidden') {
+      return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 });
+    }
+    if (result?.error === 'not_found') {
+      return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
+    }
+    return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+  };
+
+  if (req.method === 'GET' && secondLast === 'feedback' && last === 'unseen') {
+    const { data, error } = await service.schema('app').rpc('unseen_feedback', { p_clinician_id: user.id });
+    return reply(data, error);
+  }
+
+  if (req.method === 'GET' && last === 'sessions') {
+    const limit = Number(url.searchParams.get('limit') ?? 30);
+    const { data, error } = await service.schema('app').rpc('patient_sessions', {
+      p_clinician_id: user.id,
+      p_patient_id: secondLast,
+      p_limit: Number.isFinite(limit) ? limit : 30,
+    });
+    return reply(data, error);
+  }
+
+  if (req.method === 'POST' && secondLast === 'feedback' && last === 'seen') {
+    const { data, error } = await service.schema('app').rpc('mark_feedback_seen', {
+      p_clinician_id: user.id,
+      p_patient_id: parts[parts.length - 3],
+    });
+    return reply(data, error);
+  }
 
   if (req.method === 'POST') {
     const action = parts[parts.length - 1];

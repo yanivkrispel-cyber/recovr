@@ -76,8 +76,10 @@ function deepLink(event: string, vars: NotifVars): string {
     case 'plan_updated':
       return '/m/?diff=last';
     case 'adherence_drop':
-    case 'pain_spike':
       return vars.patient_id ? `/app/patients/${vars.patient_id}` : '/app/';
+    case 'pain_spike':
+      // Opens History with the latest session's exercise feedback expanded.
+      return vars.patient_id ? `/app/patients/${vars.patient_id}?tab=history&session=latest` : '/app/';
     case 'new_message':
       // patient->clinician carries patient_id; clinician->patient does not.
       // The clinician route opens the chat on a phone and redirects to the

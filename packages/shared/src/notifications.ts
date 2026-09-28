@@ -194,8 +194,10 @@ export function deepLink(event: NotificationEventKey, vars: NotifVars): string {
     case 'plan_updated':
       return '/plan?diff=last';
     case 'adherence_drop':
-    case 'pain_spike':
       return vars.patient_id ? `/patients/${vars.patient_id}` : '/patients';
+    case 'pain_spike':
+      // History tab with the latest session's exercise feedback expanded.
+      return vars.patient_id ? `/patients/${vars.patient_id}?tab=history&session=latest` : '/patients';
     case 'weekly_digest':
       return '/dashboard';
     case 'new_message':

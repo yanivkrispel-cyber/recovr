@@ -9,7 +9,9 @@ Clinical rows are **soft-deleted** (`deleted_at`) — never hard delete.
   password_hash, mfa_secret, last_login_at, status
 - **patient** — id, clinic_id, primary_clinician_id → user, name, name_en, birth_date, sex,
   phone, email, sport, position, status (`invited` | `active` | `paused` | `discharged`),
-  consent_version, consent_at, locale, timezone, activated_at, discharged_at
+  consent_version, consent_at, locale, timezone, activated_at, discharged_at,
+  feedback_seen_at (when the clinic last opened this patient's session notes — drives the
+  new-note badge; one marker per patient, not per clinician)
 - **patient_auth** — id, patient_id, invite_token, invite_expires_at, password_hash, status
 - **device_token** — id, owner_type (`user`|`patient`), owner_id, endpoint, keys jsonb, platform, last_seen_at
 

@@ -1,4 +1,4 @@
-import { useContext, useState, type CSSProperties, type ReactNode } from 'react';
+import { useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { t } from 'shared';
@@ -8,6 +8,7 @@ import AppShell from '../components/AppShell';
 import PhoneRow from '../components/PhoneRow';
 import { MessagesTab } from '../components/MessageThread';
 import EditPlan from '../components/EditPlan';
+import { NewNotePill, SessionItemsDetail, isNewNote, usePatientSessions, type PatientSessions } from '../components/SessionFeedback';
 import MeasurementPanel, { type JointEntry } from '../components/MeasurementPanel';
 import { computeFlag, flagColor, gapFlag, REGION_JOINT, ROM_JOINT_HE, ROM_JOINT_ORDER, sideGap, type FlagState } from '../lib/romFlags';
 
@@ -97,7 +98,7 @@ export default function PatientOverview() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { patientId } = useParams({ from: '/patients/$patientId' });
-  const { tab: initialTab } = useSearch({ from: '/patients/$patientId' });
+  const { tab: initialTab, session: initialSession } = useSearch({ from: '/patients/$patientId' });
   const [editOpen, setEditOpen] = useState(false);
   const isTablet = useIsTablet(); // T-22: tablet is view-only for v1
   const isPhone = useIsPhone();
@@ -106,6 +107,25 @@ export default function PatientOverview() {
   // Recording measurements stays desktop-only (AssessmentsTab still gets isTablet).
   const canEditPlan = !isTablet || isPhone;
   const toast = useToast();
+
+  const { data: sessionsData } = usePatientSessions(patientId);
+
+  // Opening the patient marks their notes as seen (clears the dashboard /
+  // patient-list badge). The loaded sessions keep the previous seen time, so
+  // the notes that were new stay highlighted for this visit.
+  const markedSeen = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sessionsData || markedSeen.current === patientId) return;
+    const hasNew = sessionsData.sessions.some((s) => s.items.some((i) => isNewNote(i, sessionsData.feedback_seen_at)));
+    if (!hasNew) return;
+    markedSeen.current = patientId;
+    void supabase.functions
+      .invoke(`patient-overview/patients/${patientId}/feedback/seen`, { method: 'POST' })
+      .then(() => queryClient.invalidateQueries({ queryKey: ['unseen-feedback'] }));
+  }, [sessionsData, patientId, supabase, queryClient]);
+
+  const openSession = (session: string) =>
+    navigate({ to: '/patients/$patientId', params: { patientId }, search: { tab: 'history', session } });
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['patient-overview', patientId],
@@ -261,13 +281,13 @@ export default function PatientOverview() {
           </div>
 
           <Tabs
-            key={initialTab ?? 'overview'}
+            key={`${initialTab ?? 'overview'}:${initialSession ?? ''}`}
             defaultValue={initialTab ?? 'overview'}
             // On a phone the conversation gets its own full-screen view.
             onChange={isPhone ? (v) => v === 'messages' && navigate({ to: '/messages/$patientId', params: { patientId } }) : undefined}
           >
             <Tab value="overview" label="סקירה · Overview">
-              <OverviewTab data={data} patientId={patientId} />
+              <OverviewTab data={data} patientId={patientId} sessions={sessionsData} onOpenSession={openSession} />
             </Tab>
             <Tab value="plan" label="תכנית · Plan">
               <PlanTab data={data} patientId={patientId} onEditPlan={() => setEditOpen(true)} isTablet={!canEditPlan} />
@@ -279,7 +299,7 @@ export default function PatientOverview() {
               <AssessmentsTab patientId={patientId} patientName={data.patient.name} protocolSlug={data.plan?.protocol_slug ?? null} isTablet={isTablet} />
             </Tab>
             <Tab value="history" label={t('clinician.history.title')}>
-              <HistoryTab data={data} />
+              <HistoryTab data={data} sessions={sessionsData} initialSession={initialSession} />
             </Tab>
             <Tab value="messages" label="הודעות · Messages">
               <MessagesTab patientId={patientId} patientName={data.patient.name} />
@@ -302,7 +322,14 @@ function kpiCardStyle(): CSSProperties {
   return { background: 'var(--shell-sidebar-bg)', border: '1px solid var(--shell-border)', borderRadius: 'var(--radius-card)', padding: 16 };
 }
 
-function OverviewTab({ data, patientId }: { data: OverviewData; patientId: string }) {
+function OverviewTab({
+  data, patientId, sessions, onOpenSession,
+}: {
+  data: OverviewData;
+  patientId: string;
+  sessions: PatientSessions | undefined;
+  onOpenSession: (session: string) => void;
+}) {
   const supabase = useContext(SupabaseContext);
   const queryClient = useQueryClient();
 
@@ -358,11 +385,20 @@ function OverviewTab({ data, patientId }: { data: OverviewData; patientId: strin
             <div style={{ fontWeight: 700, color: 'var(--flag-red)', fontSize: 13 }}>דורש בדיקה · Needs Review</div>
             <div style={{ fontSize: 13, color: '#5A2C21', marginTop: 4 }}>{topAlert.type}</div>
           </div>
-          <Button size="sm" variant="danger" onClick={() => reviewAlert.mutate(topAlert.id)} disabled={reviewAlert.isPending}>
-            בדוק · Review
-          </Button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {topAlert.type === 'pain_spike' && (
+              <Button size="sm" variant="ghost" onClick={() => onOpenSession('latest')}>
+                צפה באימון · View session
+              </Button>
+            )}
+            <Button size="sm" variant="danger" onClick={() => reviewAlert.mutate(topAlert.id)} disabled={reviewAlert.isPending}>
+              בדוק · Review
+            </Button>
+          </div>
         </div>
       )}
+
+      <RecentNotesCard sessions={sessions} onOpenSession={onOpenSession} />
 
       <div style={kpiCardStyle()}>
         <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)', marginBottom: 10 }}>מטרות נוכחיות · Current goals</div>
@@ -993,13 +1029,111 @@ const ghostRoundBtn: CSSProperties = {
   cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
 };
 
-function HistoryTab({ data }: { data: OverviewData }) {
-  const events = [
-    ...data.recent_activity.map((s) => ({
-      at: s.date,
-      label: `${sessionStatusLabel[s.status] ?? s.status} (${Math.round(s.completion_ratio * 100)}%)`,
-    })),
-    ...data.phase_transitions.map((pt) => ({
+function RecentNotesCard({
+  sessions, onOpenSession,
+}: {
+  sessions: PatientSessions | undefined;
+  onOpenSession: (session: string) => void;
+}) {
+  const notes = (sessions?.sessions ?? [])
+    .flatMap((s) => s.items.filter((i) => i.note).map((item) => ({ item, date: s.date })))
+    .slice(0, 5);
+
+  return (
+    <div style={kpiCardStyle()}>
+      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)', marginBottom: 10 }}>
+        הערות אחרונות של המטופל · Recent patient notes
+      </div>
+      {!sessions ? (
+        <Skeleton count={2} height={16} />
+      ) : notes.length === 0 ? (
+        <div style={{ fontSize: 13, color: 'var(--nav-inactive-text)' }}>המטופל לא השאיר הערות עדיין</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {notes.map(({ item, date }) => (
+            <div
+              key={item.id}
+              {...clickableDivProps(() => onOpenSession(date))}
+              style={{ cursor: 'pointer', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 3 }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ color: 'var(--ink)', fontWeight: 600 }}>{formatRelativeDate(date)}</span>
+                <span style={{ color: 'var(--nav-inactive-text)' }}>· {item.name}</span>
+                {item.pain_score != null && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: item.pain_score >= 6 ? 'var(--flag-red)' : 'var(--ink-soft)' }}>
+                    כאב {item.pain_score}/10
+                  </span>
+                )}
+                {isNewNote(item, sessions.feedback_seen_at) && <NewNotePill />}
+              </div>
+              <div style={{ color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>“{item.note}”</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type HistoryEvent =
+  | { kind: 'session'; at: string; date: string; label: string; notes: number; fresh: boolean; hasItems: boolean }
+  | { kind: 'transition'; at: string; label: string };
+
+function HistoryTab({
+  data, sessions, initialSession,
+}: {
+  data: OverviewData;
+  sessions: PatientSessions | undefined;
+  initialSession: string | undefined;
+}) {
+  const sessionList = sessions?.sessions ?? [];
+  const target =
+    initialSession === 'latest'
+      ? sessionList.find((s) => s.items.length > 0)?.date
+      : initialSession;
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(target ? [target] : []));
+  // Sessions may arrive after mount (deep link straight into this tab).
+  const appliedTarget = useRef(false);
+  useEffect(() => {
+    if (appliedTarget.current || !target || !sessions) return;
+    appliedTarget.current = true;
+    setExpanded((e) => new Set(e).add(target));
+    requestAnimationFrame(() => document.getElementById(`session-${target}`)?.scrollIntoView({ block: 'center' }));
+  }, [target, sessions]);
+
+  const toggle = (date: string) =>
+    setExpanded((e) => {
+      const next = new Set(e);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+
+  const statusText = (status: string, ratio: number) =>
+    `${sessionStatusLabel[status] ?? status} (${Math.round(ratio * 100)}%)`;
+
+  const events: HistoryEvent[] = [
+    ...(sessions
+      ? sessionList.map((s): HistoryEvent => ({
+          kind: 'session',
+          at: s.date,
+          date: s.date,
+          label: statusText(s.status, s.completion_ratio),
+          notes: s.items.filter((i) => i.note).length,
+          fresh: s.items.some((i) => isNewNote(i, sessions.feedback_seen_at)),
+          hasItems: s.items.length > 0,
+        }))
+      : data.recent_activity.map((s): HistoryEvent => ({
+          kind: 'session',
+          at: s.date,
+          date: s.date,
+          label: statusText(s.status, s.completion_ratio),
+          notes: 0,
+          fresh: false,
+          hasItems: false,
+        }))),
+    ...data.phase_transitions.map((pt): HistoryEvent => ({
+      kind: 'transition',
       at: pt.approved_at,
       label: `מעבר שלב ${pt.from_phase_n} → ${pt.to_phase_n} (${pt.direction === 'forward' ? 'קדימה' : 'אחורה'})`,
     })),
@@ -1013,12 +1147,42 @@ function HistoryTab({ data }: { data: OverviewData }) {
           <div style={{ fontSize: 13, color: 'var(--nav-inactive-text)' }}>אין היסטוריה עדיין</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>
-            {events.map((e, i) => (
-              <div key={i}>
-                <span style={{ color: 'var(--ink)', fontWeight: 600 }}>{formatRelativeDate(e.at)}</span>{' '}
-                <span style={{ color: 'var(--nav-inactive-text)' }}>— {e.label}</span>
-              </div>
-            ))}
+            {events.map((e, i) => {
+              if (e.kind === 'transition') {
+                return (
+                  <div key={i}>
+                    <span style={{ color: 'var(--ink)', fontWeight: 600 }}>{formatRelativeDate(e.at)}</span>{' '}
+                    <span style={{ color: 'var(--nav-inactive-text)' }}>— {e.label}</span>
+                  </div>
+                );
+              }
+              const session = sessionList.find((s) => s.date === e.date);
+              const open = expanded.has(e.date);
+              return (
+                <div key={i} id={`session-${e.date}`}>
+                  <div
+                    {...(e.hasItems ? clickableDivProps(() => toggle(e.date)) : {})}
+                    aria-expanded={e.hasItems ? open : undefined}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', cursor: e.hasItems ? 'pointer' : 'default' }}
+                  >
+                    {e.hasItems && (
+                      <span style={{ fontSize: 10, color: 'var(--nav-inactive-text)', width: 10 }}>{open ? '▾' : '◂'}</span>
+                    )}
+                    <span style={{ color: 'var(--ink)', fontWeight: 600 }}>{formatRelativeDate(e.at)}</span>
+                    <span style={{ color: 'var(--nav-inactive-text)' }}>— {e.label}</span>
+                    {e.notes > 0 && (
+                      <span style={{ fontSize: 11, color: 'var(--gold-deep)', fontWeight: 600 }}>
+                        {e.notes === 1 ? 'הערה אחת' : `${e.notes} הערות`}
+                      </span>
+                    )}
+                    {e.fresh && <NewNotePill />}
+                  </div>
+                  {open && session && sessions && (
+                    <SessionItemsDetail session={session} seenAt={sessions.feedback_seen_at} />
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

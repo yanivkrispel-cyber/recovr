@@ -29,7 +29,9 @@ patient's timezone · cursor pagination (`?cursor=&limit=`) · `Idempotency-Key`
 | GET | `/patients/:id/plan?version=N` | current or specific `plan_version` |
 | POST | `/patients/:id/plan/versions` | `{base_version, phases:[{phase_n, exercises, removal_reasons, criteria}], note?}` → one new version atomically, any number of phases. 409 `plan_version_conflict` on a stale `base_version`; 422 on an unknown phase or a removal without a reason. The single-phase body `{base_version, phase_n, exercises, …}` is still accepted. |
 | POST | `/patients/:id/phase-transitions` | `{to_phase_n, override_reason?}` → approve/regress |
-| GET | `/patients/:id/sessions?from=&to=` | session history + items |
+| GET | `/patients/:id/sessions?limit=N` | last N sessions (default 30, max 120), each with its items' patient feedback: sets/reps/load done, pain, difficulty, note, skipped + reason; plus `feedback_seen_at`. Audited read. |
+| POST | `/patients/:id/feedback/seen` | mark this patient's notes as seen (clears the new-note badge) |
+| GET | `/feedback/unseen` | `[{patient_id, count, latest_at}]` — notes synced after the patient's `feedback_seen_at` |
 | GET | `/patients/:id/adherence?window=7\|30` | `{pct, days_done, days_planned, series:[{date,completed}]}` |
 | POST | `/patients/:id/measurements` | `{type,key,value,unit,side,measured_at}` |
 | GET/POST | `/patients/:id/messages` | thread |

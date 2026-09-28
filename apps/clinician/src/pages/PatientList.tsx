@@ -5,6 +5,7 @@ import { t, type BodyRegion } from 'shared';
 import { Badge, Button, EmptyState, Input, Modal, Select, Skeleton, Textarea, clickableDivProps, useToast } from 'ui';
 import { AuthContext, SupabaseContext } from '../App';
 import AppShell from '../components/AppShell';
+import { NewNotePill, useUnseenFeedback } from '../components/SessionFeedback';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -57,6 +58,8 @@ export default function PatientList() {
     setInviteOpen(true);
     navigate({ to: '/patients', search: {}, replace: true });
   }, [search.invite, navigate]);
+
+  const unseenNotes = useUnseenFeedback();
 
   const { data: patients, isLoading, error } = useQuery({
     queryKey: ['patients', tab],
@@ -186,6 +189,9 @@ export default function PatientList() {
                   <div>
                     <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 15, color: 'var(--ink)' }}>{p.name}</div>
                     <div style={{ fontSize: 11, color: 'var(--nav-inactive-text)' }}>{p.nameEn}</div>
+                    {unseenNotes.has(p.id) && (
+                      <div style={{ marginTop: 6 }}><NewNotePill count={unseenNotes.get(p.id)} /></div>
+                    )}
                   </div>
                   <Badge tone={p.status === 'pending' || p.status === 'discharged' ? 'neutral' : p.status === 'attention' || p.status === 'inactive' ? 'attention' : 'success'}>
                     {statusLabel[p.status]}
