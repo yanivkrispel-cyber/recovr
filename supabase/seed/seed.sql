@@ -25,6 +25,7 @@ ON CONFLICT (id) DO NOTHING;
 --    from what a newly-provisioned clinic actually gets.
 CREATE SCHEMA IF NOT EXISTS clinic_demo;
 SELECT create_clinic_tables('clinic_demo');
+SELECT add_clinic_columns('clinic_demo');
 
 -- Match what provision_clinic() now does for real clinics: lock the schema
 -- down (RLS + no client-role grants; see 0046/0047) so local dev mirrors prod.
@@ -586,3 +587,8 @@ SELECT app._catalog_link_dataset_media_2026_09_13();
 -- protocols (used in >=2 differently-tagged protocols) got skipped by the
 -- 0029 backfill. Same migration-time-found-nothing reason as above.
 SELECT app._catalog_fix_core_region_gaps_2026_09_13();
+
+-- 0057: the demo plans above are inserted in the old shape (only reached
+-- phases, no base protocol version). Bring them up to what
+-- create_patient_with_plan now builds.
+SELECT app.backfill_plan_versions('clinic_demo');

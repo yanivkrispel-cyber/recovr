@@ -27,7 +27,7 @@ patient's timezone · cursor pagination (`?cursor=&limit=`) · `Idempotency-Key`
 | POST | `/patients/:id/discharge` | archive: `status='discharged'`. Non-destructive — data untouched, patient drops out of `filter=all` until reactivated. Idempotent. |
 | POST | `/patients/:id/reactivate` | undo a discharge: `status='active'` |
 | GET | `/patients/:id/plan?version=N` | current or specific `plan_version` |
-| POST | `/patients/:id/plan/versions` | `{changes:[...], note}` → creates a new version atomically |
+| POST | `/patients/:id/plan/versions` | `{base_version, phases:[{phase_n, exercises, removal_reasons, criteria}], note?}` → one new version atomically, any number of phases. 409 `plan_version_conflict` on a stale `base_version`; 422 on an unknown phase or a removal without a reason. The single-phase body `{base_version, phase_n, exercises, …}` is still accepted. |
 | POST | `/patients/:id/phase-transitions` | `{to_phase_n, override_reason?}` → approve/regress |
 | GET | `/patients/:id/sessions?from=&to=` | session history + items |
 | GET | `/patients/:id/adherence?window=7\|30` | `{pct, days_done, days_planned, series:[{date,completed}]}` |

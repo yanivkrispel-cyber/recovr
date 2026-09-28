@@ -71,6 +71,15 @@ interface EditPlanProps {
 
 type EditTab = 'goals' | 'exercises' | 'assessments' | 'criteria';
 
+// Unsaved edits to a phase other than the one on screen. Switching phases
+// parks the current phase's edits here; Save sends every parked phase plus
+// the visible one as a single plan version.
+interface PhaseDraft {
+  exercises: PlanExercise[];
+  criteria: PlanCriterion[];
+  removals: Record<string, string>;
+}
+
 const DRAFT_KEY_PREFIX = 'recoveryos:plan-draft:';
 
 export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlanProps) {
@@ -95,7 +104,9 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
   const [draft, setDraft] = useState<PlanExercise[]>([]);
   const [criteriaDraft, setCriteriaDraft] = useState<PlanCriterion[]>([]);
   const [removals, setRemovals] = useState<Record<string, string>>({});
+  // `dirty` = the visible phase has unsaved edits; other phases' live in `stash`.
   const [dirty, setDirty] = useState(false);
+  const [stash, setStash] = useState<Record<number, PhaseDraft>>({});
   const [savedFlash, setSavedFlash] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -116,6 +127,7 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
   useEffect(() => {
     if (!open || !plan) return;
     const initialPhase = phaseN ?? plan.current_phase_n;
+    setStash({});
     loadPhaseIntoDraft(initialPhase);
     setEditTab('exercises');
     setSavedFlash(false);
@@ -137,6 +149,34 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
     setSaveError(null);
     setDirty(false);
   }
+
+  // Phase navigation: park the visible phase's edits, then show the target
+  // phase — its parked edits if it has any, otherwise the saved plan.
+  function switchPhase(n: number) {
+    if (n === phaseN) return;
+    const parked = stash[n];
+    setStash((s) => {
+      const next = { ...s };
+      if (phaseN !== null && dirty) next[phaseN] = { exercises: draft, criteria: criteriaDraft, removals };
+      delete next[n];
+      return next;
+    });
+    if (!parked) {
+      loadPhaseIntoDraft(n);
+      return;
+    }
+    setPhaseN(n);
+    setDraft(parked.exercises);
+    setCriteriaDraft(parked.criteria);
+    setRemovals(parked.removals);
+    setSaveError(null);
+    setDirty(true);
+  }
+
+  const unsavedPhases = new Set<number>([
+    ...Object.keys(stash).map(Number),
+    ...(dirty && phaseN !== null ? [phaseN] : []),
+  ]);
 
   const draftExerciseIds = draft.map((d) => d.exercise_id);
 
@@ -258,6 +298,11 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
   // (matches the prototype's saveAndCloseEditPlan vs saveEditPlan split).
   async function doSave(): Promise<boolean> {
     if (!plan || phaseN === null) return false;
+    const edits: [number, PhaseDraft][] = [
+      ...Object.entries(stash).map(([n, d]) => [Number(n), d] as [number, PhaseDraft]),
+      ...(dirty ? [[phaseN, { exercises: draft, criteria: criteriaDraft, removals }] as [number, PhaseDraft]] : []),
+    ];
+    if (edits.length === 0) return true;
     setSaving(true);
     setSaveError(null);
 
@@ -267,31 +312,33 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
         method: 'POST',
         body: {
           base_version: plan.version,
-          phase_n: phaseN,
-          exercises: draft.map((e) => ({
-            plan_exercise_id: e.id,
-            exercise_id: e.exercise_id,
-            sets: e.sets,
-            reps: e.reps,
-            rest_sec: e.rest_sec,
-            hold_sec: e.hold_sec,
-            side: e.side,
-            load: e.load ?? null,
-            load_unit: e.load_unit ?? null,
-            tempo: e.tempo ?? null,
-            order: e.order,
-            clinician_note: e.clinician_note?.trim() || null,
-          })),
-          removal_reasons: removals,
-          criteria: criteriaDraft.map((c, i) => ({
-            id: c.id,
-            type: c.type,
-            label: c.label,
-            label_en: c.label_en,
-            operator: c.operator,
-            value: c.value,
-            unit: c.unit,
-            order: i + 1,
+          phases: edits.map(([n, d]) => ({
+            phase_n: n,
+            exercises: d.exercises.map((e) => ({
+              plan_exercise_id: e.id,
+              exercise_id: e.exercise_id,
+              sets: e.sets,
+              reps: e.reps,
+              rest_sec: e.rest_sec,
+              hold_sec: e.hold_sec,
+              side: e.side,
+              load: e.load ?? null,
+              load_unit: e.load_unit ?? null,
+              tempo: e.tempo ?? null,
+              order: e.order,
+              clinician_note: e.clinician_note?.trim() || null,
+            })),
+            removal_reasons: d.removals,
+            criteria: d.criteria.map((c, i) => ({
+              id: c.id,
+              type: c.type,
+              label: c.label,
+              label_en: c.label_en,
+              operator: c.operator,
+              value: c.value,
+              unit: c.unit,
+              order: i + 1,
+            })),
           })),
         },
       },
@@ -312,8 +359,9 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
       return false;
     }
 
-    localStorage.removeItem(DRAFT_KEY_PREFIX + patientId + ':' + phaseN);
+    localStorage.removeItem(DRAFT_KEY_PREFIX + patientId);
     queryClient.invalidateQueries({ queryKey: ['plan', patientId] });
+    setStash({});
     setDirty(false);
     setSavedFlash(true);
     onSaved();
@@ -380,14 +428,18 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
   function handleConflictKeepDraft() {
     if (phaseN !== null) {
       localStorage.setItem(
-        DRAFT_KEY_PREFIX + patientId + ':' + phaseN,
-        JSON.stringify({ draft, removals }),
+        DRAFT_KEY_PREFIX + patientId,
+        JSON.stringify({
+          ...stash,
+          ...(dirty ? { [phaseN]: { exercises: draft, criteria: criteriaDraft, removals } } : {}),
+        }),
       );
     }
     setConflict(null);
   }
 
   function handleDiscard() {
+    setStash({});
     if (phaseN !== null) loadPhaseIntoDraft(phaseN);
   }
 
@@ -424,7 +476,7 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
       </header>
       )}
 
-      {dirty && (
+      {unsavedPhases.size > 0 && (
         <div className="m-pad m-gap-sm" style={{ position: 'sticky', top: 0, zIndex: 5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, background: 'var(--navy)', color: 'var(--cream)', padding: '11px 26px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12 }}>
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)', flex: 'none' }} />
@@ -470,13 +522,21 @@ export default function EditPlan({ patientId, open, onClose, onSaved }: EditPlan
         ) : (
           <>
             <div className="m-phase-strip" style={{ width: 160, flex: 'none', padding: '18px 12px', display: 'flex', flexDirection: 'column', gap: 6, borderInlineEnd: '1px solid var(--shell-border)' }}>
-              {plan.protocol_phases.map((p) => (
+              {/* The plan's own phases (0057: a plan holds every phase from the
+                  start), so any phase — past, current or not yet reached — can
+                  be edited for this patient. */}
+              {plan.phases.map((p) => (
                 <button
                   key={p.n}
-                  onClick={() => loadPhaseIntoDraft(p.n)}
+                  onClick={() => switchPhase(p.n)}
+                  title={p.name}
                   style={p.n === phaseN ? pillStyle(true) : pillStyle(false)}
                 >
                   שלב {p.n}
+                  {p.n === plan.current_phase_n && <span style={{ fontWeight: 400, opacity: 0.75 }}> · נוכחי</span>}
+                  {unsavedPhases.has(p.n) && (
+                    <span aria-label="שינויים שלא נשמרו · Unsaved changes" style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'var(--gold)', marginInlineStart: 6, verticalAlign: 'middle' }} />
+                  )}
                 </button>
               ))}
             </div>

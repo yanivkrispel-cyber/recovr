@@ -38,6 +38,14 @@ advances a phase automatically.
 - Removing an exercise requires a reason (enum + optional note) — it appears in patient history.
 - Changing a plan for *today* does not invalidate work the patient already logged today.
 - Reordering exercises only is a **silent** change (no patient notification).
+- A plan holds **every phase** from creation (unreached phases have no `started_at`), so any
+  phase — past, current or future — can be edited for one patient. One save may change several
+  phases and still produces a single `plan_version`.
+- Only changes to the patient's **current** phase notify the patient (`plan_updated`); edits to
+  other phases are silent until the patient reaches them.
+- A plan records the protocol version it was built from (`base_protocol_version_id`). Template
+  edits never change existing plans on their own — they are offered per patient for review
+  (planned), and advancing a phase never pulls in template changes.
 
 ## 4. Alerts (clinician, in-app + push)
 | Alert | Condition | Dedupe |

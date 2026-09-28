@@ -1,6 +1,8 @@
 // Edge Function: patient plan (T-07).
 //   GET   /patients/:id/plan?version=N   -> app.get_plan (N omitted = current)
-//   POST  /patients/:id/plan/versions    -> app.save_plan_version, atomic
+//   POST  /patients/:id/plan/versions    -> app.save_plan_version_phases, atomic
+//         body {base_version, phases: [{phase_n, exercises, removal_reasons?, criteria?}], note?};
+//         the older single-phase body {base_version, phase_n, exercises, ...} is still accepted
 //   PATCH /patients/:id/plan             -> app.rename_patient_pathology and/or app.update_patient_note
 
 import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
@@ -11,13 +13,17 @@ import { requireMfa } from '../_shared/mfa.ts';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-interface SaveInput {
-  base_version: number;
+interface PhaseEdit {
   phase_n: number;
   exercises: unknown[];
   removal_reasons?: Record<string, string>;
+  criteria?: unknown[] | null;
+}
+
+interface SaveInput extends Partial<PhaseEdit> {
+  base_version: number;
+  phases?: PhaseEdit[];
   note?: string;
-  criteria?: unknown[];
 }
 
 Deno.serve(withCors(async (req) => {
@@ -77,23 +83,31 @@ Deno.serve(withCors(async (req) => {
     }
 
     const body: SaveInput = await req.json();
+    const phases: PhaseEdit[] | null = Array.isArray(body.phases)
+      ? body.phases
+      : typeof body.phase_n === 'number' && Array.isArray(body.exercises)
+        ? [{ phase_n: body.phase_n, exercises: body.exercises, removal_reasons: body.removal_reasons, criteria: body.criteria }]
+        : null;
     if (
       typeof body.base_version !== 'number' ||
-      typeof body.phase_n !== 'number' ||
-      !Array.isArray(body.exercises)
+      !phases ||
+      phases.length === 0 ||
+      phases.some((p) => typeof p?.phase_n !== 'number' || !Array.isArray(p.exercises))
     ) {
       return new Response(JSON.stringify({ error: 'validation_failed' }), { status: 422 });
     }
 
-    const { data: result, error } = await service.schema('app').rpc('save_plan_version', {
+    const { data: result, error } = await service.schema('app').rpc('save_plan_version_phases', {
       p_clinician_id: user.id,
       p_patient_id: patientId,
       p_base_version: body.base_version,
-      p_phase_n: body.phase_n,
-      p_exercises: body.exercises,
-      p_removal_reasons: body.removal_reasons ?? {},
+      p_phases: phases.map((p) => ({
+        phase_n: p.phase_n,
+        exercises: p.exercises,
+        removal_reasons: p.removal_reasons ?? {},
+        criteria: p.criteria ?? null,
+      })),
       p_note: body.note ?? null,
-      p_criteria: body.criteria ?? null,
     });
 
     if (error) {
@@ -111,8 +125,11 @@ Deno.serve(withCors(async (req) => {
         { status: 409 },
       );
     }
-    if (result?.error === 'validation_failed') {
-      return new Response(JSON.stringify({ error: 'validation_failed', message: result.message }), { status: 422 });
+    if (result?.error === 'validation_failed' || result?.error === 'phase_not_found') {
+      return new Response(
+        JSON.stringify({ error: 'validation_failed', message: result.message ?? result.error, phase_n: result.phase_n }),
+        { status: 422 },
+      );
     }
 
     return new Response(JSON.stringify(result), {

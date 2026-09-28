@@ -27,6 +27,9 @@ Clinical rows are **soft-deleted** (`deleted_at`) — never hard delete.
   region_detail, region_detail_en (optional free-text qualifier, e.g. "Medial", "Tibial
   Tuberosity" — kept verbatim from the old region/region_en text, no longer the only region
   signal), source (`system`|`clinic`), version, is_active
+- **protocol_version** — id, seq, protocol_id, version, snapshot jsonb (phases + exercises +
+  criteria), created_by, created_at. Immutable; one row per distinct content
+  (`app.protocol_snapshot`). The diff base for offering template edits to existing plans.
 - **protocol_phase** — id, protocol_id, n, name, name_en, duration_days, goals jsonb
   (`[{he,en}]`), order
 - **protocol_phase_exercise** — id, protocol_phase_id, exercise_id, prescription
@@ -83,9 +86,11 @@ Clinical rows are **soft-deleted** (`deleted_at`) — never hard delete.
   learning stays within the clinic and never reads patient records.
 
 ## Patient plan
-- **plan** — id, patient_id, protocol_id, started_at, current_phase_n, status
+- **plan** — id, patient_id, protocol_id, base_protocol_version_id → app.protocol_version,
+  started_at, current_phase_n, status
 - **plan_version** — id, plan_id, version, created_by, created_at, note, is_current
-- **plan_phase** — id, plan_version_id, n, name, duration_days, started_at, completed_at
+- **plan_phase** — id, plan_version_id, n, name, duration_days, started_at (null = not reached
+  yet; every protocol phase is copied in at plan creation), completed_at
 - **plan_exercise** — id, plan_phase_id, exercise_id, sets, reps, load, load_unit, tempo,
   hold_sec, rest_sec, side, frequency (`3x/week` normalized: days_per_week int + schedule jsonb),
   order, clinician_note, removed_reason, source (`protocol`|`added`|`modified`)
