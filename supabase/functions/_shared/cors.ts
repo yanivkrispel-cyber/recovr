@@ -8,6 +8,9 @@
 // JS complete authenticated requests via a signed-in user's browser.
 const ALLOWED_ORIGINS = new Set([
   'https://recovr-bykrispel.web.app',
+  // IPv4-only custom domain: some ISPs' IPv6 route to Firebase Hosting resets
+  // TLS handshakes, and the default *.web.app host publishes an AAAA record.
+  'https://recovr.coachkrispel.com',
   'http://localhost:5173',
   'http://localhost:5174',
 ]);
