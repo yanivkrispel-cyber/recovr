@@ -84,9 +84,9 @@ html {
   --patient-danger: #E4A99C;
 
   /* Typography */
-  --font-display: "Frank Ruhl Libre", serif;
+  --font-display: "Heebo", sans-serif;
   --font-ui: "Heebo", sans-serif;
-  --font-accent: "Cormorant Garamond", serif;
+  --font-accent: "Heebo", sans-serif;
 
   /* Spacing scale (px) */
   --space-1: 3px;

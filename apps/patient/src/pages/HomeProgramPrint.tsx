@@ -170,7 +170,7 @@ function PageOne({ data, printedOn }: { data: HomeProgram; printedOn: string }) 
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <Logo tone="light" height={30} />
-            <div style={{ fontFamily: 'var(--font-accent)', fontStyle: 'italic', fontSize: 13, color: 'rgba(201,162,75,.8)' }}>precision rehab, phase by phase</div>
+            <div style={{ fontFamily: 'var(--font-accent)', fontSize: 13, color: 'rgba(201,162,75,.8)' }}>precision rehab, phase by phase</div>
           </div>
         </div>
         <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 3 }}>

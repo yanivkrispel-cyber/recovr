@@ -39,7 +39,7 @@ export const tokens = {
   },
   typography: {
     display: {
-      fontFamily: '"Frank Ruhl Libre", serif',
+      fontFamily: '"Heebo", sans-serif',
       weights: [700, 800],
       sizes: [14, 16, 20, 22, 28],
     },
@@ -49,8 +49,8 @@ export const tokens = {
       bodySize: { clinician: '12-13px', patient: '15-16px' },
     },
     accent: {
-      fontFamily: '"Cormorant Garamond", serif',
-      style: 'italic',
+      fontFamily: '"Heebo", sans-serif',
+      style: 'normal',
       size: 13,
       color: 'rgba(201, 162, 75, 0.72-0.80)',
     },
