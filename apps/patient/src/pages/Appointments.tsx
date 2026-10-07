@@ -1,7 +1,7 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { QueryError, Skeleton, useToast } from 'ui';
-import { formatDayLong, formatTime, t, type BookableType, type I18nKey, type PatientAppointment } from 'shared';
+import { formatDayLong, formatTime, t, typePriceText, type BookableType, type I18nKey, type PatientAppointment } from 'shared';
 import SlotPicker from '../components/booking/SlotPicker';
 import { DARK as th } from '../components/booking/theme';
 import StatusTag from '../components/booking/StatusTag';
@@ -105,6 +105,7 @@ export default function Appointments({ onBack, startBooking = false }: { onBack:
                 <span style={{ fontSize: 13, color: th.muted }}>{t('sched.minutes', { n: ty.duration_min })}</span>
               </span>
               {ty.description && <span style={{ fontSize: 13, color: th.muted }}>{ty.description}</span>}
+              {typePriceText(ty) && <span style={{ fontSize: 13, fontWeight: 600, color: th.text }}>{typePriceText(ty)}</span>}
               {ty.confirmation === 'manual' && <span style={{ fontSize: 12, color: th.accent }}>{t('sched.me.needs_approval')}</span>}
             </button>
           ))}

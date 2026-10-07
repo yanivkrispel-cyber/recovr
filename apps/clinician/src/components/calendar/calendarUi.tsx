@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react';
+import { useRef, type CSSProperties, type ReactNode, type TouchEvent } from 'react';
 import { t, type AppointmentStatus, type CalendarAppointment, type TypeColor, type I18nKey } from 'shared';
 
 // Look of the calendar, from the token layer only (CLAUDE.md rule 11).
@@ -10,6 +10,23 @@ export const TYPE_STYLE: Record<TypeColor, { background: string; color: string; 
   clay: { background: 'var(--pill-attention-bg)', color: 'var(--ink)', accent: 'var(--danger)' },
   slate: { background: 'var(--line-soft)', color: 'var(--ink)', accent: 'var(--navy-muted)' },
 };
+
+/** Load bar colour for a utilisation percentage. */
+export function loadColor(pct: number): string {
+  if (pct >= 75) return 'var(--gold-deep)';
+  if (pct >= 30) return 'var(--gold)';
+  return 'var(--line-input)';
+}
+
+/** Heat-map cell colours by utilisation level (0 free … 5 full). */
+export const HEAT: { background: string; color: string }[] = [
+  { background: 'var(--cream)', color: 'var(--ink-soft)' },
+  { background: 'var(--cream)', color: 'var(--ink-soft)' },
+  { background: 'var(--sand)', color: 'var(--navy)' },
+  { background: 'var(--gold)', color: 'var(--navy)' },
+  { background: 'var(--gold-deep)', color: 'var(--white)' },
+  { background: 'var(--navy)', color: 'var(--cream)' },
+];
 
 export const HATCH =
   'repeating-linear-gradient(135deg, var(--line-soft) 0, var(--line-soft) 6px, var(--shell-border-soft) 6px, var(--shell-border-soft) 12px)';
@@ -141,4 +158,79 @@ export function PlusIcon() {
       <path d="M12 5v14M5 12h14" />
     </svg>
   );
+}
+
+/** Pill-shaped segmented switch (view tabs, "appointment / block time"). */
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+  label,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+  label: string;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label={label}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))`,
+        background: 'var(--line-soft)',
+        borderRadius: 10,
+        padding: 3,
+        gap: 3,
+      }}
+    >
+      {options.map((o) => {
+        const on = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="tab"
+            aria-selected={on}
+            onClick={() => onChange(o.value)}
+            style={{
+              height: 34,
+              border: 'none',
+              borderRadius: 8,
+              fontFamily: 'inherit',
+              fontSize: 14,
+              cursor: 'pointer',
+              ...(on
+                ? { background: 'var(--white)', color: 'var(--navy)', fontWeight: 800, boxShadow: 'var(--shadow-floating)' }
+                : { background: 'transparent', color: 'var(--nav-inactive-text)', fontWeight: 600 }),
+            }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Touch handlers that report a deliberate sideways swipe. RTL: a swipe to
+ *  the right brings in what lies to the left — the next day/week — so it
+ *  reports +1. */
+export function useHorizontalSwipe(onSwipe: (delta: 1 | -1) => void) {
+  const start = useRef<{ x: number; y: number } | null>(null);
+  return {
+    onTouchStart: (e: TouchEvent) => {
+      start.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    },
+    onTouchEnd: (e: TouchEvent) => {
+      const from = start.current;
+      start.current = null;
+      if (!from) return;
+      const dx = e.changedTouches[0].clientX - from.x;
+      const dy = e.changedTouches[0].clientY - from.y;
+      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      onSwipe(dx > 0 ? 1 : -1);
+    },
+  };
 }

@@ -258,7 +258,7 @@ BEGIN
 
   -- --- sweep ---------------------------------------------------------------
   INSERT INTO clinic_demo.appointment (clinic_id, practitioner_id, patient_id, type_id, starts_at, ends_at, status, source)
-  VALUES ('11111111-1111-1111-1111-111111111111', doc, pt, t_tx, now() - interval '2 days', now() - interval '2 days' + interval '45 minutes', 'pending', 'patient_app');
+  VALUES ('11111111-1111-1111-1111-111111111111', doc, pt, t_tx, now() - interval '400 days', now() - interval '400 days' + interval '45 minutes', 'pending', 'patient_app');
   UPDATE clinic_demo.booking_request SET created_at = now() - interval '2 days'
   WHERE id = (SELECT id FROM clinic_demo.booking_request WHERE email = 'dana.demo@example.test' LIMIT 1);
   INSERT INTO clinic_demo.booking_request (clinic_id, practitioner_id, type_id, starts_at, name, phone, email, consent_version, consent_at, code_hash, created_at)
@@ -268,6 +268,64 @@ BEGIN
   PERFORM pg_temp.eq((r ->> 'purged')::int, 1, 'sweep purges only requests that never became an appointment');
 
   RAISE NOTICE 'all scheduling checks passed';
+END
+$test$;
+
+-- --- 0063: prices and the big picture, on a day nothing else touches --------
+DO $test$
+DECLARE
+  doc  CONSTANT UUID := '22222222-2222-2222-2222-222222222222';
+  pt   CONSTANT UUID := '7c75eb99-ca61-4c7f-87f4-145ba1c02686';
+  cid  CONSTANT UUID := '11111111-1111-1111-1111-111111111111';
+  d2   DATE := (now() AT TIME ZONE 'Asia/Jerusalem')::date + 61;
+  r    JSONB;
+  t1   UUID;
+  t2   UUID;
+  b    UUID;
+BEGIN
+  r := app.appointment_type_save(doc, '{"name": "טיפול מבחן", "duration_min": 45, "who_may_book": "existing", "price_ils": 300}');
+  t1 := (r -> 'type' ->> 'id')::uuid;
+  PERFORM pg_temp.eq((r -> 'type' ->> 'price_ils')::numeric, 300::numeric, 'type price saved');
+  r := app.appointment_type_save(doc, '{"name": "הערכה מבחן", "duration_min": 60, "who_may_book": "anyone", "price_ils": 400}');
+  t2 := (r -> 'type' ->> 'id')::uuid;
+  r := app.appointment_type_save(doc, '{"name": "שלילי", "duration_min": 45, "price_ils": -5}');
+  PERFORM pg_temp.eq(r ->> 'error', 'validation_failed', 'negative price refused');
+
+  PERFORM app.time_off_create(doc, jsonb_build_object('starts_at', pg_temp.at(d2, '10:00'), 'ends_at', pg_temp.at(d2, '11:00')));
+  INSERT INTO clinic_demo.appointment (clinic_id, practitioner_id, patient_id, type_id, starts_at, ends_at, status, source, price_ils)
+  VALUES (cid, doc, pt, t1, pg_temp.at(d2, '08:00'), pg_temp.at(d2, '08:45'), 'attended', 'clinician', NULL),
+         (cid, doc, pt, t2, pg_temp.at(d2, '09:00'), pg_temp.at(d2, '10:00'), 'confirmed', 'clinician', 350),
+         (cid, doc, pt, t1, pg_temp.at(d2, '14:00'), pg_temp.at(d2, '14:45'), 'pending', 'patient_app', NULL),
+         (cid, doc, pt, t1, pg_temp.at(d2, '15:00'), pg_temp.at(d2, '15:45'), 'cancelled', 'clinician', NULL),
+         (cid, doc, pt, t1, pg_temp.at(d2, '16:00'), pg_temp.at(d2, '16:45'), 'no_show', 'clinician', NULL);
+  SELECT id INTO b FROM clinic_demo.appointment WHERE starts_at = pg_temp.at(d2, '09:00') AND practitioner_id = doc;
+
+  r := app.calendar_summary(doc, d2, d2) -> 'days' -> 0;
+  PERFORM pg_temp.eq((r ->> 'available_min')::int, 420, 'working minutes = weekly hours minus blocked time');
+  PERFORM pg_temp.eq((r ->> 'booked_min')::int, 195, 'booked = live appointments (pending, confirmed, attended, no-show)');
+  PERFORM pg_temp.eq((r ->> 'free_min')::int, 225, 'free = working minus booked');
+  PERFORM pg_temp.eq((r ->> 'open_slots')::int, 3, 'open slots: 45-min appointments that fit the gaps (15 / 60 / 75 / 75 min)');
+  PERFORM pg_temp.eq((r ->> 'appointments')::int, 4, 'appointment count excludes the cancelled one');
+  PERFORM pg_temp.eq((r ->> 'pending')::int || '/' || (r ->> 'attended') || '/' || (r ->> 'no_show') || '/' || (r ->> 'cancelled'), '1/1/1/1', 'status counts');
+  PERFORM pg_temp.eq((r ->> 'revenue_expected')::numeric, 650::numeric, 'expected revenue = attended + confirmed, override wins');
+  PERFORM pg_temp.eq((r ->> 'revenue_realised')::numeric, 300::numeric, 'realised revenue = attended');
+  PERFORM pg_temp.eq((r ->> 'revenue_pending')::numeric, 300::numeric, 'pending revenue = requests awaiting approval');
+
+  r := app.appointment_update(doc, b, '{"price_ils": null}');
+  PERFORM pg_temp.eq(r -> 'appointment' ->> 'price_ils', NULL, 'clearing the override falls back to the type');
+  r := app.calendar_summary(doc, d2, d2) -> 'days' -> 0;
+  PERFORM pg_temp.eq((r ->> 'revenue_expected')::numeric, 700::numeric, 'revenue follows the type price after clearing');
+  r := app.appointment_update(doc, b, '{"price_ils": -1}');
+  PERFORM pg_temp.eq(r ->> 'error', 'validation_failed', 'negative override refused');
+
+  r := app.calendar_summary(doc, d2, d2 + 63);
+  PERFORM pg_temp.eq(r ->> 'error', 'validation_failed', 'summary range is capped');
+
+  r := app.clinician_free_slots(doc, t1, d2, d2);
+  PERFORM pg_temp.eq(jsonb_array_length(r -> 'slots'), 3, 'clinician suggestions: 11:00, 15:00 (cancelled slot is free), 17:00');
+  PERFORM pg_temp.eq((r -> 'slots' ->> 0)::timestamptz, pg_temp.at(d2, '11:00'), 'first suggestion after the blocked hour');
+
+  RAISE NOTICE 'all insight checks passed';
 END
 $test$;
 

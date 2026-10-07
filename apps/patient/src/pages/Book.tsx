@@ -8,6 +8,7 @@ import {
   isValidEmail,
   normalizePhone,
   t,
+  typePriceText,
   type BookableType,
   type ClinicContact,
   type PatientAppointment,
@@ -228,7 +229,7 @@ export default function Book({ slug }: { slug: string }) {
                       <span style={{ fontSize: 14, color: th.muted, whiteSpace: 'nowrap' }}>{t('sched.minutes', { n: ty.duration_min })}</span>
                     </span>
                     {ty.description && <span style={{ fontSize: 14, color: th.muted }}>{ty.description}</span>}
-                    {ty.price_label && <span style={{ fontSize: 14, fontWeight: 600, color: th.cta }}>{ty.price_label}</span>}
+                    {typePriceText(ty) && <span style={{ fontSize: 14, fontWeight: 600, color: th.cta }}>{typePriceText(ty)}</span>}
                   </button>
                 ))}
                 <p style={{ margin: 0, fontSize: 14, color: th.muted }}>{t('sched.book.existing_hint')}</p>

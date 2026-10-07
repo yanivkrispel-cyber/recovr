@@ -17,3 +17,11 @@
   outline: 2px solid var(--gold);
   outline-offset: -2px;
 }
+
+/* Bottom sheets (phone): 16px fields so iOS doesn't zoom the page on focus —
+   beats the 14px inline field style on purpose. */
+.cal-sheet input,
+.cal-sheet textarea,
+.cal-sheet select {
+  font-size: 16px !important;
+}

@@ -5,10 +5,12 @@ import { Button, Drawer, useToast } from 'ui';
 import {
   canTransition,
   clinicDate,
+  formatILS,
   formatDayLong,
   formatTime,
   minutesOf,
   t,
+  whatsappUrl,
   windowsOn,
   zonedTimeToUtc,
   type AppointmentStatus,
@@ -20,6 +22,7 @@ import {
 import { SchedulingError, useLinkRequest, useUpdateAppointment, type AppointmentPatch } from '../../lib/scheduling';
 import { AddPatientModal, type PatientPrefill } from '../../pages/PatientList';
 import { ConflictList } from './ConflictList';
+import BottomSheet from './BottomSheet';
 import { StatusPill, TypeSwatch, fieldStyle, isLead, labelStyle, personName } from './calendarUi';
 
 interface Props {
@@ -27,24 +30,43 @@ interface Props {
   tz: string;
   types: AppointmentType[];
   rules: WeeklyHoursRule[];
-  /** desktop: move, retype, annotate; below 1024px the drawer is status-only */
+  /** move, retype, annotate, price */
   editable: boolean;
+  /** phone: a bottom sheet instead of the side drawer */
+  variant?: 'drawer' | 'sheet';
   onClose: () => void;
 }
 
 const DURATIONS = [15, 20, 30, 45, 60, 75, 90, 120];
 
-export default function AppointmentDrawer({ appointment, tz, types, rules, editable, onClose }: Props) {
+export default function AppointmentDrawer({ appointment, tz, types, rules, editable, variant = 'drawer', onClose }: Props) {
+  const body = appointment && (
+    <DrawerBody
+      key={appointment.id + appointment.status + appointment.starts_at}
+      a={appointment}
+      tz={tz}
+      types={types}
+      rules={rules}
+      editable={editable}
+      compact={variant === 'sheet'}
+      onClose={onClose}
+    />
+  );
+  if (variant === 'sheet') {
+    return (
+      <BottomSheet open={!!appointment} onClose={onClose} title={appointment ? personName(appointment) : ''}>
+        {body}
+      </BottomSheet>
+    );
+  }
   return (
     <Drawer open={!!appointment} onClose={onClose} title={appointment ? personName(appointment) : ''} width="440px">
-      {appointment && (
-        <DrawerBody key={appointment.id + appointment.status + appointment.starts_at} a={appointment} tz={tz} types={types} rules={rules} editable={editable} onClose={onClose} />
-      )}
+      {body}
     </Drawer>
   );
 }
 
-function DrawerBody({ a, tz, types, rules, editable, onClose }: { a: CalendarAppointment; tz: string; types: AppointmentType[]; rules: WeeklyHoursRule[]; editable: boolean; onClose: () => void }) {
+function DrawerBody({ a, tz, types, rules, editable, compact, onClose }: { a: CalendarAppointment; tz: string; types: AppointmentType[]; rules: WeeklyHoursRule[]; editable: boolean; compact: boolean; onClose: () => void }) {
   const toast = useToast();
   const update = useUpdateAppointment();
   const link = useLinkRequest();
@@ -57,6 +79,7 @@ function DrawerBody({ a, tz, types, rules, editable, onClose }: { a: CalendarApp
   const [duration, setDuration] = useState(Math.round((Date.parse(a.ends_at) - Date.parse(a.starts_at)) / 60_000));
   const [typeId, setTypeId] = useState(a.type.id);
   const [note, setNote] = useState(a.note ?? '');
+  const [price, setPrice] = useState(a.price_ils != null ? String(a.price_ils) : '');
   // A snapshot, not the live lead: once the card is created the appointment
   // refetches as the patient's, and the wizard must stay up for its result
   // screen (invite link).
@@ -68,7 +91,13 @@ function DrawerBody({ a, tz, types, rules, editable, onClose }: { a: CalendarApp
   useEffect(() => setError(null), [date, time, duration]);
 
   const lead = isLead(a) ? a.lead : null;
-  const hasEmail = !!(a.lead?.email || a.patient);
+  const hasEmail = !!(a.lead?.email || a.patient?.email);
+  const phone = a.patient?.phone ?? a.lead?.phone ?? null;
+  const email = a.patient?.email ?? a.lead?.email ?? null;
+  const wa = phone ? whatsappUrl(phone) : null;
+  const priceValue = price.trim() === '' ? null : Number(price);
+  const priceValid = priceValue === null || (Number.isFinite(priceValue) && priceValue >= 0 && priceValue <= 100000);
+  const priceDirty = priceValue !== (a.price_ils ?? null);
 
   async function run(patch: AppointmentPatch, success: I18nKey) {
     setError(null);
@@ -99,7 +128,7 @@ function DrawerBody({ a, tz, types, rules, editable, onClose }: { a: CalendarApp
   })();
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18, padding: '18px 24px 28px', overflowY: 'auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? 14 : 18, padding: compact ? '4px 0 8px' : '18px 24px 28px', overflowY: 'auto' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
         <StatusPill status={a.status} />
         {lead && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold-deep)' }}>{t('sched.lead')}</span>}
@@ -144,6 +173,26 @@ function DrawerBody({ a, tz, types, rules, editable, onClose }: { a: CalendarApp
         <Link to="/patients/$patientId" params={{ patientId: a.patient.id }} style={{ fontSize: 14, fontWeight: 600, color: 'var(--gold-deep)' }}>
           {t('sched.appt.open_patient')} ←
         </Link>
+      )}
+
+      {(phone || email) && (
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${[phone, wa, email].filter(Boolean).length}, minmax(0, 1fr))`, gap: 8 }}>
+          {phone && (
+            <a href={`tel:${phone}`} style={contactBtn}>
+              {t('sched.mobile.call')}
+            </a>
+          )}
+          {wa && (
+            <a href={wa} target="_blank" rel="noreferrer" style={contactBtn}>
+              {t('sched.mobile.whatsapp')}
+            </a>
+          )}
+          {email && (
+            <a href={`mailto:${email}`} style={contactBtn}>
+              {t('sched.mobile.email')}
+            </a>
+          )}
+        </div>
       )}
 
       {lead && (
@@ -324,6 +373,34 @@ function DrawerBody({ a, tz, types, rules, editable, onClose }: { a: CalendarApp
       {error && <ErrorBox error={error} tz={tz} />}
 
       {editable && (
+        <Section title={t('sched.appt.price')}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step={10}
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              placeholder={a.type.price_ils != null ? String(a.type.price_ils) : ''}
+              aria-invalid={!priceValid}
+              aria-describedby="appt-price-hint"
+              style={{ ...fieldStyle, width: 140, flex: 'none' }}
+            />
+            {priceDirty && priceValid && (
+              <Button size="sm" variant="secondary" loading={busy} onClick={() => run({ price_ils: priceValue, notify: false }, 'sched.appt.toast.saved')}>
+                {t('sched.appt.save')}
+              </Button>
+            )}
+          </div>
+          <span id="appt-price-hint" style={{ fontSize: 12, color: 'var(--muted)' }}>
+            {t('sched.appt.price_hint')}
+            {a.type.price_ils != null ? ` · ${t('sched.appt.price_type', { price: formatILS(a.type.price_ils) })}` : ''}
+          </span>
+        </Section>
+      )}
+
+      {editable && (
         <Section title={t('sched.appt.note')}>
           <textarea
             value={note}
@@ -362,6 +439,20 @@ function DrawerBody({ a, tz, types, rules, editable, onClose }: { a: CalendarApp
     </div>
   );
 }
+
+const contactBtn = {
+  height: 44,
+  border: '1px solid var(--shell-border)',
+  borderRadius: 12,
+  background: 'var(--white)',
+  color: 'var(--navy)',
+  fontSize: 14,
+  fontWeight: 600,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  textDecoration: 'none',
+} as const;
 
 function Term({ children }: { children: ReactNode }) {
   return <dt style={{ color: 'var(--muted)', fontSize: 13 }}>{children}</dt>;

@@ -105,10 +105,10 @@ const calendarRoute = createRoute({
   path: '/calendar',
   component: Calendar,
   // date: the clinic-local day to show (YYYY-MM-DD, default today);
-  // view: 'day' (default week; phones always show a day).
-  validateSearch: (search: Record<string, unknown>): { date?: string; view?: 'day' } => ({
+  // view: day / week / month (default: week on desktop, day on a phone).
+  validateSearch: (search: Record<string, unknown>): { date?: string; view?: 'day' | 'week' | 'month' } => ({
     date: typeof search.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(search.date) ? search.date : undefined,
-    view: search.view === 'day' ? 'day' : undefined,
+    view: search.view === 'day' || search.view === 'week' || search.view === 'month' ? search.view : undefined,
   }),
 });
 

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Button, Modal, useToast } from 'ui';
+import { Button, useToast } from 'ui';
 import { addDays, clinicDate, formatDayLong, formatTime, minutesOf, t, zonedTimeToUtc, type TimeOff } from 'shared';
 import { SchedulingError, useCreateTimeOff, useDeleteTimeOff } from '../../lib/scheduling';
 import { ConflictList } from './ConflictList';
-import { fieldStyle, labelStyle } from './calendarUi';
+import { DialogFrame } from './BottomSheet';
+import { Segmented, fieldStyle, labelStyle } from './calendarUi';
 
 interface Props {
   /** 'new' opens the form; a TimeOff shows it with a remove button */
@@ -11,9 +12,13 @@ interface Props {
   defaultDate: string;
   tz: string;
   onClose: () => void;
+  /** phone: a bottom sheet instead of a modal */
+  sheet?: boolean;
+  /** phone: the "new appointment" side of the FAB's sheet */
+  onSwitchToAppointment?: () => void;
 }
 
-export default function TimeOffModal({ target, defaultDate, tz, onClose }: Props) {
+export default function TimeOffModal({ target, defaultDate, tz, onClose, sheet = false, onSwitchToAppointment }: Props) {
   const toast = useToast();
   const create = useCreateTimeOff();
   const remove = useDeleteTimeOff();
@@ -41,11 +46,11 @@ export default function TimeOffModal({ target, defaultDate, tz, onClose }: Props
   if (target !== 'new') {
     const sameDay = clinicDate(target.starts_at, tz) === clinicDate(target.ends_at, tz);
     return (
-      <Modal
+      <DialogFrame
+        sheet={sheet}
         open
         onClose={onClose}
         title={t('sched.off.title')}
-        size="sm"
         footer={
           <div style={{ display: 'flex', gap: 8 }}>
             <Button
@@ -71,7 +76,7 @@ export default function TimeOffModal({ target, defaultDate, tz, onClose }: Props
           {formatTime(target.ends_at, tz)}
         </p>
         {target.reason && <p style={{ margin: '8px 0 0', fontSize: 14, color: 'var(--ink-soft)' }}>{target.reason}</p>}
-      </Modal>
+      </DialogFrame>
     );
   }
 
@@ -98,23 +103,40 @@ export default function TimeOffModal({ target, defaultDate, tz, onClose }: Props
   }
 
   return (
-    <Modal
+    <DialogFrame
+      sheet={sheet}
       open
       onClose={onClose}
-      title={t('sched.off.title')}
-      size="sm"
+      title={onSwitchToAppointment ? t('sched.mobile.new_or_block') : t('sched.off.title')}
       footer={
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Button onClick={submit} disabled={!valid} loading={create.isPending}>
+        sheet ? (
+          <Button onClick={submit} disabled={!valid} loading={create.isPending} style={{ width: '100%' }} size="lg">
             {t('sched.off.save')}
           </Button>
-          <Button variant="ghost" onClick={onClose}>
-            {t('sched.book.back')}
-          </Button>
-        </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button onClick={submit} disabled={!valid} loading={create.isPending}>
+              {t('sched.off.save')}
+            </Button>
+            <Button variant="ghost" onClick={onClose}>
+              {t('sched.book.back')}
+            </Button>
+          </div>
+        )
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {onSwitchToAppointment && (
+          <Segmented
+            label={t('sched.mobile.new_or_block')}
+            options={[
+              { value: 'appt', label: t('sched.appt.new') },
+              { value: 'off', label: t('sched.cal.block') },
+            ]}
+            value="off"
+            onChange={(v) => v === 'appt' && onSwitchToAppointment()}
+          />
+        )}
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
           <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} />
           {t('sched.off.all_day')}
@@ -154,6 +176,6 @@ export default function TimeOffModal({ target, defaultDate, tz, onClose }: Props
             </div>
           ))}
       </div>
-    </Modal>
+    </DialogFrame>
   );
 }

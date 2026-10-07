@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   addDays,
+  addMonths,
   canTransition,
+  clipToLocalDay,
+  dayUtilisation,
+  freeGaps,
+  effectivePrice,
+  formatDateRange,
+  formatMinutes,
+  formatMonthTitle,
+  monthEnd,
+  monthGrid,
+  sumDays,
+  typePriceText,
+  utilisationLevel,
+  whatsappUrl,
   formatTime,
   freeSlots,
   googleCalendarUrl,
@@ -178,5 +192,90 @@ describe('add to calendar', () => {
     expect(url.searchParams.get('dates')).toBe('20261006T060000Z/20261006T064500Z');
     expect(url.searchParams.get('text')).toBe('טיפול');
     expect(url.searchParams.get('location')).toBe('תל אביב');
+  });
+});
+
+describe('the big picture (0063)', () => {
+  const day = (over: Partial<import('./scheduling').CalendarDaySummary>) => ({
+    date: '2026-10-13', available_min: 480, booked_min: 240, free_min: 240, open_slots: 4, appointments: 5,
+    pending: 1, attended: 2, no_show: 0, cancelled: 1, revenue_expected: 960, revenue_realised: 640, revenue_pending: 400,
+    ...over,
+  });
+
+  it('utilisation and heat levels', () => {
+    expect(dayUtilisation(day({}))).toBe(50);
+    expect(dayUtilisation(day({ available_min: 0, booked_min: 0 }))).toBe(0);
+    expect(utilisationLevel(0)).toBe(0);
+    expect(utilisationLevel(20)).toBe(1);
+    expect(utilisationLevel(50)).toBe(2);
+    expect(utilisationLevel(60)).toBe(3);
+    expect(utilisationLevel(80)).toBe(4);
+    expect(utilisationLevel(100)).toBe(5);
+  });
+
+  it('sums days (week out of a month) and recomputes utilisation', () => {
+    const t = sumDays([day({}), day({ available_min: 300, booked_min: 300, revenue_expected: 640 })]);
+    expect(t.available_min).toBe(780);
+    expect(t.booked_min).toBe(540);
+    expect(t.utilisation).toBe(69);
+    expect(t.revenue_expected).toBe(1600);
+  });
+
+  it('effective price: the appointment override, else the type', () => {
+    const type = { id: 't', name: 'טיפול', color: 'gold' as const, duration_min: 45, price_ils: 320 };
+    expect(effectivePrice({ price_ils: null, type })).toBe(320);
+    expect(effectivePrice({ price_ils: 250, type })).toBe(250);
+    expect(effectivePrice({ price_ils: 0, type })).toBe(0);
+    expect(effectivePrice({ price_ils: null, type: { ...type, price_ils: null } })).toBeNull();
+  });
+
+  it('price shown to patients: the clinic wording, else the number, never ₪0', () => {
+    expect(typePriceText({ price_label: '350 ₪ · 300 ₪ בחבילה', price_ils: 350 })).toBe('350 ₪ · 300 ₪ בחבילה');
+    expect(typePriceText({ price_label: '  ', price_ils: 320 })).toMatch(/320/);
+    expect(typePriceText({ price_label: null, price_ils: 0 })).toBeNull();
+    expect(typePriceText({ price_label: null })).toBeNull();
+  });
+
+  it('formats durations and months in Hebrew', () => {
+    expect(formatMinutes(45)).toBe('45 דק׳');
+    expect(formatMinutes(60)).toBe('1 ש׳');
+    expect(formatMinutes(195)).toBe('3:15 ש׳');
+    expect(formatMonthTitle('2026-10-13')).toBe('אוקטובר 2026');
+    expect(formatDateRange('2026-10-04', '2026-10-08')).toBe('4–8 באוקטובר');
+    expect(formatDateRange('2026-09-27', '2026-10-03')).toBe('27 בספטמבר–3 באוקטובר');
+    expect(formatDateRange('2026-10-04', '2026-10-04')).toBe('4 באוקטובר');
+  });
+
+  it('month grid: whole Sunday-first weeks', () => {
+    const g = monthGrid('2026-10-13');
+    expect(g).toHaveLength(35);
+    expect(g[0]).toEqual({ date: '2026-09-27', inMonth: false });
+    expect(g[4]).toEqual({ date: '2026-10-01', inMonth: true });
+    expect(g[34]).toEqual({ date: '2026-10-31', inMonth: true });
+    expect(monthGrid('2026-08-05')).toHaveLength(42); // 1 Aug 2026 is a Saturday
+    expect(addMonths('2026-12-15', 1)).toBe('2027-01-01');
+    expect(monthEnd('2028-02-10')).toBe('2028-02-29');
+  });
+
+  it('WhatsApp links for Israeli numbers', () => {
+    expect(whatsappUrl('050-123 4567')).toBe('https://wa.me/972501234567');
+    expect(whatsappUrl('+972 52-111-2233')).toBe('https://wa.me/972521112233');
+    expect(whatsappUrl('12')).toBeNull();
+  });
+});
+
+describe('day geometry', () => {
+  it('clips instants to a clinic-local day', () => {
+    expect(clipToLocalDay(at('2026-10-13', '09:00'), at('2026-10-13', '09:45'), '2026-10-13', TZ)).toEqual([540, 585]);
+    expect(clipToLocalDay(at('2026-10-12', '22:00'), at('2026-10-13', '02:00'), '2026-10-13', TZ)).toEqual([0, 120]);
+    expect(clipToLocalDay(at('2026-10-12', '09:00'), at('2026-10-12', '10:00'), '2026-10-13', TZ)).toBeNull();
+  });
+
+  it('finds free gaps of at least the minimum length', () => {
+    const windows = [{ start: 540, end: 1020 }]; // 09:00–17:00
+    const busy: [number, number][] = [[540, 585], [600, 645], [660, 705], [780, 825], [840, 900], [960, 1005]];
+    expect(freeGaps(windows, busy)).toEqual([{ start: 705, end: 780 }, { start: 900, end: 960 }]);
+    expect(freeGaps(windows, busy, 10)).toContainEqual({ start: 585, end: 600 });
+    expect(freeGaps([{ start: 480, end: 720 }], [])).toEqual([{ start: 480, end: 720 }]);
   });
 });

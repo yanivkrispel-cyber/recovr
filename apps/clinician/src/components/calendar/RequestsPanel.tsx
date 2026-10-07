@@ -3,18 +3,24 @@ import { formatDayShort, formatTime, t, type CalendarAppointment } from 'shared'
 import { useBookingRequests, useUpdateAppointment } from '../../lib/scheduling';
 import { Pill, isLead, panelStyle, personName } from './calendarUi';
 
-/** Pending booking requests (website + patients' apps), oldest decision first. */
-export default function RequestsPanel({ tz, onOpen }: { tz: string; onOpen: (a: CalendarAppointment) => void }) {
+/** Pending booking requests (website + patients' apps), oldest decision first.
+ *  `bare`: no panel chrome or heading — inside the phone's requests sheet. */
+export default function RequestsPanel({ tz, onOpen, bare = false }: { tz: string; onOpen: (a: CalendarAppointment) => void; bare?: boolean }) {
   const toast = useToast();
   const { data: requests, isLoading } = useBookingRequests();
   const update = useUpdateAppointment();
 
   return (
-    <section aria-labelledby="requests-title" style={{ ...panelStyle, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <h2 id="requests-title" style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>
-        {t('sched.cal.requests.title')}
-        {requests?.length ? <span style={{ color: 'var(--gold-deep)' }}> · {requests.length}</span> : null}
-      </h2>
+    <section
+      aria-labelledby={bare ? undefined : 'requests-title'}
+      style={bare ? { display: 'flex', flexDirection: 'column', gap: 10 } : { ...panelStyle, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}
+    >
+      {!bare && (
+        <h2 id="requests-title" style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>
+          {t('sched.cal.requests.title')}
+          {requests?.length ? <span style={{ color: 'var(--gold-deep)' }}> · {requests.length}</span> : null}
+        </h2>
+      )}
 
       {isLoading ? (
         <Skeleton count={2} height={74} radius={10} />
@@ -41,7 +47,7 @@ export default function RequestsPanel({ tz, onOpen }: { tz: string; onOpen: (a: 
             )}
             <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
               <Button
-                size="sm"
+                size={bare ? 'md' : 'sm'}
                 loading={update.isPending && update.variables?.id === r.id}
                 onClick={async () => {
                   try {
@@ -55,7 +61,7 @@ export default function RequestsPanel({ tz, onOpen }: { tz: string; onOpen: (a: 
               >
                 {t('sched.appt.approve')}
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => onOpen(r)}>
+              <Button size={bare ? 'md' : 'sm'} variant="secondary" onClick={() => onOpen(r)}>
                 {t('sched.appt.details')}
               </Button>
             </div>

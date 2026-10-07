@@ -230,14 +230,15 @@ clinics later. Channel is **email only** (no SMS/WhatsApp). Payments are recorde
 Decisions: new-patient first visits need **manual approval**; waitlist offers are **sent by the
 clinician** (system suggests, one click sends); **new and existing patients** may self-book.
 Build order: T-34 + T-35 together, then T-36, T-37, T-38. Mockup:
-https://claude.ai/artifact/XzBGp2VWhrZkqCQzF4qDUd
+https://claude.ai/artifact/XzBGp2VWhrZkqCQzF4qDUd · phone calendar redesign (2026-10-07):
+https://claude.ai/artifact/B6DqqKU9KYxoisRY2Q2Gt4
 
 **T-34 Availability & clinician calendar**
 - Settings › Calendar: weekly availability per practitioner (several windows per day), appointment
   types (name, duration, price shown as text, colour, who may book: `anyone` | `existing` |
   `clinician_only`, confirmation: `manual` | `auto`), buffer between appointments, minimum
   notice, booking horizon, free-cancellation window.
-- Calendar screen (day / week), Sun–Fri, clinic timezone (`Asia/Jerusalem`): create, move,
+- Calendar screen (day / week / month), Sun–Fri, clinic timezone (`Asia/Jerusalem`): create, move,
   resize, cancel and mark attended / no-show; block time (vacation, conference) as a time-off
   row; each card shows the patient's current phase and 7-day adherence (existing engines, read
   only).
@@ -247,8 +248,24 @@ https://claude.ai/artifact/XzBGp2VWhrZkqCQzF4qDUd
 - Slot generation (`app.available_slots(practitioner, type, from, to)`) = availability minus
   appointments, time-off, buffer, minimum notice; mirrored and tested in
   `packages/shared/src/slots.ts` (DST change weeks, buffers, windows split by time-off).
-- Phone (<768px) shows the day view, read + mark attended; week view and editing are ≥1024px
-  (T-22 rule unchanged).
+- Phone (<768px), revised 2026-10-07 after owner testing ("can't see which month I'm in, no
+  big picture, side panels"): sticky header with the month name, requests bell and Today;
+  day / week / month tabs; a week strip with a load bar per day (swipe = next/previous week,
+  swipe on the day = next/previous day). Day = a list (next-up card with countdown, arrived and
+  WhatsApp; free gaps with "+ book"; pending requests approved in place) or a one-day timeline.
+  Week = KPIs + one row per day. Month = KPIs + heat map + the next 4 weeks. Appointment
+  details, new appointment and block time open as bottom sheets; a floating "+" opens new
+  appointment / block time. Booking and editing work at every width — the T-22 view-only rule
+  stays for plan editing, not for the calendar.
+- Big picture (2026-10-07): `app.calendar_summary(from, to)` (≤ 62 days) per clinic-local day —
+  available / booked / free minutes, open slots (most common type length, from now), counts per
+  status, revenue. Shown as KPI tiles (desktop side panel, week and month tabs), the week strip
+  and the month heat map. Revenue needs a number: `price_ils` per type plus an optional
+  per-appointment override (effective = override ?? type price); "expected" = confirmed +
+  attended, "realised" = attended, requests shown separately. Recorded, never charged.
+- New-appointment form suggests the next free starts for the chosen type
+  (`app.clinician_free_slots`: availability minus bookings/time-off/buffer, no minimum notice).
+- Toasts are centred above the phone tab bar in both apps.
 - Every appointment change is written to `audit_log`.
 
 **T-35 Public booking page & new-patient intake**

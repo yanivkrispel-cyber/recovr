@@ -40,6 +40,8 @@ export interface AppointmentType {
   description: string | null;
   duration_min: number;
   price_label: string | null;
+  /** ₪, drives revenue (0063) */
+  price_ils: number | null;
   color: TypeColor;
   who_may_book: WhoMayBook;
   confirmation: Confirmation;
@@ -119,13 +121,15 @@ export interface CalendarAppointment {
   status: AppointmentStatus;
   source: AppointmentSource;
   note: string | null;
+  /** per-appointment price override (₪); null = the type's price */
+  price_ils: number | null;
   created_at: string;
   decided_at: string | null;
   cancelled_by: 'clinician' | 'patient' | 'system' | null;
   cancelled_at: string | null;
   cancel_reason: string | null;
-  type: { id: string; name: string; color: TypeColor; duration_min: number };
-  patient: { id: string; name: string; status: string } | null;
+  type: { id: string; name: string; color: TypeColor; duration_min: number; price_ils: number | null };
+  patient: { id: string; name: string; status: string; phone: string | null; email: string | null } | null;
   /** A website visitor who has no patient card yet (or just got one). */
   lead: {
     request_id: string;
@@ -192,6 +196,7 @@ export interface BookableType {
   description: string | null;
   duration_min: number;
   price_label: string | null;
+  price_ils?: number | null;
   confirmation?: Confirmation;
 }
 
@@ -506,6 +511,41 @@ export function freeSlots(input: FreeSlotsInput): Date[] {
     .map((s) => new Date(s));
 }
 
+/** [start, end) of an instant range clipped to one clinic-local day, in
+ *  minutes past that day's midnight (end may be 1440); null when they don't
+ *  meet. */
+export function clipToLocalDay(start: string | Date, end: string | Date, day: string, tz: string): [number, number] | null {
+  const dayStart = zonedTimeToUtc(day, '00:00', tz).getTime();
+  const dayEnd = zonedTimeToUtc(addDays(day, 1), '00:00', tz).getTime();
+  const s = Math.max(ms(start), dayStart);
+  const e = Math.min(ms(end), dayEnd);
+  if (e <= s) return null;
+  const sMin = s === dayStart ? 0 : zonedParts(new Date(s), tz).minutes;
+  const eMin = e === dayEnd ? 24 * 60 : zonedParts(new Date(e), tz).minutes;
+  return [sMin, eMin];
+}
+
+/** Free gaps (minutes past midnight) of one day: working windows minus the
+ *  busy ranges, keeping gaps of at least `minLen` minutes. */
+export function freeGaps(
+  windows: { start: number; end: number }[],
+  busy: [number, number][],
+  minLen = 30,
+): { start: number; end: number }[] {
+  const sorted = [...busy].sort((a, b) => a[0] - b[0]);
+  const out: { start: number; end: number }[] = [];
+  for (const w of windows) {
+    let cur = w.start;
+    for (const [s, e] of sorted) {
+      if (e <= cur || s >= w.end) continue;
+      if (s - cur >= minLen) out.push({ start: cur, end: Math.min(s, w.end) });
+      cur = Math.max(cur, e);
+    }
+    if (w.end - cur >= minLen) out.push({ start: cur, end: w.end });
+  }
+  return out;
+}
+
 /** Working windows of one clinic-local day, in minutes past midnight. */
 export function windowsOn(rules: WeeklyHoursRule[], date: string): { start: number; end: number }[] {
   const wd = weekdayOf(date);
@@ -513,6 +553,159 @@ export function windowsOn(rules: WeeklyHoursRule[], date: string): { start: numb
     .filter((r) => r.weekday === wd)
     .map((r) => ({ start: minutesOf(r.start_time), end: minutesOf(r.end_time) }))
     .sort((a, b) => a.start - b.start);
+}
+
+// --- the big picture (app.calendar_summary, 0063) ---------------------------------
+
+export interface CalendarDaySummary {
+  /** clinic-local YYYY-MM-DD */
+  date: string;
+  available_min: number;
+  booked_min: number;
+  free_min: number;
+  /** standard-length appointments that still fit, from now on */
+  open_slots: number;
+  appointments: number;
+  pending: number;
+  attended: number;
+  no_show: number;
+  cancelled: number;
+  revenue_expected: number;
+  revenue_realised: number;
+  revenue_pending: number;
+}
+
+export interface CalendarSummaryTotals extends Omit<CalendarDaySummary, 'date'> {
+  utilisation: number;
+}
+
+/** GET scheduling/summary */
+export interface CalendarSummary {
+  timezone: string;
+  /** the standard appointment length the open-slot counts use */
+  slot_min: number;
+  days: CalendarDaySummary[];
+  totals: CalendarSummaryTotals;
+}
+
+/** Utilisation (booked ÷ working minutes) of a day, 0–100; 0 when closed. */
+export function dayUtilisation(d: Pick<CalendarDaySummary, 'available_min' | 'booked_min'>): number {
+  return d.available_min > 0 ? Math.min(100, Math.round((d.booked_min / d.available_min) * 100)) : 0;
+}
+
+/** Heat level for a utilisation: 0 free … 5 full. */
+export function utilisationLevel(pct: number): 0 | 1 | 2 | 3 | 4 | 5 {
+  if (pct >= 95) return 5;
+  if (pct >= 75) return 4;
+  if (pct >= 55) return 3;
+  if (pct >= 30) return 2;
+  if (pct > 0) return 1;
+  return 0;
+}
+
+/** Totals over a set of days (e.g. one week out of a month's summary). */
+export function sumDays(days: CalendarDaySummary[]): CalendarSummaryTotals {
+  const t = days.reduce(
+    (acc, d) => {
+      acc.available_min += d.available_min;
+      acc.booked_min += d.booked_min;
+      acc.free_min += d.free_min;
+      acc.open_slots += d.open_slots;
+      acc.appointments += d.appointments;
+      acc.pending += d.pending;
+      acc.attended += d.attended;
+      acc.no_show += d.no_show;
+      acc.cancelled += d.cancelled;
+      acc.revenue_expected += Number(d.revenue_expected);
+      acc.revenue_realised += Number(d.revenue_realised);
+      acc.revenue_pending += Number(d.revenue_pending);
+      return acc;
+    },
+    {
+      available_min: 0, booked_min: 0, free_min: 0, open_slots: 0, appointments: 0, pending: 0,
+      attended: 0, no_show: 0, cancelled: 0, revenue_expected: 0, revenue_realised: 0, revenue_pending: 0,
+    },
+  );
+  return { ...t, utilisation: dayUtilisation(t) };
+}
+
+/** The price an appointment counts for: its own, else its type's. */
+export function effectivePrice(a: Pick<CalendarAppointment, 'price_ils' | 'type'>): number | null {
+  return a.price_ils ?? a.type.price_ils ?? null;
+}
+
+const ILS = new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 });
+
+export function formatILS(amount: number): string {
+  return ILS.format(Math.round(amount));
+}
+
+/** What a patient sees as a type's price: the clinic's own wording if it set
+ *  one ("350 ₪ · 300 ₪ בחבילה"), else the number; nothing for free/unpriced. */
+export function typePriceText(type: { price_label?: string | null; price_ils?: number | null }): string | null {
+  const label = type.price_label?.trim();
+  if (label) return label;
+  return type.price_ils != null && type.price_ils > 0 ? formatILS(type.price_ils) : null;
+}
+
+/** "45 דק׳", "1 ש׳", "3:15 ש׳" */
+export function formatMinutes(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = Math.round(min % 60);
+  if (h === 0) return `${m} דק׳`;
+  return m === 0 ? `${h} ש׳` : `${h}:${String(m).padStart(2, '0')} ש׳`;
+}
+
+/** "אוקטובר 2026" for a clinic-local date. */
+export function formatMonthTitle(date: string): string {
+  return new Intl.DateTimeFormat('he-IL', { timeZone: 'UTC', month: 'long', year: 'numeric' }).format(
+    zonedTimeToUtc(date, '12:00', 'UTC'),
+  );
+}
+
+/** Local dates as a short range: "4–8 באוקטובר", "27 בספטמבר–3 באוקטובר". */
+export function formatDateRange(from: string, to: string): string {
+  const fmt = new Intl.DateTimeFormat('he-IL', { timeZone: 'UTC', day: 'numeric', month: 'long' });
+  return fmt.formatRange(zonedTimeToUtc(from, '12:00', 'UTC'), zonedTimeToUtc(to, '12:00', 'UTC'));
+}
+
+export function monthStart(date: string): string {
+  return `${date.slice(0, 7)}-01`;
+}
+
+export function monthEnd(date: string): string {
+  const [y, m] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+}
+
+export function addMonths(date: string, n: number): string {
+  const [y, m] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 10);
+}
+
+/** The month as whole Sunday-first weeks: 35 or 42 days, with the days of
+ *  the neighbouring months that fill the first and last rows. */
+export function monthGrid(date: string): { date: string; inMonth: boolean }[] {
+  const first = monthStart(date);
+  const last = monthEnd(date);
+  const start = weekStart(first);
+  const end = addDays(weekStart(last), 6);
+  const out: { date: string; inMonth: boolean }[] = [];
+  for (let d = start; d <= end; d = addDays(d, 1)) out.push({ date: d, inMonth: d >= first && d <= last });
+  return out;
+}
+
+/** A wa.me link for an Israeli or international number. */
+export function whatsappUrl(phone: string, text?: string): string | null {
+  let digits = phone.replace(/\D/g, '');
+  if (!digits) return null;
+  if (phone.trim().startsWith('+')) {
+    // already international
+  } else if (digits.startsWith('0')) {
+    digits = `972${digits.slice(1)}`;
+  }
+  if (digits.length < 9) return null;
+  return `https://wa.me/${digits}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
 }
 
 // --- add to calendar ------------------------------------------------------------

@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from 'react';
 import {
-  addDays,
+  clipToLocalDay,
   formatTime,
   hhmm,
   isLive,
@@ -27,18 +27,6 @@ interface Placed<T> {
   height: number;
   lane: number;
   lanes: number;
-}
-
-/** [start, end) of an instant range, clipped to one local day, in minutes. */
-function clipToDay(start: string, end: string, day: string, tz: string): [number, number] | null {
-  const dayStart = zonedTimeToUtc(day, '00:00', tz).getTime();
-  const dayEnd = zonedTimeToUtc(addDays(day, 1), '00:00', tz).getTime();
-  const s = Math.max(Date.parse(start), dayStart);
-  const e = Math.min(Date.parse(end), dayEnd);
-  if (e <= s) return null;
-  const sMin = s === dayStart ? 0 : zonedParts(new Date(s), tz).minutes;
-  const eMin = e === dayEnd ? DAY_MIN : zonedParts(new Date(e), tz).minutes;
-  return [sMin, Math.max(eMin, sMin + 5)];
 }
 
 /** Side-by-side lanes for overlapping items (e.g. a cancelled visit under a new one). */
@@ -94,20 +82,22 @@ export interface WeekGridProps {
   onCreate?: (date: string, minutes: number) => void;
   onOpen: (a: CalendarAppointment) => void;
   onOpenTimeOff?: (o: TimeOff) => void;
+  /** phone timeline: the day is already named above the grid */
+  hideHeader?: boolean;
 }
 
-export default function WeekGrid({ days, tz, rules, appointments, timeOff, now, onCreate, onOpen, onOpenTimeOff }: WeekGridProps) {
+export default function WeekGrid({ days, tz, rules, appointments, timeOff, now, onCreate, onOpen, onOpenTimeOff, hideHeader = false }: WeekGridProps) {
   const today = zonedParts(now, tz).date;
 
   const perDay = useMemo(
     () =>
       days.map((day) => {
         const appts = appointments.flatMap((a) => {
-          const r = clipToDay(a.starts_at, a.ends_at, day, tz);
+          const r = clipToLocalDay(a.starts_at, a.ends_at, day, tz);
           return r ? [{ item: a, start: r[0], end: r[1] }] : [];
         });
         const offs = timeOff.flatMap((o) => {
-          const r = clipToDay(o.starts_at, o.ends_at, day, tz);
+          const r = clipToLocalDay(o.starts_at, o.ends_at, day, tz);
           return r ? [{ item: o, start: r[0], end: r[1] }] : [];
         });
         return { day, appts, offs, windows: windowsOn(rules, day) };
@@ -135,14 +125,14 @@ export default function WeekGrid({ days, tz, rules, appointments, timeOff, now, 
   const height = (toMin - fromMin) * PX_PER_MIN;
   const halfHours = Array.from({ length: (toMin - fromMin) / 30 }, (_, i) => fromMin + i * 30);
   const nowMin = zonedParts(now, tz).minutes;
-  const columns = `56px repeat(${days.length}, minmax(${days.length > 1 ? 112 : 240}px, 1fr))`;
+  const columns = `56px repeat(${days.length}, minmax(${days.length > 1 ? 112 : 200}px, 1fr))`;
 
   return (
     <div style={{ overflowX: 'auto' }}>
       <div style={{ minWidth: days.length > 1 ? 56 + days.length * 112 : undefined }}>
         <div
           style={{
-            display: 'grid',
+            display: hideHeader ? 'none' : 'grid',
             gridTemplateColumns: columns,
             position: 'sticky',
             top: 0,

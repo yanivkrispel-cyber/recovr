@@ -8,6 +8,7 @@ import type {
   CalendarAppointment,
   CalendarConflicts,
   CalendarRange,
+  CalendarSummary,
   SchedulingSettings,
   SchedulingSetup,
   TimeOff,
@@ -50,6 +51,7 @@ export const SETUP_KEY = ['scheduling', 'setup'] as const;
 export const REQUESTS_KEY = ['scheduling', 'requests'] as const;
 export const REQUEST_COUNT_KEY = ['scheduling', 'requests', 'count'] as const;
 const CALENDAR_KEY = ['scheduling', 'calendar'] as const;
+const SUMMARY_KEY = ['scheduling', 'summary'] as const;
 
 export function useSchedulingSetup() {
   const supabase = useContext(SupabaseContext);
@@ -60,14 +62,38 @@ export function useSchedulingSetup() {
   });
 }
 
-export function useCalendarRange(from: string, to: string) {
+export function useCalendarRange(from: string, to: string, enabled = true) {
   const supabase = useContext(SupabaseContext);
   return useQuery({
     queryKey: [...CALENDAR_KEY, from, to],
+    enabled,
     queryFn: () =>
       call<CalendarRange>(supabase, `calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, 'GET'),
     placeholderData: (prev) => prev,
     refetchInterval: 60_000,
+  });
+}
+
+/** Per-day big picture for clinic-local dates [from, to] (≤ 62 days). */
+export function useCalendarSummary(from: string, to: string, enabled = true) {
+  const supabase = useContext(SupabaseContext);
+  return useQuery({
+    queryKey: [...SUMMARY_KEY, from, to],
+    enabled,
+    queryFn: () => call<CalendarSummary>(supabase, `summary?from=${from}&to=${to}`, 'GET'),
+    placeholderData: (prev) => prev,
+    refetchInterval: 120_000,
+  });
+}
+
+/** Open start times to suggest for a new appointment of `typeId`. */
+export function useClinicianSlots(typeId: string | null, from: string, to: string) {
+  const supabase = useContext(SupabaseContext);
+  return useQuery({
+    queryKey: ['scheduling', 'slots', typeId, from, to],
+    enabled: !!typeId,
+    queryFn: async () => (await call<{ slots: string[] }>(supabase, `slots?type_id=${typeId}&from=${from}&to=${to}`, 'GET')).slots,
+    staleTime: 30_000,
   });
 }
 
@@ -96,6 +122,8 @@ function useInvalidateCalendar() {
   return () => {
     void queryClient.invalidateQueries({ queryKey: CALENDAR_KEY });
     void queryClient.invalidateQueries({ queryKey: REQUESTS_KEY });
+    void queryClient.invalidateQueries({ queryKey: SUMMARY_KEY });
+    void queryClient.invalidateQueries({ queryKey: ['scheduling', 'slots'] });
   };
 }
 
@@ -115,6 +143,7 @@ export interface AppointmentPatch {
   type_id?: string;
   note?: string | null;
   cancel_reason?: string;
+  price_ils?: number | null;
   notify?: boolean;
 }
 
@@ -180,6 +209,7 @@ function useSetupMutation<TInput, TResult>(fn: (supabase: Supabase, input: TInpu
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: SETUP_KEY });
       void queryClient.invalidateQueries({ queryKey: CALENDAR_KEY });
+      void queryClient.invalidateQueries({ queryKey: SUMMARY_KEY });
     },
   });
 }

@@ -5,6 +5,8 @@
 //   POST   /scheduling/types                      create / update an appointment type
 //   PUT    /scheduling/availability               { practitioner_id?, rules } replace weekly hours
 //   GET    /scheduling/calendar?from&to           appointments + blocked time (ISO instants)
+//   GET    /scheduling/summary?from&to            per-day big picture (clinic-local dates, ≤ 62 days)
+//   GET    /scheduling/slots?type_id&from&to      open start times to suggest for a new appointment
 //   POST   /scheduling/appointments               book a patient            { …, notify? }
 //   PATCH  /scheduling/appointments/:id           move / status / note      { …, notify? }
 //   POST   /scheduling/time-off                   block time
@@ -111,6 +113,25 @@ Deno.serve(withCors(async (req) => {
       return json({ error: 'validation_failed' }, 422);
     }
     const { data, error } = await rpc('calendar_range', { p_clinician_id: user.id, p_from: from, p_to: to });
+    return reply(data, error);
+  }
+
+  const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+  if (req.method === 'GET' && resource === 'summary') {
+    const from = url.searchParams.get('from') ?? '';
+    const to = url.searchParams.get('to') ?? '';
+    if (!DATE.test(from) || !DATE.test(to)) return json({ error: 'validation_failed' }, 422);
+    const { data, error } = await rpc('calendar_summary', { p_clinician_id: user.id, p_from: from, p_to: to });
+    return reply(data, error);
+  }
+
+  if (req.method === 'GET' && resource === 'slots') {
+    const typeId = url.searchParams.get('type_id');
+    const from = url.searchParams.get('from') ?? '';
+    const to = url.searchParams.get('to') ?? '';
+    if (!isUuid(typeId) || !DATE.test(from) || !DATE.test(to)) return json({ error: 'validation_failed' }, 422);
+    const { data, error } = await rpc('clinician_free_slots', { p_clinician_id: user.id, p_type_id: typeId, p_from: from, p_to: to });
     return reply(data, error);
   }
 

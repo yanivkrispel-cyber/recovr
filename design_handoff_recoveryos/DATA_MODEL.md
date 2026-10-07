@@ -138,7 +138,7 @@ Full field-by-field spec in `ROM_MEASUREMENT.md` §5.
   sent_at, read_at
 - **audit_log** — id, actor_type, actor_id, action, entity_type, entity_id, ip, user_agent, at
 
-## Scheduling (M6) — built for T-34/T-35 in migration 0062; T-36/T-37 planned
+## Scheduling (M6) — built for T-34/T-35 in migrations 0062–0063; T-36/T-37 planned
 Clinic level (`app`):
 - **clinic.booking_slug** — unique public address of the booking page (`/m/book/<slug>`)
 - **clinic.settings → scheduling** (defaults via `app.scheduling_settings`): booking_enabled,
@@ -147,7 +147,9 @@ Clinic level (`app`):
 
 Per clinic (`clinic_<slug>`, created by `add_clinic_scheduling_tables` via `add_clinic_columns`):
 - **appointment_type** — id, clinic_id, name, name_en, description, duration_min (5–480),
-  price_label (display text, no payments), color (`navy|gold|green|clay|slate` — token keys),
+  price_ils (NUMERIC 0–100000, nullable — feeds expected revenue and the booking page; 0063),
+  price_label (optional display text that replaces the number on the booking page, no payments),
+  color (`navy|gold|green|clay|slate` — token keys),
   who_may_book (`anyone`|`existing`|`clinician_only`), confirmation (`manual`|`auto`), active, sort
 - **availability_rule** — id, clinic_id, practitioner_id → user, weekday (0 = Sunday), start_time,
   end_time (clinic-local, 5-minute marks, no overlap within a day)
@@ -161,7 +163,8 @@ Per clinic (`clinic_<slug>`, created by `add_clinic_scheduling_tables` via `add_
   type_id, starts_at, ends_at (≤ 12 h), status (`pending`|`confirmed`|`attended`|`no_show`|
   `cancelled`|`declined`|`expired`), source (`clinician`|`patient_app`|`public`), note (internal),
   created_by, decided_by, decided_at, cancelled_by (`clinician`|`patient`|`system`),
-  cancelled_at, cancel_reason. Exclusion constraint: no overlapping live rows (`pending`,
+  cancelled_at, cancel_reason, price_ils (per-appointment override, NULL = the type's price;
+  0063). Exclusion constraint: no overlapping live rows (`pending`,
   `confirmed`, `attended`, `no_show`) per practitioner; a trigger keeps live appointments and
   time_off apart.
 - Manage links in e-mails are stateless HMAC tokens over (clinic id, appointment id) — nothing

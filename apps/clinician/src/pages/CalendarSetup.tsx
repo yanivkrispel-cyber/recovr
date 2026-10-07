@@ -8,6 +8,7 @@ import {
   MIN_NOTICE_OPTIONS,
   SLOT_STEP_OPTIONS,
   TYPE_COLORS,
+  formatILS,
   isValidSlug,
   suggestSlug,
   t,
@@ -218,6 +219,7 @@ function Types({ setup }: { setup: SchedulingSetup }) {
               </div>
               <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
                 {t(`sched.who.${ty.who_may_book}` as I18nKey)} · {t(`sched.confirm.${ty.confirmation}` as I18nKey)}
+                {ty.price_ils != null ? ` · ${formatILS(ty.price_ils)}` : ''}
                 {ty.price_label ? ` · ${ty.price_label}` : ''}
               </div>
             </div>
@@ -255,8 +257,11 @@ function TypeEditor({ initial, onClose }: { initial: Partial<AppointmentType>; o
   const save = useSaveAppointmentType();
   const toast = useToast();
   const [draft, setDraft] = useState<Partial<AppointmentType>>(initial);
+  const [price, setPrice] = useState(initial.price_ils != null ? String(initial.price_ils) : '');
   const set = <K extends keyof AppointmentType>(k: K, v: AppointmentType[K]) => setDraft((d) => ({ ...d, [k]: v }));
-  const valid = !!draft.name?.trim() && !!draft.duration_min && draft.duration_min >= 5 && draft.duration_min <= 480;
+  const priceValue = price.trim() === '' ? null : Number(price);
+  const priceValid = priceValue === null || (Number.isFinite(priceValue) && priceValue >= 0 && priceValue <= 100000);
+  const valid = !!draft.name?.trim() && !!draft.duration_min && draft.duration_min >= 5 && draft.duration_min <= 480 && priceValid;
 
   return (
     <Modal
@@ -275,7 +280,8 @@ function TypeEditor({ initial, onClose }: { initial: Partial<AppointmentType>; o
                   id: draft.id,
                   name: draft.name?.trim(),
                   duration_min: draft.duration_min,
-                  price_label: draft.price_label ?? null,
+                  price_ils: priceValue,
+                  price_label: draft.price_label?.trim() || null,
                   description: draft.description ?? null,
                   color: draft.color,
                   who_may_book: draft.who_may_book,
@@ -307,6 +313,21 @@ function TypeEditor({ initial, onClose }: { initial: Partial<AppointmentType>; o
             <input type="number" min={5} max={480} step={5} value={draft.duration_min ?? ''} onChange={(e) => set('duration_min', Number(e.target.value))} style={fieldStyle} />
           </label>
         </div>
+        <label style={labelStyle}>
+          {t('sched.setup.types.price_ils')}
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            max={100000}
+            step={10}
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            aria-invalid={!priceValid}
+            style={{ ...fieldStyle, maxWidth: 160 }}
+          />
+          <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)' }}>{t('sched.setup.types.price_ils_hint')}</span>
+        </label>
         <label style={labelStyle}>
           {t('sched.setup.types.price')}
           <input value={draft.price_label ?? ''} onChange={(e) => set('price_label', e.target.value)} maxLength={40} style={fieldStyle} />

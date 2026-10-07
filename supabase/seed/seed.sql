@@ -625,6 +625,16 @@ VALUES
    'שיחה טלפונית — לבדוק יחד אם אנחנו מתאימים', 15, 'slate', 'anyone', 'auto', 4)
 ON CONFLICT (id) DO NOTHING;
 
+-- 0063: prices (₪) behind the calendar's revenue numbers.
+UPDATE clinic_demo.appointment_type SET price_ils = p.price
+FROM (VALUES
+  ('b0000000-0000-0000-0000-000000000001'::uuid, 400),
+  ('b0000000-0000-0000-0000-000000000002'::uuid, 320),
+  ('b0000000-0000-0000-0000-000000000003'::uuid, 320),
+  ('b0000000-0000-0000-0000-000000000004'::uuid, 0)
+) AS p(id, price)
+WHERE clinic_demo.appointment_type.id = p.id AND clinic_demo.appointment_type.price_ils IS NULL;
+
 INSERT INTO clinic_demo.availability_rule (clinic_id, practitioner_id, weekday, start_time, end_time)
 SELECT '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', w, s::time, e::time
 FROM (VALUES

@@ -102,9 +102,11 @@ Edge functions `scheduling` (clinician, MFA), `me-appointments` (patient session
 | PATCH | `/scheduling/settings` | patch of `slot_step_min, buffer_min, min_notice_min, horizon_days, free_cancel_hours, contact_address, contact_phone, practitioner_id, booking_enabled, booking_slug` → `{settings, booking_slug, booking_url}`; `slug_taken` 409, `slug_required` 422 |
 | POST | `/scheduling/types` | create (no `id`) / update an appointment type → `{type}` |
 | PUT | `/scheduling/availability` | `{practitioner_id?, rules:[{weekday, start_time, end_time}]}` replaces weekly hours (own, or anyone's for an admin) |
-| GET | `/scheduling/calendar?from&to` | `{timezone, appointments (any status, with clinical phase + server adherence), time_off, pending_count}` — ≤ 62 days |
-| POST | `/scheduling/appointments` | `{patient_id, type_id, starts_at, duration_min?, note?, notify?}` → confirmed booking; 409 `conflict` with `{conflicts:{appointments, time_off}}` |
-| PATCH | `/scheduling/appointments/:id` | move / resize / retype / note / status (`pending→confirmed\|declined`, `confirmed→cancelled\|attended\|no_show`, back to `confirmed`) → `{appointment, change, emailed}` |
+| GET | `/scheduling/calendar?from&to` | `{timezone, appointments (any status, with clinical phase + server adherence, patient phone/email, price_ils), time_off, pending_count}` — ≤ 62 days |
+| GET | `/scheduling/summary?from&to` | `{timezone, slot_min, days:[{date, available_min, booked_min, free_min, open_slots, appointments, pending, attended, no_show, cancelled, revenue_expected, revenue_realised, revenue_pending}], totals{…same sums…, utilisation}}` — clinic-local days, ≤ 62 |
+| GET | `/scheduling/slots?type_id&from&to` | `{slots:[instant]}` — free starts for the clinician's own booking form (no minimum notice / horizon), ≤ 31 days |
+| POST | `/scheduling/appointments` | `{patient_id, type_id, starts_at, duration_min?, note?, price_ils?, notify?}` → confirmed booking; 409 `conflict` with `{conflicts:{appointments, time_off}}` |
+| PATCH | `/scheduling/appointments/:id` | move / resize / retype / note / price_ils (null clears the override) / status (`pending→confirmed\|declined`, `confirmed→cancelled\|attended\|no_show`, back to `confirmed`) → `{appointment, change, emailed}` |
 | POST · DELETE | `/scheduling/time-off` · `/scheduling/time-off/:id` | block / unblock time; 409 `conflict` when appointments are in the way |
 | GET | `/scheduling/requests[?count=1]` | pending requests (website + app) with existing-patient matches · `{count}` for the nav badge |
 | POST | `/scheduling/requests/:id/link` | `{patient_id}` — tie a website request and its appointment to a card (`patient-invite` also accepts `booking_request_id`) |

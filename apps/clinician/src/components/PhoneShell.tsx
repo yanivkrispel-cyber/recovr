@@ -13,6 +13,9 @@ import { useBookingRequestCount } from '../lib/scheduling';
 // mostly following patients, chatting, and adjusting plans.
 
 const TAB_BAR_HEIGHT = 60;
+/** The slim top bar: 8px + 34px logo + 8px + 1px border (plus the notch inset).
+ *  Pages with their own sticky bar (the calendar) stick right under it. */
+export const PHONE_HEADER_HEIGHT = 51;
 
 type IconName = 'dashboard' | 'patients' | 'calendar' | 'messages' | 'more';
 
@@ -200,6 +203,8 @@ export default function PhoneShell({ user, children }: { user: User; children: R
           background: 'var(--shell-sidebar-bg)',
           borderBottom: '1px solid var(--shell-border)',
           padding: 'calc(8px + env(safe-area-inset-top)) 16px 8px',
+          height: `calc(${PHONE_HEADER_HEIGHT}px + env(safe-area-inset-top))`,
+          boxSizing: 'border-box',
           display: 'flex',
           alignItems: 'center',
         }}
