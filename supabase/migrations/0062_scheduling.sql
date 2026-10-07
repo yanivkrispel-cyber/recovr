@@ -1933,28 +1933,32 @@ END
 $cron$;
 
 -- ---------------------------------------------------------------------------
--- 9. Privileges: service_role only (0047), then the same self-check.
+-- 9. Privileges: service_role only (0047), then a self-check over what this
+--    migration created. Scoped to it on purpose: an unrelated object elsewhere
+--    in a database must not be able to block this deploy (0047 checks the
+--    whole surface).
 -- ---------------------------------------------------------------------------
+
+CREATE TEMP TABLE sched_fn AS
+SELECT p.oid
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE (n.nspname = 'app' AND (p.proname LIKE '\_sched%' OR p.proname IN (
+         'sched_overlap_guard', 'scheduling_settings', 'scheduling_setup', 'scheduling_update_settings',
+         'appointment_type_save', 'availability_save', 'calendar_range', 'appointment_create',
+         'appointment_update', 'time_off_create', 'time_off_delete', 'booking_requests',
+         'booking_requests_count', 'booking_link_patient', 'public_booking_profile',
+         'public_booking_slots', 'public_booking_request', 'public_booking_confirm',
+         'public_booking_resend', 'public_appointment', 'public_appointment_cancel',
+         'appointment_email_context', 'me_appointments', 'me_appointment_slots',
+         'me_appointment_book', 'me_appointment_cancel', 'scheduling_sweep')))
+   OR (n.nspname = 'public' AND p.proname IN ('add_clinic_scheduling_tables', 'add_clinic_columns'));
 
 DO $$
 DECLARE
   r RECORD;
 BEGIN
-  FOR r IN
-    SELECT p.oid::regprocedure AS sig
-    FROM pg_proc p
-    JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE (n.nspname = 'app' AND (p.proname LIKE '\_sched%' OR p.proname IN (
-             'sched_overlap_guard', 'scheduling_settings', 'scheduling_setup', 'scheduling_update_settings',
-             'appointment_type_save', 'availability_save', 'calendar_range', 'appointment_create',
-             'appointment_update', 'time_off_create', 'time_off_delete', 'booking_requests',
-             'booking_requests_count', 'booking_link_patient', 'public_booking_profile',
-             'public_booking_slots', 'public_booking_request', 'public_booking_confirm',
-             'public_booking_resend', 'public_appointment', 'public_appointment_cancel',
-             'appointment_email_context', 'me_appointments', 'me_appointment_slots',
-             'me_appointment_book', 'me_appointment_cancel', 'scheduling_sweep')))
-       OR (n.nspname = 'public' AND p.proname IN ('add_clinic_scheduling_tables', 'add_clinic_columns'))
-  LOOP
+  FOR r IN SELECT oid::regprocedure AS sig FROM sched_fn LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated', r.sig);
     EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role', r.sig);
   END LOOP;
@@ -1965,26 +1969,24 @@ DECLARE
   v_leaks TEXT;
 BEGIN
   SELECT string_agg(item, ', ') INTO v_leaks FROM (
-    SELECT format('%s EXECUTE %s', r.rolname, p.oid::regprocedure) AS item
-    FROM pg_proc p
-    JOIN pg_namespace n ON n.oid = p.pronamespace
+    SELECT format('%s EXECUTE %s', r.rolname, f.oid::regprocedure) AS item
+    FROM sched_fn f
     CROSS JOIN (VALUES ('anon'), ('authenticated')) AS r(rolname)
-    WHERE (n.nspname IN ('app', 'public') OR n.nspname LIKE 'clinic\_%')
-      AND pg_get_userbyid(p.proowner) = 'postgres'
-      AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')
-      AND has_function_privilege(r.rolname, p.oid, 'EXECUTE')
+    WHERE has_function_privilege(r.rolname, f.oid, 'EXECUTE')
     UNION ALL
     SELECT format('%s TABLE %s.%s', r.rolname, n.nspname, c.relname)
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
     CROSS JOIN (VALUES ('anon'), ('authenticated')) AS r(rolname)
-    WHERE (n.nspname IN ('app', 'public') OR n.nspname LIKE 'clinic\_%')
-      AND c.relkind IN ('r', 'p', 'v', 'm')
-      AND pg_get_userbyid(c.relowner) = 'postgres'
+    WHERE ((n.nspname LIKE 'clinic\_%'
+            AND c.relname IN ('appointment_type', 'availability_rule', 'time_off', 'booking_request', 'appointment'))
+           OR (n.nspname = 'app' AND c.relname = 'clinic'))
       AND has_table_privilege(r.rolname, c.oid, 'SELECT, INSERT, UPDATE, DELETE')
   ) leaks;
 
   IF v_leaks IS NOT NULL THEN
-    RAISE EXCEPTION 'API lockdown incomplete: %', v_leaks;
+    RAISE EXCEPTION 'scheduling lockdown incomplete: %', v_leaks;
   END IF;
 END $$;
+
+DROP TABLE sched_fn;
