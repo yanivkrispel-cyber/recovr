@@ -138,12 +138,14 @@ Full field-by-field spec in `ROM_MEASUREMENT.md` §5.
   sent_at, read_at
 - **audit_log** — id, actor_type, actor_id, action, entity_type, entity_id, ip, user_agent, at
 
-## Scheduling (M6) — built for T-34/T-35 in migrations 0062–0064; T-36/T-37 planned
+## Scheduling (M6) — built for T-34/T-35 and T-36 (reminders) in migrations 0062–0065; waitlist and T-37 planned
 Clinic level (`app`):
 - **clinic.booking_slug** — unique public address of the booking page (`/m/book/<slug>`)
 - **clinic.settings → scheduling** (defaults via `app.scheduling_settings`): booking_enabled,
   practitioner_id (whose calendar website bookings land in), slot_step_min, buffer_min,
-  min_notice_min, horizon_days, free_cancel_hours, contact_address, contact_phone
+  min_notice_min, horizon_days, free_cancel_hours, contact_address, contact_phone,
+  reminder_first_h (0 = off, 24, 48, 72; default 48), reminder_second_h (0 = off, 1, 2, 3, 6, 12;
+  default 3)
 
 Per clinic (`clinic_<slug>`, created by `add_clinic_scheduling_tables` via `add_clinic_columns`):
 - **appointment_type** — id, clinic_id, name, name_en, description, duration_min (5–480),
@@ -167,7 +169,8 @@ Per clinic (`clinic_<slug>`, created by `add_clinic_scheduling_tables` via `add_
   `cancelled`|`declined`|`expired`), source (`clinician`|`patient_app`|`public`), note (internal),
   created_by, decided_by, decided_at, cancelled_by (`clinician`|`patient`|`system`),
   cancelled_at, cancel_reason, price_ils (per-appointment override, NULL = the type's price;
-  0063). Exclusion constraint: no overlapping live rows (`pending`,
+  0063), late_cancel (cancelled inside the free-cancellation window by the patient), moved_at,
+  reminded_first_at, reminded_second_at (0065). Exclusion constraint: no overlapping live rows (`pending`,
   `confirmed`, `attended`, `no_show`) per practitioner; a trigger keeps live appointments and
   time_off apart.
 - Manage links in e-mails are stateless HMAC tokens over (clinic id, appointment id) — nothing

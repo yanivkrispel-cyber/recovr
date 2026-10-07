@@ -7,10 +7,16 @@ import { DARK as th } from '../components/booking/theme';
 import StatusTag from '../components/booking/StatusTag';
 import { BookingError, MY_APPOINTMENTS_KEY, myAppointments } from '../lib/booking';
 
-// "My appointments" inside the patient app (T-35): what's coming up, booking
-// a follow-up from the clinic's open slots, cancelling within the policy.
+// "My appointments" inside the patient app (T-35/T-36): what's coming up,
+// booking a follow-up from the clinic's open slots, moving or cancelling
+// within the policy.
 
-type Mode = { kind: 'list' } | { kind: 'type' } | { kind: 'time'; type: BookableType } | { kind: 'confirm'; type: BookableType; slot: string };
+type Mode =
+  | { kind: 'list' }
+  | { kind: 'type' }
+  | { kind: 'time'; type: BookableType }
+  | { kind: 'confirm'; type: BookableType; slot: string }
+  | { kind: 'move'; appointment: PatientAppointment; slot: string | null };
 
 export default function Appointments({ onBack, startBooking = false }: { onBack: () => void; startBooking?: boolean }) {
   const toast = useToast();
@@ -23,9 +29,35 @@ export default function Appointments({ onBack, startBooking = false }: { onBack:
 
   const tz = data?.timezone ?? 'Asia/Jerusalem';
   const load = useMemo(
-    () => (mode.kind === 'time' || mode.kind === 'confirm' ? (from: string, to: string) => myAppointments.slots(mode.type.id, from, to) : () => Promise.resolve([])),
+    () =>
+      mode.kind === 'time' || mode.kind === 'confirm'
+        ? (from: string, to: string) => myAppointments.slots(mode.type.id, from, to)
+        : mode.kind === 'move'
+          ? (from: string, to: string) => myAppointments.moveSlots(mode.appointment.id, from, to)
+          : () => Promise.resolve([]),
     [mode],
   );
+
+  async function move(a: PatientAppointment, slot: string) {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await myAppointments.move(a.id, slot);
+      toast.show(t('sched.me.moved'), { tone: 'success' });
+      await queryClient.invalidateQueries({ queryKey: MY_APPOINTMENTS_KEY });
+      setMode({ kind: 'list' });
+    } catch (e) {
+      const code = e instanceof BookingError ? e.code : '';
+      if (code === 'slot_taken') {
+        setMessage(t('sched.manage.slot_taken'));
+        setMode({ kind: 'move', appointment: a, slot: null });
+      } else {
+        setMessage(code === 'too_late' ? t('sched.manage.too_late', { n: data?.free_cancel_hours ?? 24 }) : t('error.generic.body'));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function book(type: BookableType, slot: string) {
     setBusy(true);
@@ -72,6 +104,7 @@ export default function Appointments({ onBack, startBooking = false }: { onBack:
     if (mode.kind === 'list') onBack();
     else if (mode.kind === 'type') setMode({ kind: 'list' });
     else if (mode.kind === 'time') setMode(data && data.types.length > 1 ? { kind: 'type' } : { kind: 'list' });
+    else if (mode.kind === 'move') setMode(mode.slot ? { ...mode, slot: null } : { kind: 'list' });
     else setMode({ kind: 'time', type: mode.type });
   };
 
@@ -81,7 +114,15 @@ export default function Appointments({ onBack, startBooking = false }: { onBack:
         → {t('sched.book.back')}
       </button>
       <h1 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 19, fontWeight: 700 }}>
-        {mode.kind === 'list' ? t('sched.me.my') : mode.kind === 'type' ? t('sched.book.choose_type') : mode.kind === 'time' ? t('sched.book.choose_time') : t('sched.me.book')}
+        {mode.kind === 'list'
+          ? t('sched.me.my')
+          : mode.kind === 'type'
+            ? t('sched.book.choose_type')
+            : mode.kind === 'time'
+              ? t('sched.book.choose_time')
+              : mode.kind === 'move'
+                ? t('sched.manage.move_title')
+                : t('sched.me.book')}
       </h1>
 
       {message && (
@@ -125,6 +166,38 @@ export default function Appointments({ onBack, startBooking = false }: { onBack:
             onPick={(slot) => setMode({ kind: 'confirm', type: mode.type, slot })}
           />
         </>
+      ) : mode.kind === 'move' ? (
+        mode.slot ? (
+          <>
+            <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 15 }}>
+              <strong>{mode.appointment.type.name}</strong>
+              <span style={{ fontSize: 13, color: th.muted, textDecoration: 'line-through' }}>
+                {formatDayLong(mode.appointment.starts_at, tz)} · {formatTime(mode.appointment.starts_at, tz)}
+              </span>
+              <span>
+                {formatDayLong(mode.slot, tz)} · {formatTime(mode.slot, tz)}
+              </span>
+            </div>
+            <button type="button" disabled={busy} onClick={() => move(mode.appointment, mode.slot!)} style={{ ...cta, opacity: busy ? 0.6 : 1 }}>
+              {busy ? t('loading.generic') : t('sched.manage.move_ok')}
+            </button>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 13, color: th.muted }}>
+              {mode.appointment.type.name} · {formatDayLong(mode.appointment.starts_at, tz)} · {formatTime(mode.appointment.starts_at, tz)}
+            </div>
+            <SlotPicker
+              tz={tz}
+              horizonDays={data.horizon_days}
+              load={load}
+              cacheKey={['me-move', mode.appointment.id, mode.appointment.starts_at]}
+              theme={th}
+              selected={null}
+              onPick={(slot) => setMode({ ...mode, slot })}
+            />
+          </>
+        )
       ) : mode.kind === 'confirm' ? (
         <>
           <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 15 }}>
@@ -176,6 +249,18 @@ export default function Appointments({ onBack, startBooking = false }: { onBack:
                     {a.status === 'confirmed' && (
                       <button type="button" onClick={() => void myAppointments.downloadIcs(a.id)} style={pill}>
                         {t('sched.book.add_ics')}
+                      </button>
+                    )}
+                    {(a.can_move ?? a.can_cancel) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMessage(null);
+                          setMode({ kind: 'move', appointment: a, slot: null });
+                        }}
+                        style={pill}
+                      >
+                        {t('sched.manage.move')}
                       </button>
                     )}
                     {a.can_cancel ? (

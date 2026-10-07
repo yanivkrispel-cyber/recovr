@@ -131,6 +131,7 @@ describe('deep links', () => {
     ['new_message', {}, '/messages'],
     ['booking_request', {}, '/calendar'],
     ['booking_cancelled', {}, '/calendar'],
+    ['booking_moved', {}, '/calendar'],
   ])('%s -> %s', (event, vars, expected) => {
     expect(deepLink(event, vars)).toBe(expected);
   });

@@ -306,6 +306,17 @@ https://claude.ai/artifact/B6DqqKU9KYxoisRY2Q2Gt4
 **T-36 Reminders, self-service changes & waitlist**
 - Reminder emails 48 h and 3 h before (configurable); signed manage link to cancel or move
   within policy; late cancel / no-show flagged per policy.
+  Built 2026-10-07 (migration 0065): two reminder points in Settings › Calendar (first: off /
+  24 / 48 / 72 h, second: off / 1 / 2 / 3 / 6 / 12 h), sent by the notifications dispatcher
+  (already cron'd every minute) to whoever has an address; a point is skipped when the booking,
+  approval or move e-mail went out after it — one attempt per point. Patients move an
+  appointment themselves from the manage link or the app, inside the free-cancellation window,
+  to a slot open under the booking rules (same length, same practitioner); "moved" e-mail with
+  .ics, `booking_moved` push to the practitioner, reminders start over. Cancelling inside the
+  window, the clinician can mark it a late cancellation by the patient (on by default); the
+  appointment shows the patient's no-shows / late cancellations of the past year and when the
+  reminder went out. "Tomorrow's reminders": tomorrow's confirmed appointments with a one-tap
+  WhatsApp message each (phone: a card on today's day view; desktop: a side panel).
 - Waitlist entries (patient or public lead): preferred days, time bands, type, clinical priority
   flag, notes. A freed slot lists matching entries ordered priority → time waiting; the
   clinician presses send; offer email with a claim link; first valid claim books the slot

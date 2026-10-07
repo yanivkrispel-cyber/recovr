@@ -4,6 +4,8 @@
 //   GET  /me-appointments/slots?type_id&from&to    free start times (local dates)
 //   POST /me-appointments           { type_id, starts_at }  book
 //   POST /me-appointments/:id/cancel                cancel within policy
+//   GET  /me-appointments/:id/slots?from&to          free times to move to
+//   POST /me-appointments/:id/move  { starts_at }   move within policy
 //   GET  /me-appointments/:id/ics                   calendar file
 //
 // The practitioner is the patient's primary clinician; the slot rules are
@@ -98,6 +100,30 @@ Deno.serve(withCors(async (req) => {
     const emailed = await sendBookingEmail(svc, data.clinic_id, data.appointment.id,
       data.appointment.status === 'confirmed' ? 'confirmed' : 'received');
     return json({ appointment: data.appointment, emailed }, 201);
+  }
+
+  if (req.method === 'GET' && rest.length === 2 && rest[1] === 'slots' && isUuid(rest[0])) {
+    const from = url.searchParams.get('from') ?? '';
+    const to = url.searchParams.get('to') ?? '';
+    if (!DATE.test(from) || !DATE.test(to)) return json({ error: 'validation_failed' }, 422);
+    const { data, error } = await rpc('me_appointment_move_slots', {
+      p_patient_auth_id: user.id, p_appointment_id: rest[0], p_from: from, p_to: to,
+    });
+    return reply(data, error);
+  }
+
+  if (req.method === 'POST' && rest.length === 2 && rest[1] === 'move' && isUuid(rest[0])) {
+    const limited = await rateLimit(svc, `me-move:user:${user.id}`, 20, 3600);
+    if (limited) return limited;
+    const b = await req.json().catch(() => null);
+    const startsAt = typeof b?.starts_at === 'string' ? b.starts_at : '';
+    if (!startsAt || Number.isNaN(Date.parse(startsAt))) return json({ error: 'validation_failed' }, 422);
+    const { data, error } = await rpc('me_appointment_move', {
+      p_patient_auth_id: user.id, p_appointment_id: rest[0], p_starts_at: startsAt,
+    });
+    if (error || data?.error) return reply(data, error);
+    const emailed = await sendBookingEmail(svc, data.clinic_id, rest[0], 'moved');
+    return json({ appointment: data.appointment, emailed });
   }
 
   if (req.method === 'POST' && rest.length === 2 && rest[1] === 'cancel' && isUuid(rest[0])) {

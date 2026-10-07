@@ -72,6 +72,9 @@ export interface SchedulingSettings {
   free_cancel_hours: number;
   contact_address: string;
   contact_phone: string;
+  /** e-mail reminder points, hours before the appointment (0 = off) */
+  reminder_first_h: number;
+  reminder_second_h: number;
 }
 
 export const SCHEDULING_DEFAULTS: SchedulingSettings = {
@@ -84,6 +87,8 @@ export const SCHEDULING_DEFAULTS: SchedulingSettings = {
   free_cancel_hours: 24,
   contact_address: '',
   contact_phone: '',
+  reminder_first_h: 48,
+  reminder_second_h: 3,
 };
 
 export const SLOT_STEP_OPTIONS = [10, 15, 20, 30, 60] as const;
@@ -91,6 +96,8 @@ export const BUFFER_OPTIONS = [0, 5, 10, 15, 20, 30] as const;
 export const MIN_NOTICE_OPTIONS = [0, 60, 120, 180, 360, 720, 1440, 2880] as const;
 export const HORIZON_OPTIONS = [7, 14, 21, 28, 42, 60, 90] as const;
 export const FREE_CANCEL_OPTIONS = [0, 2, 6, 12, 24, 48] as const;
+export const REMINDER_FIRST_OPTIONS = [0, 24, 48, 72] as const;
+export const REMINDER_SECOND_OPTIONS = [0, 1, 2, 3, 6, 12] as const;
 
 export interface PractitionerRef {
   id: string;
@@ -128,6 +135,12 @@ export interface CalendarAppointment {
   cancelled_by: 'clinician' | 'patient' | 'system' | null;
   cancelled_at: string | null;
   cancel_reason: string | null;
+  /** cancelled inside the free-cancellation window, by the patient */
+  late_cancel?: boolean;
+  moved_at?: string | null;
+  /** when the e-mail reminders went out */
+  reminded_first_at?: string | null;
+  reminded_second_at?: string | null;
   type: { id: string; name: string; color: TypeColor; duration_min: number; price_ils: number | null };
   patient: { id: string; name: string; status: string; phone: string | null; email: string | null } | null;
   /** Someone without a patient card yet (or who just got one): a website
@@ -149,6 +162,8 @@ export interface CalendarAppointment {
     adherence: number | null;
     low_adherence: boolean;
   } | null;
+  /** A patient card's no-shows and late cancellations over the past year. */
+  history?: { no_show: number; late_cancel: number } | null;
   /** Only on booking-request rows: existing patients that look like the visitor. */
   matches?: { id: string; name: string; status: string }[];
 }
@@ -182,6 +197,8 @@ export interface PatientAppointment {
   status: AppointmentStatus;
   type: { id: string; name: string; duration_min: number };
   can_cancel: boolean;
+  /** a new time can be picked (same window as cancelling) */
+  can_move?: boolean;
 }
 
 export interface ClinicContact {

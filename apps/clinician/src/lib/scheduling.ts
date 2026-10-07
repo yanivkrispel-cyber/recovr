@@ -165,6 +165,8 @@ export interface AppointmentPatch {
   type_id?: string;
   note?: string | null;
   cancel_reason?: string;
+  /** with status 'cancelled': inside the window, the patient's late cancellation */
+  late_cancel?: boolean;
   price_ils?: number | null;
   notify?: boolean;
 }

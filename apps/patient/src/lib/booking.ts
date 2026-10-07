@@ -52,9 +52,19 @@ export const publicBooking = {
   resend: (slug: string, requestId: string) => invoke<{ ok: true }>(`public-booking/${slug}/resend`, 'POST', { request_id: requestId }),
 
   manage: (token: string) =>
-    invoke<{ appointment: PatientAppointment; clinic: ClinicContact; free_cancel_hours: number }>(`public-booking/manage/${token}`, 'GET'),
+    invoke<{ appointment: PatientAppointment; clinic: ClinicContact; free_cancel_hours: number; horizon_days?: number }>(
+      `public-booking/manage/${token}`,
+      'GET',
+    ),
 
   cancel: (token: string) => invoke<{ appointment: PatientAppointment }>(`public-booking/manage/${token}/cancel`, 'POST'),
+
+  /** free times to move the appointment to (clinic-local dates [from, to]) */
+  moveSlots: async (token: string, from: string, to: string) =>
+    (await invoke<{ slots: string[] }>(`public-booking/manage/${token}/slots?from=${from}&to=${to}`, 'GET')).slots,
+
+  move: (token: string, startsAt: string) =>
+    invoke<{ appointment: PatientAppointment; emailed: boolean }>(`public-booking/manage/${token}/move`, 'POST', { starts_at: startsAt }),
 };
 
 /** The .ics download for a manage-link appointment (no session needed). */
@@ -76,6 +86,12 @@ export const myAppointments = {
     invoke<{ appointment: PatientAppointment; emailed: boolean }>('me-appointments', 'POST', { type_id: typeId, starts_at: startsAt }),
 
   cancel: (id: string) => invoke<{ appointment: PatientAppointment }>(`me-appointments/${id}/cancel`, 'POST'),
+
+  moveSlots: async (id: string, from: string, to: string) =>
+    (await invoke<{ slots: string[] }>(`me-appointments/${id}/slots?from=${from}&to=${to}`, 'GET')).slots,
+
+  move: (id: string, startsAt: string) =>
+    invoke<{ appointment: PatientAppointment; emailed: boolean }>(`me-appointments/${id}/move`, 'POST', { starts_at: startsAt }),
 
   /** .ics needs the session's bearer, so it's fetched and handed over as a file. */
   async downloadIcs(id: string): Promise<void> {

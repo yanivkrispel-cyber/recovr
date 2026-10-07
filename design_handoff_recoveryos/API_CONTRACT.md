@@ -99,7 +99,7 @@ Edge functions `scheduling` (clinician, MFA), `me-appointments` (patient session
 | Method | Path | Returns |
 |---|---|---|
 | GET | `/scheduling/setup` | `{me, role, timezone, clinic_name, booking_slug, booking_url, settings, practitioners, types, availability}` |
-| PATCH | `/scheduling/settings` | patch of `slot_step_min, buffer_min, min_notice_min, horizon_days, free_cancel_hours, contact_address, contact_phone, practitioner_id, booking_enabled, booking_slug` → `{settings, booking_slug, booking_url}`; `slug_taken` 409, `slug_required` 422 |
+| PATCH | `/scheduling/settings` | patch of `slot_step_min, buffer_min, min_notice_min, horizon_days, free_cancel_hours, reminder_first_h, reminder_second_h, contact_address, contact_phone, practitioner_id, booking_enabled, booking_slug` → `{settings, booking_slug, booking_url}`; `slug_taken` 409, `slug_required` 422 |
 | POST | `/scheduling/types` | create (no `id`) / update an appointment type → `{type}` |
 | PUT | `/scheduling/availability` | `{practitioner_id?, rules:[{weekday, start_time, end_time}]}` replaces weekly hours (own, or anyone's for an admin) |
 | GET | `/scheduling/calendar?from&to` | `{timezone, appointments (any status, with clinical phase + server adherence, patient phone/email, price_ils), time_off, pending_count}` — ≤ 62 days |
@@ -107,7 +107,7 @@ Edge functions `scheduling` (clinician, MFA), `me-appointments` (patient session
 | GET | `/scheduling/slots?type_id&from&to` | `{slots:[instant]}` — free starts for the clinician's own booking form (no minimum notice / horizon), ≤ 31 days |
 | POST | `/scheduling/appointments` | `{patient_id \| lead:{name, phone, email?}, type_id, starts_at, duration_min?, note?, price_ils?, notify?}` → confirmed booking (a `lead` is stored as a clinician booking request — no card, no invite); 409 `conflict` with `{conflicts:{appointments, time_off}}` |
 | GET | `/scheduling/contact-matches?phone&email` | `{matches:[{id, name, status}]}` — existing cards with the same phone (last 9 digits) or e-mail |
-| PATCH | `/scheduling/appointments/:id` | move / resize / retype / note / price_ils (null clears the override) / status (`pending→confirmed\|declined`, `confirmed→cancelled\|attended\|no_show`, back to `confirmed`) → `{appointment, change, emailed}` |
+| PATCH | `/scheduling/appointments/:id` | move / resize / retype / note / price_ils (null clears the override) / late_cancel (with `status: cancelled`) / status (`pending→confirmed\|declined`, `confirmed→cancelled\|attended\|no_show`, back to `confirmed`) → `{appointment, change, emailed}` |
 | POST · DELETE | `/scheduling/time-off` · `/scheduling/time-off/:id` | block / unblock time; 409 `conflict` when appointments are in the way |
 | GET | `/scheduling/requests[?count=1]` | pending requests (website + app) with existing-patient matches · `{count}` for the nav badge |
 | POST | `/scheduling/requests/:id/link` | `{patient_id}` — tie a website request and its appointment to a card (`patient-invite` also accepts `booking_request_id`) |
@@ -115,12 +115,14 @@ Edge functions `scheduling` (clinician, MFA), `me-appointments` (patient session
 | GET | `/me-appointments/slots?type_id&from&to` | `{slots:[instant]}` |
 | POST | `/me-appointments` | `{type_id, starts_at}` → `{appointment, emailed}`; 409 `slot_taken` / `limit_reached` (4 upcoming) |
 | POST · GET | `/me-appointments/:id/cancel` · `/me-appointments/:id/ics` | cancel inside the free-cancellation window (409 `too_late`) · calendar file |
+| GET · POST | `/me-appointments/:id/slots?from&to` · `/me-appointments/:id/move` | free times to move to (same length, booking rules) · `{starts_at}` → `{appointment, emailed}`; 409 `too_late` / `slot_taken` / `not_movable` |
 | GET | `/public-booking/:slug` | clinic contact, public types, body regions, policy, `consent_version` — 404 when booking is off |
 | GET | `/public-booking/:slug/slots?type_id&from&to` | `{slots}` (≤ 31 days per call) |
 | POST | `/public-booking/:slug/request` | `{type_id, starts_at, name, phone, email, body_region_id?, consent: true}` → e-mails a 6-digit code → `{request_id, email}`; 409 `slot_taken` / `already_booked` |
 | POST | `/public-booking/:slug/confirm` | `{request_id, code, starts_at?}` → `{status: pending\|confirmed, token, appointment, clinic}`; 422 `invalid_code` (+`attempts_left`) / `code_expired` / `too_many_attempts`; 409 `slot_taken` keeps the code valid for another time |
 | POST | `/public-booking/:slug/resend` | `{request_id}` — new code (3 per request) |
-| GET · POST | `/public-booking/manage/:token` · `/public-booking/manage/:token/cancel` | the appointment behind a manage link (stateless HMAC token) · cancel within policy |
+| GET · POST | `/public-booking/manage/:token` · `/public-booking/manage/:token/cancel` | the appointment behind a manage link (stateless HMAC token; `can_move`, `horizon_days`) · cancel within policy |
+| GET · POST | `/public-booking/manage/:token/slots?from&to` · `/public-booking/manage/:token/move` | free times to move to · `{starts_at}` → `{appointment, emailed}`; 409 `too_late` / `slot_taken` (10 moves / h per IP) |
 | GET | `/public-booking/ics/:token` | calendar file |
 
 ## Errors

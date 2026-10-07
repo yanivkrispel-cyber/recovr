@@ -34,6 +34,7 @@ import AppointmentDrawer from '../components/calendar/AppointmentDrawer';
 import NewAppointmentModal from '../components/calendar/NewAppointmentModal';
 import TimeOffModal from '../components/calendar/TimeOffModal';
 import RequestsPanel from '../components/calendar/RequestsPanel';
+import { RemindersList, useTomorrowAppointments } from '../components/calendar/TomorrowReminders';
 import { Chevron, PlusIcon, Segmented, TypeSwatch, iconButton, panelStyle, useHorizontalSwipe } from '../components/calendar/calendarUi';
 import {
   useBookingRequestCount,
@@ -112,6 +113,7 @@ export default function Calendar() {
   const [newOpen, setNewOpen] = useState(false);
   const [offTarget, setOffTarget] = useState<'new' | TimeOff | null>(null);
   const [requestsOpen, setRequestsOpen] = useState(false);
+  const [remindersOpen, setRemindersOpen] = useState(false);
   const [dayMode, setDayModeState] = useState<DayMode>(readDayMode);
 
   const myRules = useMemo(
@@ -138,6 +140,19 @@ export default function Calendar() {
   }, [view, anchor, weekDays, myRules, appointments, calendar.data, tz]);
 
   const opened = openRequest ?? calendar.data?.appointments.find((a) => a.id === openId) ?? null;
+
+  const configured = !!setup.data && !(setup.data.types.length === 0 && setup.data.availability.length === 0);
+  const tomorrow = useTomorrowAppointments(tz, today, configured && (!isPhone || (view === 'day' && anchor === today)));
+  const settings = setup.data?.settings;
+  const remindersList = settings && (
+    <RemindersList
+      appointments={tomorrow.list}
+      tz={tz}
+      clinicName={setup.data?.clinic_name ?? ''}
+      address={settings.contact_address}
+      emailReminders={settings.reminder_first_h > 0 || settings.reminder_second_h > 0}
+    />
+  );
 
   function go(date: string, nextView: CalendarView = view) {
     navigate({ to: '/calendar', search: { date: date === today ? undefined : date, view: nextView === defaultView ? undefined : nextView } });
@@ -253,6 +268,15 @@ export default function Calendar() {
               </div>
               <DayModeToggle mode={dayMode} onChange={setDayMode} />
             </div>
+            {anchor === today && tomorrow.list.length > 0 && (
+              <button type="button" onClick={() => setRemindersOpen(true)} style={remindersCard}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3.5 20.5l1.4-4.4A8.5 8.5 0 1 1 21 11.5z" />
+                </svg>
+                <span style={{ flex: 1 }}>{t('sched.remind.card', { count: tomorrow.list.length })}</span>
+                <span aria-hidden>←</span>
+              </button>
+            )}
             {dayMode === 'list' ? (
               <DayAgenda
                 day={anchor}
@@ -315,6 +339,14 @@ export default function Calendar() {
 
         <aside style={{ flex: '1 1 280px', maxWidth: 340, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <RequestsPanel tz={tz} onOpen={(a) => setOpenRequest(a)} />
+          {tomorrow.list.length > 0 && (
+            <section aria-labelledby="reminders-title" style={{ ...panelStyle, padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <h2 id="reminders-title" style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>
+                {t('sched.remind.title')} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>· {tomorrow.list.length}</span>
+              </h2>
+              {remindersList}
+            </section>
+          )}
           {view !== 'month' && weekSummary.data && <KpiTiles totals={weekSummary.data.totals} slotMin={slotMin} scope="week" hasPrices={hasPrices} />}
           {setup.data && (
             <section style={{ ...panelStyle, padding: 14, display: 'flex', flexWrap: 'wrap', gap: '8px 14px' }}>
@@ -337,7 +369,7 @@ export default function Calendar() {
     { value: 'week', label: t('sched.cal.view.week') },
     { value: 'month', label: t('sched.cal.view.month') },
   ];
-  const sheetOpen = newOpen || offTarget !== null || !!opened || requestsOpen;
+  const sheetOpen = newOpen || offTarget !== null || !!opened || requestsOpen || remindersOpen;
 
   return (
     <AppShell user={user}>
@@ -472,6 +504,7 @@ export default function Calendar() {
             rules={myRules}
             editable
             variant={isPhone ? 'sheet' : 'drawer'}
+            freeCancelHours={setup.data.settings.free_cancel_hours}
             onClose={() => {
               setOpenId(null);
               setOpenRequest(null);
@@ -511,6 +544,11 @@ export default function Calendar() {
                 : undefined
             }
           />
+          {isPhone && (
+            <BottomSheet open={remindersOpen} onClose={() => setRemindersOpen(false)} title={t('sched.remind.title')}>
+              {remindersList}
+            </BottomSheet>
+          )}
           {isPhone && (
             <BottomSheet open={requestsOpen} onClose={() => setRequestsOpen(false)} title={t('sched.mobile.requests')}>
               <RequestsPanel
@@ -584,6 +622,24 @@ function toggleStyle(active: boolean): CSSProperties {
     fontWeight: active ? 700 : 500,
   };
 }
+
+const remindersCard: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  width: '100%',
+  minHeight: 48,
+  padding: '10px 14px',
+  border: '1px solid var(--line-soft)',
+  borderRadius: 12,
+  background: 'var(--pill-good-bg)',
+  color: 'var(--flag-green)',
+  fontFamily: 'inherit',
+  fontSize: 14,
+  fontWeight: 700,
+  textAlign: 'start',
+  cursor: 'pointer',
+};
 
 const todayStyle: CSSProperties = {
   height: 36,

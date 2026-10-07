@@ -2,11 +2,13 @@ import { useState, type CSSProperties } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Logo, Skeleton } from 'ui';
 import { formatDayLong, formatTime, googleCalendarUrl, t, type I18nKey } from 'shared';
+import SlotPicker from '../components/booking/SlotPicker';
 import { LIGHT as th } from '../components/booking/theme';
 import { BookingError, publicBooking, publicIcsUrl } from '../lib/booking';
 
-// /m/booking/:token — the link in every booking e-mail (T-35): see the
-// appointment, add it to a calendar, cancel within the clinic's policy.
+// /m/booking/:token — the link in every booking e-mail (T-35/T-36): see the
+// appointment, add it to a calendar, move or cancel it within the clinic's
+// policy.
 
 export default function ManageBooking({ token }: { token: string }) {
   const queryClient = useQueryClient();
@@ -19,6 +21,8 @@ export default function ManageBooking({ token }: { token: string }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [moving, setMoving] = useState(false);
+  const [newSlot, setNewSlot] = useState<string | null>(null);
 
   const tz = data?.clinic.timezone ?? 'Asia/Jerusalem';
   const a = data?.appointment;
@@ -38,6 +42,29 @@ export default function ManageBooking({ token }: { token: string }) {
           ? t('sched.manage.too_late', { n: data?.free_cancel_hours ?? 24 })
           : t('error.generic.body'),
       );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function move() {
+    if (!newSlot) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await publicBooking.move(token, newSlot);
+      await queryClient.invalidateQueries({ queryKey: key });
+      setMoving(false);
+      setNewSlot(null);
+      setMessage(t('sched.manage.moved'));
+    } catch (e) {
+      const code = e instanceof BookingError ? e.code : '';
+      if (code === 'slot_taken') {
+        setNewSlot(null);
+        setMessage(t('sched.manage.slot_taken'));
+      } else {
+        setMessage(code === 'too_late' ? t('sched.manage.too_late', { n: data?.free_cancel_hours ?? 24 }) : t('error.generic.body'));
+      }
     } finally {
       setBusy(false);
     }
@@ -98,7 +125,55 @@ export default function ManageBooking({ token }: { token: string }) {
               </>
             )}
 
+            {live && (a.can_move ?? a.can_cancel) && !confirming && (
+              moving ? (
+                <section aria-label={t('sched.manage.move_title')} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>{t('sched.manage.move_title')}</h2>
+                  {newSlot ? (
+                    <>
+                      <p style={{ margin: 0, fontSize: 15 }}>
+                        {t('sched.manage.move_confirm', { when: `${formatDayLong(newSlot, tz)} · ${formatTime(newSlot, tz)}` })}
+                      </p>
+                      <button type="button" onClick={move} disabled={busy} style={{ ...primary, opacity: busy ? 0.6 : 1 }}>
+                        {busy ? t('loading.generic') : t('sched.manage.move_ok')}
+                      </button>
+                      <button type="button" onClick={() => setNewSlot(null)} style={{ ...outline, background: 'none' }}>
+                        {t('sched.book.back')}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <SlotPicker
+                        tz={tz}
+                        horizonDays={data.horizon_days ?? 42}
+                        load={(from, to) => publicBooking.moveSlots(token, from, to)}
+                        cacheKey={['manage-move', token, a.starts_at]}
+                        theme={th}
+                        selected={null}
+                        onPick={setNewSlot}
+                      />
+                      <button type="button" onClick={() => setMoving(false)} style={{ ...outline, background: 'none' }}>
+                        {t('sched.book.back')}
+                      </button>
+                    </>
+                  )}
+                </section>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMessage(null);
+                    setMoving(true);
+                  }}
+                  style={outline}
+                >
+                  {t('sched.manage.move')}
+                </button>
+              )
+            )}
+
             {live &&
+              !moving &&
               (a.can_cancel ? (
                 confirming ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -142,6 +217,18 @@ const outline: CSSProperties = {
   fontSize: 15,
   fontWeight: 600,
   textDecoration: 'none',
+  fontFamily: 'inherit',
+  cursor: 'pointer',
+};
+
+const primary: CSSProperties = {
+  minHeight: 50,
+  border: 'none',
+  borderRadius: 10,
+  background: th.cta,
+  color: th.ctaInk,
+  fontSize: 15,
+  fontWeight: 700,
   fontFamily: 'inherit',
   cursor: 'pointer',
 };

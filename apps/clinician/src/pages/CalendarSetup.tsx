@@ -6,6 +6,8 @@ import {
   FREE_CANCEL_OPTIONS,
   HORIZON_OPTIONS,
   MIN_NOTICE_OPTIONS,
+  REMINDER_FIRST_OPTIONS,
+  REMINDER_SECOND_OPTIONS,
   SLOT_STEP_OPTIONS,
   TYPE_COLORS,
   formatILS,
@@ -398,7 +400,12 @@ function BookingRules({ setup }: { setup: SchedulingSetup }) {
   const toast = useToast();
   const s = setup.settings;
 
-  const field = (key: 'slot_step_min' | 'buffer_min' | 'min_notice_min' | 'horizon_days' | 'free_cancel_hours', labelKey: I18nKey, options: readonly number[], fmt: (n: number) => string) => (
+  const field = (
+    key: 'slot_step_min' | 'buffer_min' | 'min_notice_min' | 'horizon_days' | 'free_cancel_hours' | 'reminder_first_h' | 'reminder_second_h',
+    labelKey: I18nKey,
+    options: readonly number[],
+    fmt: (n: number) => string,
+  ) => (
     <label style={labelStyle}>
       {t(labelKey)}
       <select
@@ -421,6 +428,15 @@ function BookingRules({ setup }: { setup: SchedulingSetup }) {
     </label>
   );
 
+  const reminderLabel = (n: number) =>
+    n === 0
+      ? t('sched.none')
+      : n === 1
+        ? t('sched.setup.rules.reminder_1h')
+        : n === 2
+          ? t('sched.setup.rules.reminder_2h')
+          : t('sched.setup.rules.reminder_value', { n });
+
   const duration = (min: number) =>
     min === 0 ? t('sched.none') : min % 1440 === 0 ? t('sched.days', { n: min / 1440 }) : min % 60 === 0 ? t('sched.hours', { n: min / 60 }) : t('sched.minutes', { n: min });
 
@@ -432,7 +448,10 @@ function BookingRules({ setup }: { setup: SchedulingSetup }) {
         {field('min_notice_min', 'sched.setup.rules.notice', MIN_NOTICE_OPTIONS, (n) => (n === 0 ? t('sched.none') : t('sched.setup.rules.notice_value', { n: duration(n) })))}
         {field('horizon_days', 'sched.setup.rules.horizon', HORIZON_OPTIONS, (n) => t('sched.setup.rules.horizon_value', { n }))}
         {field('free_cancel_hours', 'sched.setup.rules.free_cancel', FREE_CANCEL_OPTIONS, (n) => (n === 0 ? t('sched.none') : t('sched.setup.rules.free_cancel_value', { n })))}
+        {field('reminder_first_h', 'sched.setup.rules.reminder_first', REMINDER_FIRST_OPTIONS, reminderLabel)}
+        {field('reminder_second_h', 'sched.setup.rules.reminder_second', REMINDER_SECOND_OPTIONS, reminderLabel)}
       </div>
+      <p style={{ margin: 0, fontSize: 12.5, color: 'var(--muted)' }}>{t('sched.setup.rules.reminder_hint')}</p>
     </Card>
   );
 }

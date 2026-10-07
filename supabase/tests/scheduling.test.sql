@@ -403,4 +403,129 @@ BEGIN
 END
 $test$;
 
+-- --- 0065: reminders, patient moves, late cancellations -----------------------
+DO $test$
+DECLARE
+  doc    CONSTANT UUID := '22222222-2222-2222-2222-222222222222';
+  pt     CONSTANT UUID := '7c75eb99-ca61-4c7f-87f4-145ba1c02686';
+  cid    CONSTANT UUID := '11111111-1111-1111-1111-111111111111';
+  d4     DATE := (now() AT TIME ZONE 'Asia/Jerusalem')::date + 63;
+  pauth  UUID;
+  tester UUID;
+  t      UUID;
+  r      JSONB;
+  due    JSONB;
+  a_due  UUID;
+  a_new  UUID;
+  a_soon UUID;
+  a_lead UUID;
+  a_mv   UUID;
+  a_late UUID;
+  b_ns   INT;
+  b_lc   INT;
+BEGIN
+  SELECT id INTO pauth FROM app.patient_auth WHERE patient_id = pt;
+  r := app.scheduling_update_settings(doc, '{"reminder_first_h": 48, "reminder_second_h": 3, "free_cancel_hours": 24}');
+  PERFORM pg_temp.eq(r -> 'settings' ->> 'reminder_first_h', '48', 'reminder points are settings');
+  r := app.scheduling_update_settings(doc, '{"reminder_first_h": 36}');
+  PERFORM pg_temp.eq(r ->> 'error', 'validation_failed', 'reminder points come from the offered values');
+  r := app.appointment_type_save(doc, '{"name": "טיפול תזכורות", "duration_min": 45, "who_may_book": "existing"}');
+  t := (r -> 'type' ->> 'id')::uuid;
+
+  -- Reminders, on a practitioner of their own so nothing else collides.
+  INSERT INTO app."user" (clinic_id, role, name, email, password_hash)
+  VALUES (cid, 'clinician', 'בודק תזכורות', 'reminder-test@example.test', 'x')
+  RETURNING id INTO tester;
+  INSERT INTO clinic_demo.appointment (clinic_id, practitioner_id, patient_id, type_id, starts_at, ends_at, status, source, created_at)
+  VALUES (cid, tester, pt, t, now() + interval '30 hours', now() + interval '30 hours 45 minutes', 'confirmed', 'clinician', now() - interval '5 days')
+  RETURNING id INTO a_due;
+  INSERT INTO clinic_demo.appointment (clinic_id, practitioner_id, patient_id, type_id, starts_at, ends_at, status, source, created_at)
+  VALUES (cid, tester, pt, t, now() + interval '31 hours', now() + interval '31 hours 45 minutes', 'confirmed', 'clinician', now() - interval '1 hour')
+  RETURNING id INTO a_new;
+  INSERT INTO clinic_demo.appointment (clinic_id, practitioner_id, patient_id, type_id, starts_at, ends_at, status, source, created_at)
+  VALUES (cid, tester, pt, t, now() + interval '2 hours', now() + interval '2 hours 45 minutes', 'confirmed', 'clinician', now() - interval '5 days')
+  RETURNING id INTO a_soon;
+  r := app.appointment_create(doc, jsonb_build_object('type_id', t, 'starts_at', pg_temp.at(d4, '16:00'),
+         'lead', jsonb_build_object('name', 'בלי מייל', 'phone', '0507654321')));
+  a_lead := (r -> 'appointment' ->> 'id')::uuid;
+  UPDATE clinic_demo.appointment
+  SET starts_at = now() + interval '20 hours', ends_at = now() + interval '20 hours 45 minutes',
+      practitioner_id = tester, created_at = now() - interval '5 days', decided_at = now() - interval '5 days'
+  WHERE id = a_lead;
+
+  due := app.booking_reminders_due(1000) -> 'reminders';
+  PERFORM pg_temp.eq((SELECT x ->> 'stage' FROM jsonb_array_elements(due) x WHERE x ->> 'appointment_id' = a_due::text),
+                     'first', 'booked days ago, 30 h out: the first reminder is due');
+  PERFORM pg_temp.eq((SELECT count(*)::int FROM jsonb_array_elements(due) x WHERE x ->> 'appointment_id' = a_new::text), 0,
+                     'booked an hour ago, already inside the window: the booking e-mail did the job');
+  PERFORM pg_temp.eq((SELECT string_agg(x ->> 'stage', ',') FROM jsonb_array_elements(due) x WHERE x ->> 'appointment_id' = a_soon::text),
+                     'second', '2 h out: only the second reminder (the first is past its turn)');
+  PERFORM pg_temp.eq((SELECT count(*)::int FROM jsonb_array_elements(due) x WHERE x ->> 'appointment_id' = a_lead::text), 0,
+                     'no e-mail address, no reminder');
+
+  PERFORM app.booking_reminder_mark(cid, a_due, 'first');
+  due := app.booking_reminders_due(1000) -> 'reminders';
+  PERFORM pg_temp.eq((SELECT count(*)::int FROM jsonb_array_elements(due) x WHERE x ->> 'appointment_id' = a_due::text), 0,
+                     'a reminder goes out once');
+
+  r := app.scheduling_update_settings(doc, '{"reminder_first_h": 0, "reminder_second_h": 0}');
+  due := app.booking_reminders_due(1000) -> 'reminders';
+  PERFORM pg_temp.eq((SELECT count(*)::int FROM jsonb_array_elements(due) x WHERE x ->> 'clinic_id' = cid::text), 0,
+                     'reminders off: nothing due');
+  PERFORM app.scheduling_update_settings(doc, '{"reminder_first_h": 48, "reminder_second_h": 3}');
+
+  -- The clinician moves it: reminders start over, and a move inside the
+  -- window counts as having told the patient.
+  r := app.appointment_update(doc, a_due, jsonb_build_object('starts_at', now() + interval '40 hours'));
+  PERFORM pg_temp.eq(r -> 'appointment' ->> 'reminded_first_at', NULL, 'a move clears the reminder stamps');
+  PERFORM pg_temp.eq((r -> 'appointment' ->> 'moved_at') IS NOT NULL, true, 'a move is stamped');
+  due := app.booking_reminders_due(1000) -> 'reminders';
+  PERFORM pg_temp.eq((SELECT count(*)::int FROM jsonb_array_elements(due) x WHERE x ->> 'appointment_id' = a_due::text), 0,
+                     'moved into the window just now: no first reminder on top of the "moved" e-mail');
+
+  -- Patient moves (app and manage link): the patient's practitioner, open slots only.
+  r := app.appointment_create(doc, jsonb_build_object('patient_id', pt, 'type_id', t, 'starts_at', pg_temp.at(d4, '09:00')));
+  a_mv := (r -> 'appointment' ->> 'id')::uuid;
+  r := app.me_appointment_move_slots(pauth, a_mv, d4, d4);
+  PERFORM pg_temp.eq((SELECT count(*)::int FROM jsonb_array_elements_text(r -> 'slots') s WHERE s::timestamptz = pg_temp.at(d4, '09:00')), 0,
+                     'the current time is not offered as a new time');
+  PERFORM pg_temp.eq((SELECT count(*)::int FROM jsonb_array_elements_text(r -> 'slots') s WHERE s::timestamptz = pg_temp.at(d4, '10:30')), 1,
+                     'an open time is offered');
+  r := app.me_appointment_move(pauth, a_mv, pg_temp.at(d4, '10:30'));
+  PERFORM pg_temp.eq((r -> 'appointment' ->> 'starts_at')::timestamptz, pg_temp.at(d4, '10:30'), 'the patient moved it');
+  PERFORM pg_temp.eq((SELECT ends_at - starts_at FROM clinic_demo.appointment WHERE id = a_mv), interval '45 minutes', 'length kept');
+  PERFORM pg_temp.eq((SELECT count(*)::int FROM clinic_demo.notification WHERE event_key = 'booking_moved' AND payload ->> 'appointment_id' = a_mv::text), 1,
+                     'the practitioner gets a "moved" push');
+  r := app.me_appointment_move(pauth, a_mv, pg_temp.at(d4, '12:30'));
+  PERFORM pg_temp.eq(r ->> 'error', 'slot_taken', 'outside working hours is not open');
+  r := app.public_appointment_move(cid, a_mv, pg_temp.at(d4, '14:00'));
+  PERFORM pg_temp.eq((r -> 'appointment' ->> 'starts_at')::timestamptz, pg_temp.at(d4, '14:00'), 'moved again from the manage link');
+  r := app.me_appointment_move(pauth, a_lead, now() + interval '5 days');
+  PERFORM pg_temp.eq(r ->> 'error', 'not_found', 'only one''s own appointments');
+  r := app.public_appointment_move(cid, a_soon, pg_temp.at(d4, '15:00'));
+  PERFORM pg_temp.eq(r ->> 'error', 'too_late', 'inside the free-cancellation window the patient calls the clinic');
+  r := app.public_appointment(cid, a_mv);
+  PERFORM pg_temp.eq((r -> 'appointment' ->> 'can_move')::boolean, true, 'the manage page offers a move');
+  PERFORM pg_temp.eq((r ->> 'horizon_days')::int, 90, 'and knows how far ahead');
+
+  -- Late cancellation by the patient, and the history it builds.
+  SELECT (h -> 'history' ->> 'no_show')::int, (h -> 'history' ->> 'late_cancel')::int INTO b_ns, b_lc
+  FROM (SELECT app._sched_appointment_json(a_mv) AS h) s;
+  INSERT INTO clinic_demo.appointment (clinic_id, practitioner_id, patient_id, type_id, starts_at, ends_at, status, source)
+  VALUES (cid, tester, pt, t, now() - interval '10 days', now() - interval '10 days' + interval '45 minutes', 'no_show', 'clinician');
+  INSERT INTO clinic_demo.appointment (clinic_id, practitioner_id, patient_id, type_id, starts_at, ends_at, status, source)
+  VALUES (cid, tester, pt, t, now() - interval '20 days', now() - interval '20 days' + interval '45 minutes', 'confirmed', 'clinician')
+  RETURNING id INTO a_late;
+  r := app.appointment_update(doc, a_late, '{"status": "cancelled", "late_cancel": true}');
+  PERFORM pg_temp.eq((r -> 'appointment' ->> 'late_cancel')::boolean, true, 'cancellation marked as late');
+  r := app._sched_appointment_json(a_mv) -> 'history';
+  PERFORM pg_temp.eq((r ->> 'no_show')::int - b_ns, 1, 'history counts the no-show');
+  PERFORM pg_temp.eq((r ->> 'late_cancel')::int - b_lc, 1, 'history counts the late cancellation');
+  r := app.appointment_update(doc, a_late, '{"status": "confirmed"}');
+  PERFORM pg_temp.eq((r -> 'appointment' ->> 'late_cancel')::boolean, false, 'restoring clears the late flag');
+
+  RAISE NOTICE 'all reminder checks passed';
+END
+$test$;
+
 ROLLBACK;

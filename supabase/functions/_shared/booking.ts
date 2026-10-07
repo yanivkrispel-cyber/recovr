@@ -211,6 +211,7 @@ export function statusFor(code: string): number {
     case 'slug_taken':
     case 'invalid_transition':
     case 'not_cancellable':
+    case 'not_movable':
     case 'too_late':
     case 'limit_reached':
       return 409;

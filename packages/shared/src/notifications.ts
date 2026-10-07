@@ -27,7 +27,8 @@ export type NotificationEventKey =
   | 'new_message'
   | 'booking_request'
   | 'booking_new'
-  | 'booking_cancelled';
+  | 'booking_cancelled'
+  | 'booking_moved';
 
 export type NotificationRecipient = 'patient' | 'clinician';
 export type NotificationChannel = 'push' | 'email' | 'in_app';
@@ -113,6 +114,13 @@ export const NOTIFICATION_EVENTS: Record<NotificationEventKey, NotificationEvent
     urgent: false,
   },
   booking_cancelled: {
+    recipient: 'clinician',
+    channels: ['push'],
+    category: 'bookings',
+    disableable: true,
+    urgent: false,
+  },
+  booking_moved: {
     recipient: 'clinician',
     channels: ['push'],
     category: 'bookings',
@@ -211,6 +219,10 @@ const TEMPLATES: Record<NotificationEventKey, { title: string; body: string }> =
     title: 'תור בוטל',
     body: '{when} · {type_name} — בוטל ע״י המטופל/ת',
   },
+  booking_moved: {
+    title: 'תור הועבר',
+    body: '{when} · {type_name} — המועד החדש שבחר/ה המטופל/ת',
+  },
 };
 
 export function renderNotification(
@@ -245,6 +257,7 @@ export function deepLink(event: NotificationEventKey, vars: NotifVars): string {
     case 'booking_request':
     case 'booking_new':
     case 'booking_cancelled':
+    case 'booking_moved':
       return '/calendar';
   }
 }

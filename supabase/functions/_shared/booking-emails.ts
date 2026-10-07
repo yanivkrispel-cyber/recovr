@@ -8,7 +8,7 @@
 import { sendEmail } from './email.ts';
 import { bookingPageUrl, buildIcs, EMAIL_LOGO_URL, manageToken, manageUrl } from './booking.ts';
 
-export type BookingEmailKind = 'received' | 'confirmed' | 'declined' | 'moved' | 'cancelled';
+export type BookingEmailKind = 'received' | 'confirmed' | 'declined' | 'moved' | 'cancelled' | 'reminder';
 
 interface EmailContext {
   appointment_id: string;
@@ -145,8 +145,10 @@ export async function sendBookingEmail(
   const link = manageUrl(await manageToken(clinicId, appointmentId));
   const bookAgain = ctx.clinic.booking_slug ? bookingPageUrl(ctx.clinic.booking_slug) : null;
   const cancelNote = ctx.free_cancel_hours > 0
-    ? `אפשר לבטל דרך הקישור עד ${ctx.free_cancel_hours} שעות לפני התור.`
-    : 'לשינוי או ביטול אפשר להשתמש בקישור.';
+    ? `אפשר לשנות מועד או לבטל דרך הקישור עד ${ctx.free_cancel_hours} שעות לפני התור.`
+    : 'לשינוי מועד או ביטול אפשר להשתמש בקישור.';
+  // Still inside the self-service window? (A late reminder may not be.)
+  const changeable = new Date(ctx.starts_at).getTime() - Date.now() > ctx.free_cancel_hours * 3_600_000;
 
   let subject: string;
   let body: { html: string; text: string };
@@ -162,10 +164,19 @@ export async function sendBookingEmail(
     case 'confirmed':
       subject = `התור שלך נקבע · ${day(ctx.starts_at, ctx.clinic.timezone)} ${time(ctx.starts_at, ctx.clinic.timezone)}`;
       body = layout(ctx, 'התור נקבע', 'מחכים לך. הוספנו קובץ יומן כדי שהתור יופיע ביומן שלך.', {
-        cta: [link, 'צפייה בתור או ביטולו'],
+        cta: [link, 'צפייה בתור, שינוי מועד או ביטול'],
         notes: [cancelNote],
       });
       attachment = invite(ctx, 'confirmed', link);
+      break;
+    case 'reminder':
+      subject = `תזכורת: התור שלך ${day(ctx.starts_at, ctx.clinic.timezone)} ${time(ctx.starts_at, ctx.clinic.timezone)}`;
+      body = layout(ctx, 'תזכורת לתור', 'רצינו להזכיר שמחכים לך:', {
+        cta: [link, changeable ? 'צפייה בתור, שינוי מועד או ביטול' : 'צפייה בתור'],
+        notes: changeable
+          ? [cancelNote]
+          : [ctx.clinic.phone ? `לשינוי או ביטול בשלב הזה צריך לפנות למרפאה: ${ctx.clinic.phone}` : 'לשינוי או ביטול בשלב הזה צריך לפנות למרפאה.'],
+      });
       break;
     case 'moved':
       subject = `מועד התור שלך השתנה · ${day(ctx.starts_at, ctx.clinic.timezone)} ${time(ctx.starts_at, ctx.clinic.timezone)}`;

@@ -7,6 +7,7 @@ import {
   clinicDate,
   formatILS,
   formatDayLong,
+  formatDayShort,
   formatTime,
   minutesOf,
   t,
@@ -34,12 +35,14 @@ interface Props {
   editable: boolean;
   /** phone: a bottom sheet instead of the side drawer */
   variant?: 'drawer' | 'sheet';
+  /** the clinic's free-cancellation window — inside it a cancellation can be marked late */
+  freeCancelHours?: number;
   onClose: () => void;
 }
 
 const DURATIONS = [15, 20, 30, 45, 60, 75, 90, 120];
 
-export default function AppointmentDrawer({ appointment, tz, types, rules, editable, variant = 'drawer', onClose }: Props) {
+export default function AppointmentDrawer({ appointment, tz, types, rules, editable, variant = 'drawer', freeCancelHours = 24, onClose }: Props) {
   const body = appointment && (
     <DrawerBody
       key={appointment.id + appointment.status + appointment.starts_at}
@@ -49,6 +52,7 @@ export default function AppointmentDrawer({ appointment, tz, types, rules, edita
       rules={rules}
       editable={editable}
       compact={variant === 'sheet'}
+      freeCancelHours={freeCancelHours}
       onClose={onClose}
     />
   );
@@ -66,13 +70,34 @@ export default function AppointmentDrawer({ appointment, tz, types, rules, edita
   );
 }
 
-function DrawerBody({ a, tz, types, rules, editable, compact, onClose }: { a: CalendarAppointment; tz: string; types: AppointmentType[]; rules: WeeklyHoursRule[]; editable: boolean; compact: boolean; onClose: () => void }) {
+function DrawerBody({
+  a,
+  tz,
+  types,
+  rules,
+  editable,
+  compact,
+  freeCancelHours,
+  onClose,
+}: {
+  a: CalendarAppointment;
+  tz: string;
+  types: AppointmentType[];
+  rules: WeeklyHoursRule[];
+  editable: boolean;
+  compact: boolean;
+  freeCancelHours: number;
+  onClose: () => void;
+}) {
   const toast = useToast();
   const update = useUpdateAppointment();
   const link = useLinkRequest();
   const [notify, setNotify] = useState(true);
   const [reason, setReason] = useState('');
   const [confirming, setConfirming] = useState<null | 'cancelled' | 'declined'>(null);
+  // Cancelling inside the free-cancellation window: usually the patient's late call.
+  const insideWindow = Date.parse(a.starts_at) - Date.now() < freeCancelHours * 3_600_000;
+  const [lateCancel, setLateCancel] = useState(insideWindow);
   const [moving, setMoving] = useState(false);
   const [date, setDate] = useState(clinicDate(a.starts_at, tz));
   const [time, setTime] = useState(formatTime(a.starts_at, tz));
@@ -136,7 +161,24 @@ function DrawerBody({ a, tz, types, rules, editable, compact, onClose }: { a: Ca
         {a.cancelled_by && (
           <span style={{ fontSize: 12, color: 'var(--muted)' }}>· {t(`sched.cancelled_by.${a.cancelled_by}` as I18nKey)}</span>
         )}
+        {a.status === 'cancelled' && a.late_cancel && (
+          <span style={{ fontSize: 11, fontWeight: 800, borderRadius: 'var(--radius-pill)', padding: '2px 8px', background: 'var(--pill-attention-bg)', color: 'var(--flag-red)' }}>
+            {t('sched.appt.late_cancel_tag')}
+          </span>
+        )}
       </div>
+
+      {!!a.history && (a.history.no_show > 0 || a.history.late_cancel > 0) && (
+        <div style={{ fontSize: 13, color: 'var(--flag-red)', background: 'var(--pill-attention-bg)', borderRadius: 10, padding: '7px 10px' }}>
+          {t('sched.appt.history')}:{' '}
+          {[
+            a.history.no_show > 0 ? t('sched.appt.history_no_show', { n: a.history.no_show }) : null,
+            a.history.late_cancel > 0 ? t('sched.appt.history_late', { n: a.history.late_cancel }) : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </div>
+      )}
 
       <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 16px', fontSize: 14 }}>
         <Term>{t('sched.appt.date')}</Term>
@@ -168,6 +210,13 @@ function DrawerBody({ a, tz, types, rules, editable, compact, onClose }: { a: Ca
           </>
         )}
       </dl>
+      {a.status === 'confirmed' && (a.reminded_second_at || a.reminded_first_at) && (
+        <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>
+          {t('sched.appt.reminded', {
+            when: `${formatDayShort((a.reminded_second_at ?? a.reminded_first_at)!, tz)} ${formatTime((a.reminded_second_at ?? a.reminded_first_at)!, tz)}`,
+          })}
+        </span>
+      )}
 
       {a.patient && (
         <Link to="/patients/$patientId" params={{ patientId: a.patient.id }} style={{ fontSize: 14, fontWeight: 600, color: 'var(--gold-deep)' }}>
@@ -290,13 +339,23 @@ function DrawerBody({ a, tz, types, rules, editable, compact, onClose }: { a: Ca
             {t('sched.appt.cancel_reason')}
             <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} style={fieldStyle} />
           </label>
+          {confirming === 'cancelled' && insideWindow && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, minHeight: 28 }}>
+              <input type="checkbox" checked={lateCancel} onChange={(e) => setLateCancel(e.target.checked)} style={{ width: 18, height: 18, margin: 0 }} />
+              {t('sched.appt.late_cancel', { n: freeCancelHours })}
+            </label>
+          )}
           <div style={{ display: 'flex', gap: 8 }}>
             <Button
               variant="danger"
               loading={busy}
               onClick={() =>
                 run(
-                  { status: confirming, cancel_reason: reason || undefined },
+                  {
+                    status: confirming,
+                    cancel_reason: reason || undefined,
+                    ...(confirming === 'cancelled' ? { late_cancel: insideWindow && lateCancel } : {}),
+                  },
                   confirming === 'declined' ? 'sched.appt.toast.declined' : 'sched.appt.toast.cancelled',
                 )
               }

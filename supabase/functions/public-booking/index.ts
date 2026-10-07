@@ -7,6 +7,8 @@
 //   POST /public-booking/:slug/resend               { request_id } → new code
 //   GET  /public-booking/manage/:token              the appointment behind a manage link
 //   POST /public-booking/manage/:token/cancel       cancel within policy
+//   GET  /public-booking/manage/:token/slots?from&to free times to move to (≤ 31 days)
+//   POST /public-booking/manage/:token/move          { starts_at } move within policy
 //   GET  /public-booking/ics/:token                 calendar file for the appointment
 //
 // Anything that sends e-mail or tests a code is rate-limited per hashed IP
@@ -95,6 +97,33 @@ Deno.serve(withCors(async (req) => {
         });
       }
       return json(data);
+    }
+
+    if (req.method === 'GET' && rest[0] === 'manage' && rest[2] === 'slots') {
+      const from = url.searchParams.get('from') ?? '';
+      const to = url.searchParams.get('to') ?? '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return fail('validation_failed');
+      const { data, error } = await rpc('public_appointment_move_slots', {
+        p_clinic_id: ids.clinicId, p_appointment_id: ids.appointmentId, p_from: from, p_to: to,
+      });
+      if (error) return json({ error: 'internal_error', details: error.message }, 500);
+      if (data?.error) return fail(data.error);
+      return json(data);
+    }
+
+    if (req.method === 'POST' && rest[0] === 'manage' && rest[2] === 'move') {
+      const limitedMove = await rateLimit(svc, `booking-move:ip:${ip}`, 10, 3600);
+      if (limitedMove) return limitedMove;
+      const b = await req.json().catch(() => null);
+      const startsAt = typeof b?.starts_at === 'string' ? b.starts_at : '';
+      if (!startsAt || Number.isNaN(Date.parse(startsAt))) return fail('validation_failed');
+      const { data, error } = await rpc('public_appointment_move', {
+        p_clinic_id: ids.clinicId, p_appointment_id: ids.appointmentId, p_starts_at: startsAt,
+      });
+      if (error) return json({ error: 'internal_error', details: error.message }, 500);
+      if (data?.error) return fail(data.error, data.free_cancel_hours != null ? { free_cancel_hours: data.free_cancel_hours } : {});
+      const emailed = await sendBookingEmail(svc, ids.clinicId, ids.appointmentId, 'moved');
+      return json({ ...data, emailed });
     }
 
     if (req.method === 'POST' && rest[0] === 'manage' && rest[2] === 'cancel') {

@@ -13,6 +13,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2.45.0';
 import webpush from 'npm:web-push@3.6.7';
 import { withCors } from '../_shared/cors.ts';
 import { sendViaGmail } from '../_shared/gmail-smtp.ts';
+import { sendBookingEmail } from '../_shared/booking-emails.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -72,6 +73,10 @@ const TEMPLATES: Record<string, { title: string; body: string }> = {
     title: 'תור בוטל',
     body: '{when} · {type_name} — בוטל ע״י המטופל/ת',
   },
+  booking_moved: {
+    title: 'תור הועבר',
+    body: '{when} · {type_name} — המועד החדש שבחר/ה המטופל/ת',
+  },
 };
 
 function fill(tpl: string, vars: NotifVars): string {
@@ -101,6 +106,7 @@ function deepLink(event: string, vars: NotifVars): string {
     case 'booking_request':
     case 'booking_new':
     case 'booking_cancelled':
+    case 'booking_moved':
       return '/app/calendar';
     default:
       return '/app/';
@@ -258,5 +264,21 @@ Deno.serve(withCors(async (req) => {
     }
   }
 
-  return new Response(JSON.stringify({ sent, failed }), { headers: { 'Content-Type': 'application/json' } });
+  // Booking reminders (T-36): e-mails at the clinic's reminder points. One
+  // attempt each — the point is marked whether or not the e-mail went out.
+  let reminders = 0;
+  const { data: rem, error: remError } = await svc.schema('app').rpc('booking_reminders_due', { p_limit: 30 });
+  if (remError) {
+    console.error(JSON.stringify({ level: 'error', fn: 'notifications-dispatch', msg: 'reminders query failed', details: remError.message }));
+  }
+  for (const r of ((rem?.reminders ?? []) as Array<{ clinic_id: string; appointment_id: string; stage: 'first' | 'second' }>)) {
+    if (await sendBookingEmail(svc, r.clinic_id, r.appointment_id, 'reminder')) reminders++;
+    await svc.schema('app').rpc('booking_reminder_mark', {
+      p_clinic_id: r.clinic_id,
+      p_appointment_id: r.appointment_id,
+      p_stage: r.stage,
+    });
+  }
+
+  return new Response(JSON.stringify({ sent, failed, reminders }), { headers: { 'Content-Type': 'application/json' } });
 }));
