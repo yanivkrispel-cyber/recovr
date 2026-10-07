@@ -24,7 +24,10 @@ export type NotificationEventKey =
   | 'phase_approved'
   | 'weekly_digest'
   | 'pain_spike'
-  | 'new_message';
+  | 'new_message'
+  | 'booking_request'
+  | 'booking_new'
+  | 'booking_cancelled';
 
 export type NotificationRecipient = 'patient' | 'clinician';
 export type NotificationChannel = 'push' | 'email' | 'in_app';
@@ -89,6 +92,30 @@ export const NOTIFICATION_EVENTS: Record<NotificationEventKey, NotificationEvent
     recipient: 'clinician',
     channels: ['push'],
     category: 'messages',
+    disableable: true,
+    urgent: false,
+  },
+  // M6 scheduling: the practitioner hears about website / app bookings.
+  // Booking e-mails to patients are transactional (like the invite), not
+  // part of this pipeline.
+  booking_request: {
+    recipient: 'clinician',
+    channels: ['push'],
+    category: 'bookings',
+    disableable: true,
+    urgent: false,
+  },
+  booking_new: {
+    recipient: 'clinician',
+    channels: ['push'],
+    category: 'bookings',
+    disableable: true,
+    urgent: false,
+  },
+  booking_cancelled: {
+    recipient: 'clinician',
+    channels: ['push'],
+    category: 'bookings',
     disableable: true,
     urgent: false,
   },
@@ -172,6 +199,18 @@ const TEMPLATES: Record<NotificationEventKey, { title: string; body: string }> =
     title: 'הודעה חדשה מ{from_name}',
     body: '{preview}',
   },
+  booking_request: {
+    title: 'בקשת תור חדשה',
+    body: '{when} · {type_name} — מחכה לאישורך',
+  },
+  booking_new: {
+    title: 'נקבע תור חדש',
+    body: '{when} · {type_name}',
+  },
+  booking_cancelled: {
+    title: 'תור בוטל',
+    body: '{when} · {type_name} — בוטל ע״י המטופל/ת',
+  },
 };
 
 export function renderNotification(
@@ -203,6 +242,10 @@ export function deepLink(event: NotificationEventKey, vars: NotifVars): string {
     case 'new_message':
       // clinician recipient gets the patient's thread; patient recipient the tab
       return vars.patient_id ? `/patients/${vars.patient_id}` : '/messages';
+    case 'booking_request':
+    case 'booking_new':
+    case 'booking_cancelled':
+      return '/calendar';
   }
 }
 

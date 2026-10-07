@@ -111,6 +111,14 @@ describe('rendering', () => {
   });
 });
 
+describe('booking pushes (M6)', () => {
+  it('carry the time and type, never a name', () => {
+    const r = renderNotification('booking_request', { when: '13.10 14:00', type_name: 'הערכה ראשונה' });
+    expect(r.title).toBe('בקשת תור חדשה');
+    expect(r.body).toBe('13.10 14:00 · הערכה ראשונה — מחכה לאישורך');
+  });
+});
+
 describe('deep links', () => {
   it.each<[NotificationEventKey, Record<string, string | number>, string]>([
     ['daily_reminder', {}, '/today'],
@@ -121,6 +129,8 @@ describe('deep links', () => {
     ['weekly_digest', {}, '/dashboard'],
     ['new_message', { patient_id: 'p1' }, '/patients/p1'],
     ['new_message', {}, '/messages'],
+    ['booking_request', {}, '/calendar'],
+    ['booking_cancelled', {}, '/calendar'],
   ])('%s -> %s', (event, vars, expected) => {
     expect(deepLink(event, vars)).toBe(expected);
   });

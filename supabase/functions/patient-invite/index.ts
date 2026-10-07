@@ -49,6 +49,9 @@ interface Input {
   custom_exercise_ids?: string[];
   // Free-text intake note, independent of the injury/condition selection.
   intake_note?: string;
+  // The card is opened from a website booking request (T-35): the request
+  // and its appointment are linked to the new patient.
+  booking_request_id?: string;
 }
 
 function addrOnly(from: string): string {
@@ -216,6 +219,17 @@ Deno.serve(withCors(async (req) => {
         ? 422
         : 404;
     return new Response(JSON.stringify({ error: result.error }), { status });
+  }
+
+  if (body.booking_request_id && result.patient_id) {
+    const { data: linked, error: linkError } = await service.schema('app').rpc('booking_link_patient', {
+      p_clinician_id: user.id,
+      p_request_id: body.booking_request_id,
+      p_patient_id: result.patient_id,
+    });
+    if (linkError || linked?.error) {
+      console.error(JSON.stringify({ level: 'error', fn: 'patient-invite', msg: 'booking link failed', details: linkError?.message ?? linked?.error }));
+    }
   }
 
   const inviteUrl = `${PATIENT_BASE_URL}/m/invite/${result.invite_token}`;

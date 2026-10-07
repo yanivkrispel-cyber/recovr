@@ -13,3 +13,4 @@ export * from './youtube';
 export * from './exerciseRecommend';
 export * from './exerciseCatalog';
 export * from './exerciseMedia';
+export * from './scheduling';

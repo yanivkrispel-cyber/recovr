@@ -592,3 +592,119 @@ SELECT app._catalog_fix_core_region_gaps_2026_09_13();
 -- phases, no base protocol version). Bring them up to what
 -- create_patient_with_plan now builds.
 SELECT app.backfill_plan_versions('clinic_demo');
+
+-- ============================================================================
+-- M6 scheduling (0062): a working calendar for the demo clinic — appointment
+-- types, weekly hours, this week's and next week's appointments relative to
+-- today, blocked time, two website requests waiting for approval, and the
+-- public booking page at /m/book/demo.
+-- ============================================================================
+UPDATE app.clinic
+SET booking_slug = 'demo',
+    settings = jsonb_set(COALESCE(settings, '{}'::jsonb), '{scheduling}', jsonb_build_object(
+      'booking_enabled', true,
+      'practitioner_id', '22222222-2222-2222-2222-222222222222',
+      'slot_step_min', 30,
+      'buffer_min', 0,
+      'min_notice_min', 180,
+      'horizon_days', 42,
+      'free_cancel_hours', 24,
+      'contact_address', 'רחוב הדוגמה 1, תל אביב',
+      'contact_phone', '03-0000000'))
+WHERE id = '11111111-1111-1111-1111-111111111111';
+
+INSERT INTO clinic_demo.appointment_type (id, clinic_id, name, description, duration_min, color, who_may_book, confirmation, sort)
+VALUES
+  ('b0000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'הערכה ראשונה',
+   'בדיקה מלאה, אבחון ובניית תוכנית שיקום אישית', 60, 'navy', 'anyone', 'manual', 1),
+  ('b0000000-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', 'טיפול',
+   NULL, 45, 'gold', 'existing', 'auto', 2),
+  ('b0000000-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111', 'הערכה חוזרת',
+   'מדידות ובדיקת התקדמות לקראת מעבר שלב', 45, 'green', 'existing', 'auto', 3),
+  ('b0000000-0000-0000-0000-000000000004', '11111111-1111-1111-1111-111111111111', 'שיחת ייעוץ קצרה',
+   'שיחה טלפונית — לבדוק יחד אם אנחנו מתאימים', 15, 'slate', 'anyone', 'auto', 4)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO clinic_demo.availability_rule (clinic_id, practitioner_id, weekday, start_time, end_time)
+SELECT '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', w, s::time, e::time
+FROM (VALUES
+  (0, '08:30', '13:00'), (0, '15:30', '19:00'),
+  (1, '08:00', '13:00'), (1, '16:00', '19:00'),
+  (2, '09:00', '17:00'),
+  (3, '08:00', '12:30'), (3, '17:30', '19:00'),
+  (4, '09:00', '14:00')
+) AS h(w, s, e)
+WHERE NOT EXISTS (SELECT 1 FROM clinic_demo.availability_rule);
+
+DO $$
+DECLARE
+  tz      CONSTANT TEXT := 'Asia/Jerusalem';
+  clinic  CONSTANT UUID := '11111111-1111-1111-1111-111111111111';
+  doc     CONSTANT UUID := '22222222-2222-2222-2222-222222222222';
+  today   DATE := (now() AT TIME ZONE tz)::date;
+  sun     DATE := today - extract(dow FROM today)::int;
+  r       RECORD;
+  v_start TIMESTAMPTZ;
+  v_req   UUID;
+BEGIN
+  IF EXISTS (SELECT 1 FROM clinic_demo.appointment) THEN
+    RETURN;
+  END IF;
+
+  FOR r IN
+    SELECT * FROM (VALUES
+      (0,  '09:00', 'a0000001-0000-0000-0000-000000000101', 2, 'confirmed'),
+      (0,  '10:15', 'a0000001-0000-0000-0000-000000000102', 2, 'confirmed'),
+      (0,  '16:00', 'a0000001-0000-0000-0000-000000000103', 2, 'confirmed'),
+      (1,  '08:30', 'a0000001-0000-0000-0000-000000000104', 2, 'no_show'),
+      (1,  '12:00', 'a0000001-0000-0000-0000-000000000105', 3, 'confirmed'),
+      (1,  '17:00', 'a0000001-0000-0000-0000-000000000100', 2, 'confirmed'),
+      (2,  '09:00', 'a0000001-0000-0000-0000-000000000101', 2, 'confirmed'),
+      (2,  '10:00', 'a0000001-0000-0000-0000-000000000102', 2, 'confirmed'),
+      (2,  '14:00', 'a0000001-0000-0000-0000-000000000108', 2, 'cancelled'),
+      (3,  '08:00', 'a0000001-0000-0000-0000-000000000103', 2, 'confirmed'),
+      (3,  '11:00', 'a0000001-0000-0000-0000-000000000109', 2, 'confirmed'),
+      (3,  '17:30', 'a0000001-0000-0000-0000-000000000104', 2, 'confirmed'),
+      (4,  '13:00', 'a0000001-0000-0000-0000-000000000105', 2, 'confirmed'),
+      (7,  '09:00', 'a0000001-0000-0000-0000-000000000101', 2, 'confirmed'),
+      (8,  '08:30', 'a0000001-0000-0000-0000-000000000102', 2, 'confirmed'),
+      (9,  '10:00', 'a0000001-0000-0000-0000-000000000103', 3, 'confirmed')
+    ) AS x(d, t, patient, type_n, status)
+  LOOP
+    v_start := ((sun + r.d) + r.t::time) AT TIME ZONE tz;
+    INSERT INTO clinic_demo.appointment (clinic_id, practitioner_id, patient_id, type_id, starts_at, ends_at,
+                                         status, source, created_by, decided_by, decided_at,
+                                         cancelled_by, cancelled_at)
+    VALUES (clinic, doc, r.patient::uuid, ('b0000000-0000-0000-0000-00000000000' || r.type_n)::uuid,
+            v_start, v_start + interval '45 minutes',
+            -- a "confirmed" visit that already happened shows as attended
+            CASE WHEN r.status = 'confirmed' AND v_start < now() THEN 'attended' ELSE r.status END,
+            CASE WHEN r.d % 3 = 0 THEN 'patient_app' ELSE 'clinician' END,
+            doc, doc, now(),
+            CASE WHEN r.status = 'cancelled' THEN 'patient' END,
+            CASE WHEN r.status = 'cancelled' THEN now() END);
+  END LOOP;
+
+  INSERT INTO clinic_demo.time_off (clinic_id, practitioner_id, starts_at, ends_at, reason, created_by)
+  VALUES (clinic, doc, ((sun + 11) + time '09:00') AT TIME ZONE tz, ((sun + 11) + time '12:00') AT TIME ZONE tz,
+          'כנס פיזיותרפיה', doc);
+
+  -- Two website visitors waiting for approval (verified e-mail, no card yet).
+  FOR r IN
+    SELECT * FROM (VALUES
+      (9,  '15:00', 'נוי שחר', '0501234567', 'noy.demo@example.test', 'knee'),
+      (10, '09:00', 'עמית פרץ', '+972521112233', 'amit.demo@example.test', 'shoulder')
+    ) AS x(d, t, name, phone, email, region)
+  LOOP
+    v_start := ((sun + r.d) + r.t::time) AT TIME ZONE tz;
+    INSERT INTO clinic_demo.booking_request (clinic_id, practitioner_id, type_id, starts_at, name, phone, email,
+                                             body_region_id, consent_version, consent_at, email_verified_at)
+    VALUES (clinic, doc, 'b0000000-0000-0000-0000-000000000001', v_start, r.name, r.phone, r.email,
+            (SELECT id FROM app.body_region WHERE slug = r.region), 'booking-v1', now(), now())
+    RETURNING id INTO v_req;
+    INSERT INTO clinic_demo.appointment (clinic_id, practitioner_id, booking_request_id, type_id, starts_at, ends_at,
+                                         status, source)
+    VALUES (clinic, doc, v_req, 'b0000000-0000-0000-0000-000000000001', v_start, v_start + interval '60 minutes',
+            'pending', 'public');
+  END LOOP;
+END $$;

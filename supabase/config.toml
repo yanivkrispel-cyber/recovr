@@ -171,3 +171,12 @@ verify_jwt = false  # a crash can happen before login; JWT decoded when present
 
 [functions.notifications-dispatch]
 verify_jwt = false  # cron / DISPATCH_SECRET-gated, not a user session
+
+[functions.scheduling]
+verify_jwt = false
+
+[functions.me-appointments]
+verify_jwt = false
+
+[functions.public-booking]
+verify_jwt = false  # the public booking page: no session; rate-limited per IP

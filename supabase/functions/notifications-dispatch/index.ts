@@ -59,6 +59,19 @@ const TEMPLATES: Record<string, { title: string; body: string }> = {
     title: 'הודעה חדשה מ{from_name}',
     body: '{preview}',
   },
+  // M6 scheduling — to the practitioner (app._sched_notify_practitioner).
+  booking_request: {
+    title: 'בקשת תור חדשה',
+    body: '{when} · {type_name} — מחכה לאישורך',
+  },
+  booking_new: {
+    title: 'נקבע תור חדש',
+    body: '{when} · {type_name}',
+  },
+  booking_cancelled: {
+    title: 'תור בוטל',
+    body: '{when} · {type_name} — בוטל ע״י המטופל/ת',
+  },
 };
 
 function fill(tpl: string, vars: NotifVars): string {
@@ -85,6 +98,10 @@ function deepLink(event: string, vars: NotifVars): string {
       // The clinician route opens the chat on a phone and redirects to the
       // patient page's Messages tab on desktop.
       return vars.patient_id ? `/app/messages/${vars.patient_id}` : '/m/';
+    case 'booking_request':
+    case 'booking_new':
+    case 'booking_cancelled':
+      return '/app/calendar';
     default:
       return '/app/';
   }
