@@ -28,25 +28,31 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ show }}>
       {children}
+      {/* Centered by a full-width flex column, not `inset-inline-start: 50%`
+          + translateX(-50%): in RTL the inset anchors from the right, so the
+          translate pushed every toast off-centre (half off a phone screen).
+          Sits above the phone tab bars (≈60–70px) rather than over them. */}
       <div
         aria-live="polite"
         style={{
           position: 'fixed',
-          insetInlineStart: '50%',
-          bottom: 24,
-          transform: 'translateX(-50%)',
+          insetInline: 0,
+          bottom: 'calc(84px + env(safe-area-inset-bottom))',
           zIndex: 'var(--z-toast)',
           display: 'flex',
           flexDirection: 'column',
+          alignItems: 'center',
           gap: 8,
+          padding: '0 16px',
           pointerEvents: 'none',
         }}
       >
         {items.map(item => (
           <div
             key={item.id}
+            role={item.tone === 'error' ? 'alert' : 'status'}
             style={{
-              background: 'var(--navy)',
+              background: item.tone === 'error' ? 'var(--danger)' : 'var(--navy)',
               color: 'var(--cream)',
               padding: '12px 20px',
               borderRadius: 'var(--radius-panel)',
@@ -54,7 +60,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               fontSize: 14,
               fontFamily: 'var(--font-ui)',
               fontWeight: 500,
-              minWidth: 220,
+              minWidth: 'min(220px, 100%)',
+              maxWidth: 480,
               textAlign: 'center',
             }}
           >
