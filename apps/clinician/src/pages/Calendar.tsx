@@ -249,7 +249,9 @@ export default function Calendar() {
               setOpenRequest(null);
             }}
           />
-          <NewAppointmentModal open={newOpen} onClose={() => setNewOpen(false)} tz={tz} types={setup.data.types} rules={myRules} initial={creating ?? { date: anchor, minutes: 9 * 60 }} />
+          {newOpen && (
+            <NewAppointmentModal open onClose={() => setNewOpen(false)} tz={tz} types={setup.data.types} rules={myRules} initial={creating ?? { date: anchor, minutes: 9 * 60 }} />
+          )}
           <TimeOffModal target={offTarget} defaultDate={anchor} tz={tz} onClose={() => setOffTarget(null)} />
         </>
       )}

@@ -29,31 +29,19 @@ export default function NewAppointmentModal({ open, onClose, tz, types, rules, i
   const create = useCreateAppointment();
   const activeTypes = useMemo(() => types.filter((ty) => ty.active), [types]);
 
+  // Mounted per opening (see Calendar), so the form starts from the props
+  // once and a background refetch can't wipe what's being typed.
+  const firstType = activeTypes.find((ty) => ty.who_may_book !== 'anyone') ?? activeTypes[0];
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [patient, setPatient] = useState<PatientOption | null>(null);
-  const [typeId, setTypeId] = useState('');
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('');
-  const [duration, setDuration] = useState(45);
+  const [typeId, setTypeId] = useState(firstType?.id ?? '');
+  const [date, setDate] = useState(initial?.date ?? '');
+  const [time, setTime] = useState(initial ? hhmm(initial.minutes) : '');
+  const [duration, setDuration] = useState(firstType?.duration_min ?? 45);
   const [note, setNote] = useState('');
   const [notify, setNotify] = useState(true);
   const [error, setError] = useState<SchedulingError | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const first = activeTypes.find((ty) => ty.who_may_book !== 'anyone') ?? activeTypes[0];
-    setQuery('');
-    setDebounced('');
-    setPatient(null);
-    setTypeId(first?.id ?? '');
-    setDuration(first?.duration_min ?? 45);
-    setDate(initial?.date ?? '');
-    setTime(initial ? hhmm(initial.minutes) : '');
-    setNote('');
-    setNotify(true);
-    setError(null);
-  }, [open, initial, activeTypes]);
 
   useEffect(() => {
     const id = setTimeout(() => setDebounced(query.trim()), 250);
