@@ -135,6 +135,14 @@ Deno.serve(withCors(async (req) => {
     return reply(data, error);
   }
 
+  // Existing cards with the phone / e-mail of a contact being booked.
+  if (req.method === 'GET' && resource === 'contact-matches') {
+    const phone = (url.searchParams.get('phone') ?? '').slice(0, 32);
+    const email = (url.searchParams.get('email') ?? '').slice(0, 254);
+    const { data, error } = await rpc('scheduling_contact_matches', { p_clinician_id: user.id, p_phone: phone, p_email: email });
+    return reply(data, error);
+  }
+
   if (req.method === 'POST' && resource === 'appointments' && !id) {
     const b = await body();
     if (!b) return json({ error: 'validation_failed' }, 422);

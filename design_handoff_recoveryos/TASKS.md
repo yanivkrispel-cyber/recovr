@@ -265,6 +265,14 @@ https://claude.ai/artifact/B6DqqKU9KYxoisRY2Q2Gt4
   attended, "realised" = attended, requests shown separately. Recorded, never charged.
 - New-appointment form suggests the next free starts for the chosen type
   (`app.clinician_free_slots`: availability minus bookings/time-off/buffer, no minimum notice).
+  Day first (a week strip, a dot = free time), then that day's free starts; any other time via
+  a 24h picker. No native date/time inputs (they follow the phone's locale).
+- Booking someone without a patient card (2026-10-07): from the patient search, "new patient,
+  no card" takes name + phone (+ optional e-mail) and books a confirmed appointment. Stored as a
+  `booking_request` with source `clinician`, so it shows as a new patient (call / WhatsApp) and
+  "open patient card" or linking to an existing card work as for website visitors. Existing
+  cards with the same phone (last 9 digits) or e-mail are offered first. No card, no app invite
+  until the clinician opens one; no e-mail confirmation without an address.
 - Toasts are centred above the phone tab bar in both apps.
 - Every appointment change is written to `audit_log`.
 

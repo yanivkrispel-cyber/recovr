@@ -8,7 +8,9 @@ import {
   formatMonthTitle,
   formatTime,
   hhmm,
+  isValidEmail,
   minutesOf,
+  normalizePhone,
   t,
   weekStart,
   weekdayOf,
@@ -19,7 +21,7 @@ import {
   type WeeklyHoursRule,
 } from 'shared';
 import { SupabaseContext } from '../../App';
-import { SchedulingError, useClinicianSlots, useCreateAppointment } from '../../lib/scheduling';
+import { SchedulingError, useClinicianSlots, useContactMatches, useCreateAppointment } from '../../lib/scheduling';
 import { DialogFrame } from './BottomSheet';
 import { ConflictList } from './ConflictList';
 import { Chevron, DateField, Segmented, TimeField, TypeSwatch, fieldStyle, labelStyle } from './calendarUi';
@@ -61,6 +63,9 @@ export default function NewAppointmentModal({ onClose, tz, types, rules, initial
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [patient, setPatient] = useState<PatientOption | null>(null);
+  // Someone without a card yet: booked by name + phone, shown as a new patient.
+  const [contact, setContact] = useState<{ name: string; phone: string; email: string } | null>(null);
+  const [contactKey, setContactKey] = useState({ phone: '', email: '' });
   const [typeId, setTypeId] = useState(firstType?.id ?? '');
   const [date, setDate] = useState(firstDay);
   const [time, setTime] = useState(initial ? hhmm(initial.minutes) : '');
@@ -72,10 +77,11 @@ export default function NewAppointmentModal({ onClose, tz, types, rules, initial
   const [otherTime, setOtherTime] = useState(false);
   const [error, setError] = useState<SchedulingError | null>(null);
   // A day or time picked by hand (or handed in from the calendar) stays put;
-  // until then the earliest free start of the next two weeks is preselected.
+  // until then the earliest free start from the day in view (two weeks on)
+  // is preselected.
   const [chosen, setChosen] = useState(!!initial);
 
-  const nearest = useClinicianSlots(chosen ? null : typeId || null, today, addDays(today, 13));
+  const nearest = useClinicianSlots(chosen ? null : typeId || null, firstDay, addDays(firstDay, 13));
   useEffect(() => {
     if (chosen || !nearest.data?.length) return;
     const first = nearest.data[0];
@@ -117,9 +123,28 @@ export default function NewAppointmentModal({ onClose, tz, types, rules, initial
     },
   });
 
+  const contactPhone = contact ? normalizePhone(contact.phone) : null;
+  const contactEmail = contact ? contact.email.trim() : '';
+  const contactEmailOk = !contactEmail || isValidEmail(contactEmail);
+  const contactValid = !!contact && contact.name.trim().length >= 2 && !!contactPhone && contactEmailOk;
+  useEffect(() => {
+    const id = setTimeout(() => setContactKey({ phone: contactPhone ?? '', email: contactEmail && contactEmailOk ? contactEmail : '' }), 400);
+    return () => clearTimeout(id);
+  }, [contactPhone, contactEmail, contactEmailOk]);
+  const matches = useContactMatches(contactKey.phone, contactKey.email, !!contact && !!(contactKey.phone || contactKey.email));
+  const canEmail = !!patient || (!!contactEmail && contactEmailOk);
+
+  function startContact(seed: string) {
+    const s = seed.trim();
+    const looksLikePhone = /^[+\d][\d\s-]{6,}$/.test(s);
+    setContact({ name: looksLikePhone ? '' : s, phone: looksLikePhone ? s : '', email: '' });
+    setQuery('');
+    setDebounced('');
+  }
+
   const start = /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(minutesOf(time)) ? zonedTimeToUtc(date, time, tz) : null;
   const outsideHours = start ? !windowsOn(rules, date).some((w) => minutesOf(time) >= w.start && minutesOf(time) + duration <= w.end) : false;
-  const valid = !!patient && !!typeId && !!start;
+  const valid = (!!patient || contactValid) && !!typeId && !!start;
   const thisWeek = weekStart(today);
   const days = Array.from({ length: 7 }, (_, i) => addDays(week, i));
   const durations = [...new Set([...DURATIONS, duration])].sort((x, y) => x - y);
@@ -139,16 +164,18 @@ export default function NewAppointmentModal({ onClose, tz, types, rules, initial
   }
 
   async function submit() {
-    if (!valid || !patient || !start) return;
+    if (!valid || !start) return;
     setError(null);
     try {
       const res = await create.mutateAsync({
-        patient_id: patient.id,
+        ...(patient
+          ? { patient_id: patient.id }
+          : { lead: { name: contact!.name.trim(), phone: contactPhone!, email: contactEmail || undefined } }),
         type_id: typeId,
         starts_at: start.toISOString(),
         duration_min: duration,
         note: note.trim() || undefined,
-        notify,
+        notify: notify && canEmail,
       });
       toast.show(t('sched.appt.toast.created'), { tone: 'success' });
       if (res.emailed) toast.show(t('sched.appt.toast.emailed'));
@@ -159,12 +186,14 @@ export default function NewAppointmentModal({ onClose, tz, types, rules, initial
   }
 
   const submitLabel = start ? `${t('sched.appt.create')} · ${dayLabel(date)} · ${time}` : t('sched.appt.pick_time');
-  const notifyBox = (
+  const notifyBox = canEmail ? (
     <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--ink)', minHeight: 28 }}>
       <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} style={{ width: 18, height: 18, margin: 0 }} />
       {t('sched.appt.notify')}
     </label>
-  );
+  ) : contact ? (
+    <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>{t('sched.contact.no_email')}</span>
+  ) : null;
 
   return (
     <DialogFrame
@@ -210,8 +239,71 @@ export default function NewAppointmentModal({ onClose, tz, types, rules, initial
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={labelStyle}>
-            <label htmlFor="appt-patient">{t('sched.appt.patient')}</label>
-            {patient ? (
+            {contact ? <span>{t('sched.appt.patient')}</span> : <label htmlFor="appt-patient">{t('sched.appt.patient')}</label>}
+            {contact ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, borderRadius: 12, border: '1.5px dashed var(--gold-deep)', background: 'var(--white)', fontWeight: 400 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                  <strong style={{ fontSize: 14, color: 'var(--navy)' }}>{t('sched.contact.new')}</strong>
+                  <button type="button" onClick={() => setContact(null)} style={{ ...linkButton, alignSelf: 'auto' }}>
+                    {t('sched.contact.back')}
+                  </button>
+                </div>
+                <input
+                  aria-label={t('sched.contact.name')}
+                  placeholder={t('sched.contact.name')}
+                  value={contact.name}
+                  onChange={(e) => setContact({ ...contact, name: e.target.value })}
+                  autoComplete="off"
+                  maxLength={80}
+                  style={{ ...fieldStyle, minHeight: 44 }}
+                />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    dir="ltr"
+                    aria-label={t('sched.contact.phone')}
+                    placeholder={t('sched.contact.phone')}
+                    value={contact.phone}
+                    onChange={(e) => setContact({ ...contact, phone: e.target.value })}
+                    aria-invalid={!!contact.phone.trim() && !contactPhone}
+                    autoComplete="off"
+                    style={{ ...fieldStyle, minHeight: 44, textAlign: 'end' }}
+                  />
+                  <input
+                    type="email"
+                    inputMode="email"
+                    dir="ltr"
+                    aria-label={t('sched.contact.email')}
+                    placeholder={t('sched.contact.email')}
+                    value={contact.email}
+                    onChange={(e) => setContact({ ...contact, email: e.target.value })}
+                    aria-invalid={!contactEmailOk}
+                    autoComplete="off"
+                    style={{ ...fieldStyle, minHeight: 44, textAlign: 'end' }}
+                  />
+                </div>
+                {!!matches.data?.length && (
+                  <div role="status" style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', borderRadius: 10, background: 'var(--warn-bg)' }}>
+                    <span style={{ fontSize: 12.5, color: 'var(--gold-deep)', fontWeight: 700 }}>{t('sched.contact.matches')}</span>
+                    {matches.data.map((m) => (
+                      <Button
+                        key={m.id}
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setPatient({ id: m.id, name: m.name });
+                          setContact(null);
+                        }}
+                      >
+                        {t('sched.contact.use_card', { name: m.name })}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{t('sched.contact.hint')}</span>
+              </div>
+            ) : patient ? (
               <div style={{ ...fieldStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: 44 }}>
                 <strong>{patient.name}</strong>
                 <button
@@ -254,7 +346,21 @@ export default function NewAppointmentModal({ onClose, tz, types, rules, initial
                     {!isFetching && results?.length === 0 && (
                       <li style={{ padding: '9px 12px', fontSize: 13, color: 'var(--muted)' }}>{t('sched.appt.patient_none')}</li>
                     )}
+                    <li>
+                      <button
+                        type="button"
+                        onClick={() => startContact(debounced)}
+                        style={{ width: '100%', minHeight: 44, textAlign: 'start', background: 'var(--warn-bg)', border: 'none', padding: '9px 12px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, color: 'var(--gold-deep)' }}
+                      >
+                        {t('sched.contact.cta_named', { name: debounced })}
+                      </button>
+                    </li>
                   </ul>
+                )}
+                {!debounced && (
+                  <button type="button" onClick={() => startContact('')} style={linkButton}>
+                    {t('sched.contact.cta')}
+                  </button>
                 )}
               </>
             )}

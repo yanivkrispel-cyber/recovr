@@ -199,7 +199,9 @@ function DrawerBody({ a, tz, types, rules, editable, compact, onClose }: { a: Ca
         <Section title={t('sched.appt.lead_contact')}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 14 }}>
             <a href={`tel:${lead.phone}`} dir="ltr" style={{ color: 'var(--ink)', textAlign: 'start' }}>{lead.phone}</a>
-            <a href={`mailto:${lead.email}`} dir="ltr" style={{ color: 'var(--ink)', textAlign: 'start' }}>{lead.email}</a>
+            {lead.email && (
+              <a href={`mailto:${lead.email}`} dir="ltr" style={{ color: 'var(--ink)', textAlign: 'start' }}>{lead.email}</a>
+            )}
             {lead.body_region && (
               <span>
                 {t('sched.appt.lead_region')}: {lead.body_region.name}
@@ -226,7 +228,7 @@ function DrawerBody({ a, tz, types, rules, editable, compact, onClose }: { a: Ca
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => setCardPrefill({ name: lead.name, email: lead.email, phone: lead.phone, bookingRequestId: lead.request_id })}
+                onClick={() => setCardPrefill({ name: lead.name, email: lead.email ?? '', phone: lead.phone, bookingRequestId: lead.request_id })}
               >
                 {t('sched.appt.open_card')}
               </Button>

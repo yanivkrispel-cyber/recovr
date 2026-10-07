@@ -329,4 +329,78 @@ BEGIN
 END
 $test$;
 
+-- --- 0064: booking someone who has no patient card yet ----------------------
+DO $test$
+DECLARE
+  doc   CONSTANT UUID := '22222222-2222-2222-2222-222222222222';
+  pt    CONSTANT UUID := '7c75eb99-ca61-4c7f-87f4-145ba1c02686';
+  d3    DATE := (now() AT TIME ZONE 'Asia/Jerusalem')::date + 62;
+  r     JSONB;
+  t     UUID;
+  req   UUID;
+  appt  UUID;
+  pmail TEXT;
+BEGIN
+  r := app.appointment_type_save(doc, '{"name": "טיפול לאיש קשר", "duration_min": 45, "who_may_book": "existing"}');
+  t := (r -> 'type' ->> 'id')::uuid;
+
+  r := app.appointment_create(doc, jsonb_build_object('type_id', t, 'starts_at', pg_temp.at(d3, '09:00'),
+         'lead', jsonb_build_object('name', ' יוסי חדש ', 'phone', '050-123 4567')));
+  PERFORM pg_temp.eq(r -> 'appointment' ->> 'status', 'confirmed', 'contact booking is confirmed straight away');
+  PERFORM pg_temp.eq(r -> 'appointment' -> 'patient', 'null'::jsonb, 'no patient card is created');
+  PERFORM pg_temp.eq(r -> 'appointment' -> 'lead' ->> 'name', 'יוסי חדש', 'contact name trimmed');
+  PERFORM pg_temp.eq(r -> 'appointment' -> 'lead' ->> 'phone', '0501234567', 'contact phone normalised to digits');
+  PERFORM pg_temp.eq(r -> 'appointment' -> 'lead' ->> 'email', NULL, 'e-mail is optional for a contact');
+  req := (r -> 'appointment' -> 'lead' ->> 'request_id')::uuid;
+  appt := (r -> 'appointment' ->> 'id')::uuid;
+  PERFORM pg_temp.eq((SELECT source FROM clinic_demo.booking_request WHERE id = req), 'clinician', 'request marked as entered by the clinician');
+
+  r := app.appointment_create(doc, jsonb_build_object('type_id', t, 'starts_at', pg_temp.at(d3, '11:00'),
+         'lead', jsonb_build_object('name', 'רונית', 'phone', '+972 52 765 4321', 'email', 'Ronit@Example.TEST')));
+  PERFORM pg_temp.eq(r -> 'appointment' -> 'lead' ->> 'email', 'ronit@example.test', 'contact e-mail stored lower-case');
+  PERFORM pg_temp.eq(r -> 'appointment' -> 'lead' ->> 'phone', '+972527654321', 'international phone keeps its plus');
+
+  r := app.appointment_create(doc, jsonb_build_object('type_id', t, 'starts_at', pg_temp.at(d3, '13:00'),
+         'lead', jsonb_build_object('name', 'א', 'phone', '0501234567')));
+  PERFORM pg_temp.eq(r ->> 'error', 'validation_failed', 'contact name too short');
+  r := app.appointment_create(doc, jsonb_build_object('type_id', t, 'starts_at', pg_temp.at(d3, '13:00'),
+         'lead', jsonb_build_object('name', 'אבי', 'phone', '12345')));
+  PERFORM pg_temp.eq(r ->> 'error', 'validation_failed', 'contact phone too short');
+  r := app.appointment_create(doc, jsonb_build_object('type_id', t, 'starts_at', pg_temp.at(d3, '13:00'),
+         'lead', jsonb_build_object('name', 'אבי', 'phone', '0501234567', 'email', 'not-an-email')));
+  PERFORM pg_temp.eq(r ->> 'error', 'validation_failed', 'contact e-mail must be valid when given');
+  r := app.appointment_create(doc, jsonb_build_object('type_id', t, 'starts_at', pg_temp.at(d3, '13:00'), 'patient_id', pt,
+         'lead', jsonb_build_object('name', 'אבי', 'phone', '0501234567')));
+  PERFORM pg_temp.eq(r ->> 'error', 'validation_failed', 'a card and a contact at once is refused');
+  r := app.appointment_create(doc, jsonb_build_object('type_id', t, 'starts_at', pg_temp.at(d3, '13:00')));
+  PERFORM pg_temp.eq(r ->> 'error', 'validation_failed', 'neither a card nor a contact is refused');
+
+  r := app.appointment_create(doc, jsonb_build_object('type_id', t, 'starts_at', pg_temp.at(d3, '09:15'),
+         'lead', jsonb_build_object('name', 'כפול', 'phone', '0509999999')));
+  PERFORM pg_temp.eq(r ->> 'error', 'conflict', 'contact booking onto a taken slot is a conflict');
+  PERFORM pg_temp.eq((SELECT count(*)::int FROM clinic_demo.booking_request WHERE name = 'כפול'), 0, 'a clash leaves no stray contact behind');
+
+  UPDATE clinic_demo.patient SET phone = '052-7654321' WHERE id = pt;
+  SELECT lower(email) INTO pmail FROM clinic_demo.patient WHERE id = pt;
+  r := app.scheduling_contact_matches(doc, '+972 52 765 4321', NULL);
+  PERFORM pg_temp.eq(r -> 'matches' -> 0 ->> 'id', pt::text, 'an existing card is found by phone (last 9 digits)');
+  r := app.scheduling_contact_matches(doc, NULL, upper(pmail));
+  PERFORM pg_temp.eq(r -> 'matches' -> 0 ->> 'id', pt::text, 'an existing card is found by e-mail, any case');
+  r := app.scheduling_contact_matches(doc, '0500000001', NULL);
+  PERFORM pg_temp.eq(jsonb_array_length(r -> 'matches'), 0, 'no card for an unknown phone');
+  r := app.scheduling_contact_matches(doc, '1234', '');
+  PERFORM pg_temp.eq(jsonb_array_length(r -> 'matches'), 0, 'too little to match on: nothing');
+
+  UPDATE clinic_demo.booking_request SET created_at = now() - interval '2 days' WHERE id = req;
+  PERFORM app.scheduling_sweep();
+  PERFORM pg_temp.eq((SELECT count(*)::int FROM clinic_demo.booking_request WHERE id = req), 1, 'the sweep keeps contacts that have an appointment');
+
+  r := app.booking_link_patient(doc, req, pt);
+  PERFORM pg_temp.eq(r ->> 'ok', 'true', 'a contact can be linked to a card later');
+  PERFORM pg_temp.eq((SELECT patient_id FROM clinic_demo.appointment WHERE id = appt), pt, 'the linked appointment now belongs to the card');
+
+  RAISE NOTICE 'all contact checks passed';
+END
+$test$;
+
 ROLLBACK;

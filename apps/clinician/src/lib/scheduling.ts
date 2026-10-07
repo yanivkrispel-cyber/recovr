@@ -97,6 +97,25 @@ export function useClinicianSlots(typeId: string | null, from: string, to: strin
   });
 }
 
+/** Existing cards with this phone (last 9 digits) or e-mail — offered before
+ *  booking a new contact, so the same person doesn't end up twice. */
+export function useContactMatches(phone: string, email: string, enabled: boolean) {
+  const supabase = useContext(SupabaseContext);
+  return useQuery({
+    queryKey: ['scheduling', 'contact-matches', phone, email],
+    enabled,
+    queryFn: async () =>
+      (
+        await call<{ matches: { id: string; name: string; status: string }[] }>(
+          supabase,
+          `contact-matches?phone=${encodeURIComponent(phone)}&email=${encodeURIComponent(email)}`,
+          'GET',
+        )
+      ).matches,
+    staleTime: 30_000,
+  });
+}
+
 export function useBookingRequests() {
   const supabase = useContext(SupabaseContext);
   return useQuery({
@@ -128,7 +147,10 @@ function useInvalidateCalendar() {
 }
 
 export interface AppointmentInput {
-  patient_id: string;
+  /** an existing card … */
+  patient_id?: string;
+  /** … or someone without one yet (shown as a new patient until a card is opened) */
+  lead?: { name: string; phone: string; email?: string };
   type_id: string;
   starts_at: string;
   duration_min?: number;

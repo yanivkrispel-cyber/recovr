@@ -130,12 +130,14 @@ export interface CalendarAppointment {
   cancel_reason: string | null;
   type: { id: string; name: string; color: TypeColor; duration_min: number; price_ils: number | null };
   patient: { id: string; name: string; status: string; phone: string | null; email: string | null } | null;
-  /** A website visitor who has no patient card yet (or just got one). */
+  /** Someone without a patient card yet (or who just got one): a website
+   *  visitor, or a contact the clinician booked by name and phone. */
   lead: {
     request_id: string;
     name: string;
     phone: string;
-    email: string;
+    /** always set for website visitors; optional for clinician contacts */
+    email: string | null;
     patient_id: string | null;
     body_region: { id: string; name: string } | null;
   } | null;

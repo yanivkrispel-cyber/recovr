@@ -138,7 +138,7 @@ Full field-by-field spec in `ROM_MEASUREMENT.md` §5.
   sent_at, read_at
 - **audit_log** — id, actor_type, actor_id, action, entity_type, entity_id, ip, user_agent, at
 
-## Scheduling (M6) — built for T-34/T-35 in migrations 0062–0063; T-36/T-37 planned
+## Scheduling (M6) — built for T-34/T-35 in migrations 0062–0064; T-36/T-37 planned
 Clinic level (`app`):
 - **clinic.booking_slug** — unique public address of the booking page (`/m/book/<slug>`)
 - **clinic.settings → scheduling** (defaults via `app.scheduling_settings`): booking_enabled,
@@ -154,8 +154,11 @@ Per clinic (`clinic_<slug>`, created by `add_clinic_scheduling_tables` via `add_
 - **availability_rule** — id, clinic_id, practitioner_id → user, weekday (0 = Sunday), start_time,
   end_time (clinic-local, 5-minute marks, no overlap within a day)
 - **time_off** — id, clinic_id, practitioner_id, starts_at, ends_at (≤ 120 days), reason, created_by
-- **booking_request** — a website visitor: id, clinic_id, practitioner_id, type_id, starts_at,
-  name, phone (digits, optional +), email (lower-case), body_region_id, consent_version,
+- **booking_request** — someone without a patient card: a website visitor (source `public`) or
+  a contact the clinician booked by name and phone (source `clinician`, 0064; consent_version
+  `clinician`, no code): id, clinic_id, practitioner_id, type_id, starts_at, source,
+  name, phone (digits, optional +), email (lower-case; required for `public`, optional for
+  `clinician`), body_region_id, consent_version,
   consent_at, code_hash, code_expires_at, code_attempts, codes_sent, email_verified_at,
   ip_hash, patient_id (set when linked to a card). Rows that never became an appointment are
   purged after a day.
