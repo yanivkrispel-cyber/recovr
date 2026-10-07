@@ -103,6 +103,8 @@ export interface SchedulingSetup {
   timezone: string;
   clinic_name: string;
   booking_slug: string | null;
+  /** the public page's full address (server-built, per deployment) */
+  booking_url: string | null;
   settings: SchedulingSettings;
   practitioners: PractitionerRef[];
   types: AppointmentType[];
@@ -133,8 +135,14 @@ export interface CalendarAppointment {
     patient_id: string | null;
     body_region: { id: string; name: string } | null;
   } | null;
-  /** Current phase and server-computed 7-day adherence (RULES §1). */
-  clinical?: { phase_n: number | null; phase_name: string | null; adherence: number | null } | null;
+  /** Current phase and server-computed 7-day adherence (RULES §1) — the
+   *  low-adherence flag is the server's, against the clinic's threshold. */
+  clinical?: {
+    phase_n: number | null;
+    phase_name: string | null;
+    adherence: number | null;
+    low_adherence: boolean;
+  } | null;
   /** Only on booking-request rows: existing patients that look like the visitor. */
   matches?: { id: string; name: string; status: string }[];
 }
@@ -192,6 +200,7 @@ export interface MyAppointments {
   timezone: string;
   clinic: ClinicContact;
   free_cancel_hours: number;
+  horizon_days: number;
   upcoming: PatientAppointment[];
   past: PatientAppointment[];
   types: BookableType[];

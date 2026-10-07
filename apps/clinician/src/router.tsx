@@ -12,6 +12,8 @@ const Protocols = lazyWithRetry(() => import('./pages/Protocols'));
 const Settings = lazyWithRetry(() => import('./pages/Settings'));
 const Messages = lazyWithRetry(() => import('./pages/Messages'));
 const Chat = lazyWithRetry(() => import('./pages/Chat'));
+const Calendar = lazyWithRetry(() => import('./pages/Calendar'));
+const CalendarSetup = lazyWithRetry(() => import('./pages/CalendarSetup'));
 
 export const PATIENT_TABS = ['overview', 'plan', 'progress', 'assessments', 'history', 'messages'] as const;
 export type PatientTab = (typeof PATIENT_TABS)[number];
@@ -98,6 +100,24 @@ const exercisesRoute = createRoute({
   }),
 });
 
+const calendarRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/calendar',
+  component: Calendar,
+  // date: the clinic-local day to show (YYYY-MM-DD, default today);
+  // view: 'day' (default week; phones always show a day).
+  validateSearch: (search: Record<string, unknown>): { date?: string; view?: 'day' } => ({
+    date: typeof search.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(search.date) ? search.date : undefined,
+    view: search.view === 'day' ? 'day' : undefined,
+  }),
+});
+
+const calendarSetupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/calendar/setup',
+  component: CalendarSetup,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
@@ -113,6 +133,8 @@ const routeTree = rootRoute.addChildren([
   chatRoute,
   protocolsRoute,
   exercisesRoute,
+  calendarRoute,
+  calendarSetupRoute,
   settingsRoute,
 ]);
 

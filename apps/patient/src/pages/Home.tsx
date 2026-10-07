@@ -6,6 +6,7 @@ import { secondaryLabel } from '../lib/label';
 import { TODAY_KEY, fetchToday } from '../lib/today';
 import { supabase } from '../lib/supabase';
 import type { ExerciseMode } from '../App';
+import NextAppointmentCard from '../components/NextAppointmentCard';
 
 interface TodayItem {
   id: string;
@@ -32,9 +33,11 @@ interface HomeProps {
   justCompletedId?: string | null;
   onOpenProgress: () => void;
   onOpenEducation: () => void;
+  /** book: open straight into booking a new appointment */
+  onOpenAppointments: (book: boolean) => void;
 }
 
-export default function Home({ onStartExercise, justCompletedId, onOpenProgress, onOpenEducation }: HomeProps) {
+export default function Home({ onStartExercise, justCompletedId, onOpenProgress, onOpenEducation, onOpenAppointments }: HomeProps) {
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [flashId, setFlashId] = useState<string | null>(justCompletedId ?? null);
 
@@ -86,8 +89,11 @@ export default function Home({ onStartExercise, justCompletedId, onOpenProgress,
 
   if (!data) {
     return (
-      <div style={{ textAlign: 'center', padding: '60px 10px' }}>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 17, color: 'var(--patient-text)' }}>אין תכנית פעילה</h1>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ textAlign: 'center', padding: '48px 10px 8px' }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 17, color: 'var(--patient-text)' }}>אין תכנית פעילה</h1>
+        </div>
+        <NextAppointmentCard onOpen={onOpenAppointments} />
       </div>
     );
   }
@@ -163,6 +169,8 @@ export default function Home({ onStartExercise, justCompletedId, onOpenProgress,
           <span style={{ display: 'block', fontSize: 10, color: 'var(--patient-muted)' }}>My Progress</span>
         </button>
       </div>
+
+      <NextAppointmentCard onOpen={onOpenAppointments} />
 
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--patient-muted)', marginBottom: 6 }}>

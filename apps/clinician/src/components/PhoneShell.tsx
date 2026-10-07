@@ -5,6 +5,7 @@ import { t } from 'shared';
 import type { User } from 'shared';
 import { Logo, useOnlineStatus } from 'ui';
 import { SupabaseContext } from '../App';
+import { useBookingRequestCount } from '../lib/scheduling';
 
 // Phone layout of the clinician shell (<768px, see useIsPhone): slim top bar,
 // content, and a bottom tab bar. Secondary sections (protocols, library,
@@ -13,7 +14,7 @@ import { SupabaseContext } from '../App';
 
 const TAB_BAR_HEIGHT = 60;
 
-type IconName = 'dashboard' | 'patients' | 'messages' | 'more';
+type IconName = 'dashboard' | 'patients' | 'calendar' | 'messages' | 'more';
 
 function NavIcon({ name }: { name: IconName }) {
   const common = { width: 22, height: 22, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
@@ -34,6 +35,13 @@ function NavIcon({ name }: { name: IconName }) {
           <path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" />
           <path d="M16 4.6a3.5 3.5 0 0 1 0 6.8" />
           <path d="M21.5 20c0-2.8-1.6-4.9-4-5.7" />
+        </svg>
+      );
+    case 'calendar':
+      return (
+        <svg {...common}>
+          <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+          <path d="M8 3v4M16 3v4M3.5 10h17" />
         </svg>
       );
     case 'messages':
@@ -75,14 +83,14 @@ const tabStyle: CSSProperties = {
 
 const tabActive: CSSProperties = { ...tabStyle, color: 'var(--gold-deep)' };
 
-function TabLink({ to, icon, label, badge }: { to: string; icon: IconName; label: string; badge?: number }) {
+function TabLink({ to, icon, label, badge, badgeLabel }: { to: string; icon: IconName; label: string; badge?: number; badgeLabel?: string }) {
   return (
     <Link to={to} style={tabStyle} activeProps={{ style: tabActive, 'aria-current': 'page' }}>
       <span style={{ position: 'relative', display: 'flex' }}>
         <NavIcon name={icon} />
         {badge ? (
           <span
-            aria-label={t('clinician.messages.unread', { count: badge })}
+            aria-label={badgeLabel ?? t('clinician.messages.unread', { count: badge })}
             style={{
               position: 'absolute', top: -5, insetInlineStart: 13, minWidth: 17, height: 17, padding: '0 4px', boxSizing: 'border-box',
               borderRadius: 9, background: 'var(--flag-red)', color: 'var(--cream)', fontSize: 10, fontWeight: 700,
@@ -177,6 +185,7 @@ export default function PhoneShell({ user, children }: { user: User; children: R
     },
     refetchInterval: 30_000,
   });
+  const { data: pendingRequests } = useBookingRequestCount();
   const [moreOpen, setMoreOpen] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const inMore = MORE_ROUTES.some((r) => pathname.endsWith(r) || pathname.includes(`${r}/`));
@@ -222,6 +231,13 @@ export default function PhoneShell({ user, children }: { user: User; children: R
       >
         <TabLink to="/dashboard" icon="dashboard" label={t('clinician.dashboard.title')} />
         <TabLink to="/patients" icon="patients" label={t('clinician.patients.title')} />
+        <TabLink
+          to="/calendar"
+          icon="calendar"
+          label={t('sched.cal.title')}
+          badge={pendingRequests}
+          badgeLabel={pendingRequests ? t('sched.cal.requests.banner', { count: pendingRequests }) : undefined}
+        />
         <TabLink to="/messages" icon="messages" label={t('clinician.messages.title')} badge={unread} />
         <button
           onClick={() => setMoreOpen(true)}

@@ -138,27 +138,40 @@ Full field-by-field spec in `ROM_MEASUREMENT.md` §5.
   sent_at, read_at
 - **audit_log** — id, actor_type, actor_id, action, entity_type, entity_id, ip, user_agent, at
 
-## Scheduling (M6, T-34..T-37 — planned)
-- **appointment_type** — id, clinic_id, name, name_en, duration_min, price_label, color,
-  who_may_book (`anyone`|`existing`|`clinician_only`), confirmation (`manual`|`auto`),
-  is_reassessment, active, sort
-- **availability_rule** — id, clinic_id, practitioner_id → user, weekday (0–6), start_time,
-  end_time, valid_from, valid_to
-- **time_off** — id, clinic_id, practitioner_id, starts_at, ends_at, reason
-- **appointment** — id, clinic_id, practitioner_id, patient_id (null while a lead),
-  booking_request_id, type_id, starts_at, ends_at, status (`pending`|`confirmed`|`attended`|
-  `no_show`|`cancelled`|`late_cancelled`|`declined`|`expired`), source (`clinician`|`patient_app`|
-  `public`|`waitlist`), cancelled_by, cancel_reason, package_instance_id, notes. Exclusion
-  constraint: no overlapping live rows per practitioner.
-- **booking_request** — id, clinic_id, name, phone, email, body_region_id, consent_version,
-  consent_at, email_verified_at, code_hash, code_attempts, ip_hash, status
-  (`unverified`|`pending`|`approved`|`declined`|`expired`), matched_patient_id
-- **clinic settings** (`clinic.settings.scheduling`): buffer_min, min_notice_min, horizon_days,
-  free_cancel_hours, reminder_hours[], waitlist_min_lead_min, public_slug, booking_enabled
+## Scheduling (M6) — built for T-34/T-35 in migration 0062; T-36/T-37 planned
+Clinic level (`app`):
+- **clinic.booking_slug** — unique public address of the booking page (`/m/book/<slug>`)
+- **clinic.settings → scheduling** (defaults via `app.scheduling_settings`): booking_enabled,
+  practitioner_id (whose calendar website bookings land in), slot_step_min, buffer_min,
+  min_notice_min, horizon_days, free_cancel_hours, contact_address, contact_phone
+
+Per clinic (`clinic_<slug>`, created by `add_clinic_scheduling_tables` via `add_clinic_columns`):
+- **appointment_type** — id, clinic_id, name, name_en, description, duration_min (5–480),
+  price_label (display text, no payments), color (`navy|gold|green|clay|slate` — token keys),
+  who_may_book (`anyone`|`existing`|`clinician_only`), confirmation (`manual`|`auto`), active, sort
+- **availability_rule** — id, clinic_id, practitioner_id → user, weekday (0 = Sunday), start_time,
+  end_time (clinic-local, 5-minute marks, no overlap within a day)
+- **time_off** — id, clinic_id, practitioner_id, starts_at, ends_at (≤ 120 days), reason, created_by
+- **booking_request** — a website visitor: id, clinic_id, practitioner_id, type_id, starts_at,
+  name, phone (digits, optional +), email (lower-case), body_region_id, consent_version,
+  consent_at, code_hash, code_expires_at, code_attempts, codes_sent, email_verified_at,
+  ip_hash, patient_id (set when linked to a card). Rows that never became an appointment are
+  purged after a day.
+- **appointment** — id, clinic_id, practitioner_id, patient_id | booking_request_id (at least one),
+  type_id, starts_at, ends_at (≤ 12 h), status (`pending`|`confirmed`|`attended`|`no_show`|
+  `cancelled`|`declined`|`expired`), source (`clinician`|`patient_app`|`public`), note (internal),
+  created_by, decided_by, decided_at, cancelled_by (`clinician`|`patient`|`system`),
+  cancelled_at, cancel_reason. Exclusion constraint: no overlapping live rows (`pending`,
+  `confirmed`, `attended`, `no_show`) per practitioner; a trigger keeps live appointments and
+  time_off apart.
+- Manage links in e-mails are stateless HMAC tokens over (clinic id, appointment id) — nothing
+  is stored.
+
+Planned:
 - **waitlist_entry** (T-36) — id, clinic_id, patient_id | booking_request_id, type_id, weekdays[],
   time_bands[], priority, note, status (`active`|`booked`|`removed`), created_at
-- **waitlist_offer** (T-36) — id, entry_id, appointment slot (practitioner_id, starts_at,
-  ends_at, type_id), token_hash, sent_at, claimed_at, outcome
+- **waitlist_offer** (T-36) — id, entry_id, slot (practitioner_id, starts_at, ends_at, type_id),
+  token_hash, sent_at, claimed_at, outcome
 - **package_product** / **package_instance** (T-37) — product: id, clinic_id, name, sessions,
   type_ids[], validity_days, price_label; instance: id, patient_id, product_id, sessions_total,
   sessions_used, expires_at, payment jsonb (manual record)

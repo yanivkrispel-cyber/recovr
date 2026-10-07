@@ -20,6 +20,9 @@ const Education = lazyWithRetry(() => import('./pages/Education'));
 const Messages = lazyWithRetry(() => import('./pages/Messages'));
 const InviteAccept = lazyWithRetry(() => import('./pages/InviteAccept'));
 const HomeProgramPrint = lazyWithRetry(() => import('./pages/HomeProgramPrint'));
+const Book = lazyWithRetry(() => import('./pages/Book'));
+const ManageBooking = lazyWithRetry(() => import('./pages/ManageBooking'));
+const Appointments = lazyWithRetry(() => import('./pages/Appointments'));
 
 function ViewFallback() {
   return (
@@ -33,12 +36,24 @@ function ViewFallback() {
 // Pages import the client from here; it lives in lib/supabase.ts.
 export { supabase };
 
-type View = 'home' | 'exercise' | 'completion' | 'progress' | 'messages' | 'education' | 'notifications';
+type View = 'home' | 'exercise' | 'completion' | 'progress' | 'messages' | 'education' | 'notifications' | 'appointments';
 
 // /m/invite/:token and /m/program/print — the only paths this app parses;
 // everything else is local view state, matching the "no router" pattern.
 function getInviteToken(): string | null {
   const match = window.location.pathname.match(/\/invite\/([^/]+)/);
+  return match ? match[1] : null;
+}
+
+// The public booking page and the manage link from booking e-mails (T-35)
+// need no session — a visitor booking a first visit isn't a patient yet.
+function getBookSlug(): string | null {
+  const match = window.location.pathname.match(/\/book\/([a-z0-9-]+)\/?$/);
+  return match ? match[1] : null;
+}
+
+function getManageToken(): string | null {
+  const match = window.location.pathname.match(/\/booking\/([A-Za-z0-9_-]+)\/?$/);
   return match ? match[1] : null;
 }
 
@@ -99,6 +114,9 @@ export default function App() {
   const [exerciseMode, setExerciseMode] = useState<ExerciseMode>('sequence');
   // The plan item just finished in single mode — Home flashes its row.
   const [justCompletedId, setJustCompletedId] = useState<string | null>(null);
+  const [bookOnOpen, setBookOnOpen] = useState(false);
+  const [bookSlug] = useState(getBookSlug);
+  const [manageToken] = useState(getManageToken);
 
   const queryClient = useQueryClient();
 
@@ -177,6 +195,14 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
+  if (bookSlug || manageToken) {
+    return (
+      <Suspense fallback={<ViewFallback />}>
+        {bookSlug ? <Book slug={bookSlug} /> : <ManageBooking token={manageToken!} />}
+      </Suspense>
+    );
+  }
+
   if (inviteToken) {
     return (
       <Suspense fallback={<ViewFallback />}>
@@ -207,7 +233,7 @@ export default function App() {
     );
   }
 
-  const activeTab: PatientTab = view === 'exercise' || view === 'completion' ? 'home' : (view === 'notifications' ? 'home' : (view as PatientTab));
+  const activeTab: PatientTab = view === 'exercise' || view === 'completion' || view === 'notifications' || view === 'appointments' ? 'home' : (view as PatientTab);
 
   function handleTabChange(tab: PatientTab) {
     setView(tab);
@@ -229,8 +255,13 @@ export default function App() {
               justCompletedId={justCompletedId}
               onOpenProgress={() => setView('progress')}
               onOpenEducation={() => setView('education')}
+              onOpenAppointments={(book) => {
+                setBookOnOpen(book);
+                setView('appointments');
+              }}
             />
           )}
+          {view === 'appointments' && <Appointments onBack={() => setView('home')} startBooking={bookOnOpen} />}
           {view === 'exercise' && (
             <ExerciseFlow
               key={activeExerciseIndex}

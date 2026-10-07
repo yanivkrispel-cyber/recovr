@@ -5,6 +5,7 @@ import type { User } from 'shared';
 import { Logo, useIsPhone, useOnlineStatus } from 'ui';
 import { SupabaseContext } from '../App';
 import PhoneShell from './PhoneShell';
+import { useBookingRequestCount } from '../lib/scheduling';
 
 interface AppShellProps {
   user: User;
@@ -45,10 +46,22 @@ const navActive: CSSProperties = {
   borderInlineStart: '2px solid var(--gold-deep)',
 };
 
-function NavItem({ to, label, labelEn }: { to: string; label: string; labelEn: string }) {
+function NavItem({ to, label, labelEn, badge, badgeLabel }: { to: string; label: string; labelEn: string; badge?: number; badgeLabel?: string }) {
   return (
     <Link to={to} style={navInactive} activeProps={{ style: navActive }}>
       {label} <span style={{ opacity: 0.65, fontWeight: 400, fontSize: 12 }}>{labelEn}</span>
+      {badge ? (
+        <span
+          aria-label={badgeLabel}
+          style={{
+            marginInlineStart: 'auto', minWidth: 20, height: 20, padding: '0 6px', boxSizing: 'border-box', borderRadius: 10,
+            background: 'var(--gold-deep)', color: 'var(--cream)', fontSize: 11, fontWeight: 700,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          {badge > 99 ? '99+' : badge}
+        </span>
+      ) : null}
     </Link>
   );
 }
@@ -62,6 +75,7 @@ export default function AppShell({ user, children }: AppShellProps) {
 function DesktopShell({ user, children }: AppShellProps) {
   const supabase = useContext(SupabaseContext);
   const online = useOnlineStatus();
+  const { data: pendingRequests } = useBookingRequestCount();
   const initials = user.name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('');
 
   return (
@@ -97,6 +111,13 @@ function DesktopShell({ user, children }: AppShellProps) {
 
         <NavItem to="/dashboard" label={t('clinician.dashboard.title')} labelEn={t('clinician.dashboard.nav_en')} />
         <NavItem to="/patients" label={t('clinician.patients.title')} labelEn={t('clinician.patients.nav_en')} />
+        <NavItem
+          to="/calendar"
+          label={t('sched.cal.title')}
+          labelEn={t('sched.cal.nav_en')}
+          badge={pendingRequests}
+          badgeLabel={pendingRequests ? t('sched.cal.requests.banner', { count: pendingRequests }) : undefined}
+        />
         <NavItem to="/protocols" label={t('clinician.protocol.nav')} labelEn={t('clinician.protocol.nav_en')} />
         <NavItem to="/exercises" label={t('clinician.exercise.nav')} labelEn={t('clinician.exercise.nav_en')} />
         <NavItem to="/settings" label={t('clinician.settings.nav')} labelEn={t('clinician.settings.nav_en')} />

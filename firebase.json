@@ -4,6 +4,9 @@
     "public": "firebase-public",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "cleanUrls": true,
+    "redirects": [
+      { "source": "/book/:slug", "destination": "/m/book/:slug", "type": 302 }
+    ],
     "rewrites": [
       { "source": "/app/**", "destination": "/app/index.html" },
       { "source": "/m/**", "destination": "/m/index.html" }

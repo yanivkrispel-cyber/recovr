@@ -21,7 +21,7 @@ import { withCors } from '../_shared/cors.ts';
 import { getAuthUser } from '../_shared/auth.ts';
 import { requireMfa } from '../_shared/mfa.ts';
 import { rateLimit } from '../_shared/rate-limit.ts';
-import { isUuid, json, statusFor } from '../_shared/booking.ts';
+import { bookingPageUrl, isUuid, json, statusFor } from '../_shared/booking.ts';
 import { sendBookingEmail, type BookingEmailKind } from '../_shared/booking-emails.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -66,16 +66,22 @@ Deno.serve(withCors(async (req) => {
   // can't turn the calendar into a mail cannon.
   const mayEmail = async () => (await rateLimit(svc, `sched-email:user:${user.id}`, 120, 3600)) === null;
 
+  // The public page's address, from this deployment's PATIENT_BASE_URL.
+  const withBookingUrl = <T extends { booking_slug?: string | null }>(d: T) =>
+    ({ ...d, booking_url: d.booking_slug ? bookingPageUrl(d.booking_slug) : null });
+
   if (req.method === 'GET' && resource === 'setup') {
     const { data, error } = await rpc('scheduling_setup', { p_clinician_id: user.id });
-    return reply(data, error);
+    if (error || data?.error) return reply(data, error);
+    return json(withBookingUrl(data));
   }
 
   if (req.method === 'PATCH' && resource === 'settings') {
     const patch = await body();
     if (!patch) return json({ error: 'validation_failed' }, 422);
     const { data, error } = await rpc('scheduling_update_settings', { p_clinician_id: user.id, p_patch: patch });
-    return reply(data, error);
+    if (error || data?.error) return reply(data, error);
+    return json(withBookingUrl(data));
   }
 
   if (req.method === 'POST' && resource === 'types') {

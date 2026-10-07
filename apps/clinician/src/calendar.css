@@ -1,0 +1,19 @@
+/* Calendar grid cells (WeekGrid): invisible half-hour buttons that open the
+   new-appointment form. Tokens only. */
+.cal-cell {
+  background: transparent;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.cal-cell:hover {
+  background: var(--nav-active-bg);
+}
+
+.cal-cell:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+}

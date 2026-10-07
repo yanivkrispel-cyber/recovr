@@ -252,22 +252,30 @@ https://claude.ai/artifact/XzBGp2VWhrZkqCQzF4qDUd
 - Every appointment change is written to `audit_log`.
 
 **T-35 Public booking page & new-patient intake**
-- Public route `/book/<clinic-slug>` (no login, Hebrew, phone-first): choose type → day →
-  slot → name, mobile, email, optional body region (from `app.body_region`; no free-text
-  medical details), privacy + cancellation consent → 6-digit email code → request created.
-- Only types with `who_may_book = anyone` are offered publicly. Requests are `pending` and hold
-  their slot for 24 h; unverified requests never hold a slot and expire after 15 min.
-- Abuse limits: per-IP and per-email rate limits, Cloudflare Turnstile on the code request,
-  code valid 10 min / 5 attempts. The edge function runs with the service role and is the only
-  public write path (no anon RLS on scheduling tables).
-- Clinician sees "new website requests" (calendar sidebar + dashboard badge): approve → creates
-  the `patient` (status `invited`, existing invite flow sends the app invite) and confirms the
-  appointment; or propose another time; or decline. Matching an existing patient by
-  email/phone is offered, never automatic.
+- Public route `/m/book/<clinic-slug>` (`/book/<slug>` redirects; no login, Hebrew,
+  phone-first): choose type → day → slot → name, mobile, email, optional body region (from
+  `app.body_region`; no free-text medical details), privacy + cancellation consent → 6-digit
+  email code → request created.
+- Only types with `who_may_book = anyone` are offered publicly. A verified request is a
+  `pending` appointment that holds its slot until the clinician decides (or its start time
+  passes → `expired`); unverified requests never hold a slot and are purged after a day.
+  One upcoming website booking per e-mail address.
+- Abuse limits: rate limits per hashed IP, per address and per clinic; code valid 15 min,
+  5 attempts, 3 codes per request. The edge function runs with the service role and is the
+  only public write path (no anon access to scheduling tables). A bot challenge (e.g.
+  Turnstile) is a follow-up if abuse shows up.
+- Clinician sees pending requests (calendar side panel + nav badge + push): approve
+  (optionally at another time — "move + approve") or decline. A website visitor gets a patient
+  card only when the clinician opens one: "open patient card" runs the existing add-patient
+  flow prefilled from the request and links request + appointment to the new card; or the
+  request is linked to an existing patient matched by e-mail/phone (offered, never
+  automatic). A no-show leaves no stray card.
 - Existing patients book from the patient app (types with `who_may_book` in `anyone|existing`);
   `auto`-confirm types confirm instantly, `manual` ones go to the same queue.
-- Emails (existing SMTP / notification pipeline, no medical content): code, "request received",
-  confirmed (with .ics attachment + manage link), declined/alternative proposed.
+- Emails (Gmail relay / Inbucket, no names, nothing clinical): code, "request received",
+  confirmed (with .ics + manage link), moved (.ics), declined, cancelled (.ics cancel). The
+  manage link (stateless signed token) shows the appointment and cancels it within the
+  free-cancellation window; inside the window the patient contacts the clinic.
 - Consent version and timestamp stored on the booking request and carried to the patient row.
 
 **T-36 Reminders, self-service changes & waitlist**

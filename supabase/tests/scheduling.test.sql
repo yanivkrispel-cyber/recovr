@@ -7,6 +7,8 @@
 -- Needs the demo seed (clinic_demo, clinician 2222…, patient "דנה רז" with a
 -- patient login). Everything runs in one transaction that is rolled back, so
 -- the database is left as it was. A failed assertion aborts with its label.
+-- Independent of whatever else the calendar holds: it works on a day two
+-- months out, compares counts against a baseline, and finds its own rows by id.
 -- ============================================================================
 
 BEGIN;
@@ -29,7 +31,8 @@ DECLARE
   doc   CONSTANT UUID := '22222222-2222-2222-2222-222222222222';
   pt    CONSTANT UUID := '7c75eb99-ca61-4c7f-87f4-145ba1c02686';  -- דנה רז
   pauth UUID;
-  d     DATE := (now() AT TIME ZONE 'Asia/Jerusalem')::date + 3;
+  d     DATE := (now() AT TIME ZONE 'Asia/Jerusalem')::date + 60;
+  base_pending INT;
   r     JSONB;
   t_eval UUID;
   t_tx   UUID;
@@ -43,7 +46,18 @@ DECLARE
 BEGIN
   SELECT id INTO pauth FROM app.patient_auth WHERE patient_id = pt;
 
+  -- A clean slate for the parts that count: no backlog for the sweep, none
+  -- of the test patient's own upcoming visits (limit / ownership checks).
+  PERFORM app.scheduling_sweep();
+  UPDATE clinic_demo.appointment SET status = 'cancelled'
+  WHERE patient_id = pt AND status IN ('pending', 'confirmed') AND starts_at > now();
+  DELETE FROM clinic_demo.booking_request br
+  WHERE br.email_verified_at IS NULL
+    AND NOT EXISTS (SELECT 1 FROM clinic_demo.appointment a WHERE a.booking_request_id = br.id);
+  base_pending := (app.booking_requests_count(doc) ->> 'count')::int;
+
   -- --- setup ---------------------------------------------------------------
+  PERFORM app.scheduling_update_settings(doc, '{"horizon_days": 90}');
   r := app.scheduling_update_settings(doc, '{"booking_slug": "demo-test", "booking_enabled": true}');
   PERFORM pg_temp.eq(r -> 'settings' ->> 'practitioner_id', doc::text, 'enabling booking defaults the practitioner to the caller');
 
@@ -168,9 +182,10 @@ BEGIN
   PERFORM pg_temp.eq(r ->> 'error', 'already_booked', 'one upcoming website booking per e-mail');
 
   r := app.booking_requests(doc);
-  PERFORM pg_temp.eq(jsonb_array_length(r -> 'requests'), 1, 'request queue lists the pending request');
-  PERFORM pg_temp.eq(r -> 'requests' -> 0 -> 'matches' -> 0 ->> 'id', pt::text, 'matched to the patient with the same e-mail');
-  PERFORM pg_temp.eq((app.booking_requests_count(doc) ->> 'count')::int, 1, 'badge count');
+  SELECT x INTO r FROM jsonb_array_elements(r -> 'requests') x WHERE x ->> 'id' = a2::text;
+  PERFORM pg_temp.eq(r IS NOT NULL, true, 'request queue lists the pending request');
+  PERFORM pg_temp.eq(r -> 'matches' -> 0 ->> 'id', pt::text, 'matched to the patient with the same e-mail');
+  PERFORM pg_temp.eq((app.booking_requests_count(doc) ->> 'count')::int, base_pending + 1, 'badge count');
 
   -- slot taken between request and code → pick another time with the same code
   r := app.public_booking_request('demo-test', jsonb_build_object(
@@ -213,7 +228,8 @@ BEGIN
 
   -- --- patient app ---------------------------------------------------------
   r := app.me_appointments(pauth);
-  PERFORM pg_temp.eq(jsonb_array_length(r -> 'types'), 2, 'patient can book both types');
+  SELECT count(*) INTO n FROM jsonb_array_elements(r -> 'types') x WHERE (x ->> 'id')::uuid IN (t_eval, t_tx);
+  PERFORM pg_temp.eq(n, 2, 'patient can book both types');
   r := app.me_appointment_book(pauth, t_tx, pg_temp.at(d, '11:15'));
   PERFORM pg_temp.eq(r ->> 'error', 'slot_taken', 'off-grid start is refused for patients too');
   r := app.me_appointment_book(pauth, t_tx, pg_temp.at(d, '11:00'));
@@ -221,6 +237,9 @@ BEGIN
   a1 := (r -> 'appointment' ->> 'id')::uuid;
   PERFORM pg_temp.eq(r -> 'appointment' ->> 'can_cancel', 'true', 'cancellable outside the window');
 
+  -- Bring it within a week, then require 7 days' notice.
+  UPDATE clinic_demo.appointment SET starts_at = now() + interval '3 days', ends_at = now() + interval '3 days 45 minutes'
+  WHERE id = a1;
   PERFORM app.scheduling_update_settings(doc, '{"free_cancel_hours": 168}');
   r := app.me_appointment_cancel(pauth, a1);
   PERFORM pg_temp.eq(r ->> 'error', 'too_late', 'inside the free-cancellation window the patient must call');

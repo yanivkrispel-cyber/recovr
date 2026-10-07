@@ -913,14 +913,15 @@ BEGIN
   EXECUTE format('SET LOCAL search_path TO %I, app, public', v.schema_name);
 
   WITH summary AS MATERIALIZED (
-    SELECT s.patient_id, s.phase_n, s.phase_name, s.adherence, s.is_invited
+    SELECT s.patient_id, s.phase_n, s.phase_name, s.adherence, s.is_invited, s.is_low_adherence
     FROM app.clinic_patient_summary(v.schema_name) s
   )
   SELECT COALESCE(jsonb_agg(
            app._sched_appointment_json(a.id)
            || jsonb_build_object('clinical', CASE WHEN sm.patient_id IS NULL THEN NULL ELSE jsonb_build_object(
                 'phase_n', sm.phase_n, 'phase_name', sm.phase_name,
-                'adherence', CASE WHEN sm.is_invited THEN NULL ELSE sm.adherence END) END)
+                'adherence', CASE WHEN sm.is_invited THEN NULL ELSE sm.adherence END,
+                'low_adherence', COALESCE(sm.is_low_adherence, false) AND NOT sm.is_invited) END)
            ORDER BY a.starts_at), '[]'::jsonb)
   INTO v_appts
   FROM appointment a
@@ -1724,6 +1725,7 @@ BEGIN
     'timezone', v.tz,
     'clinic', app._sched_clinic_public(v.clinic_id),
     'free_cancel_hours', v_hours,
+    'horizon_days', (v_set ->> 'horizon_days')::int,
     'upcoming', COALESCE((
       SELECT jsonb_agg(app._sched_patient_appointment_json(a.id, v_hours) ORDER BY a.starts_at)
       FROM appointment a

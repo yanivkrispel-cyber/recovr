@@ -1,5 +1,6 @@
 import { useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { Skeleton, EmptyState } from 'ui';
 import { t, thresholdOptions, type Units } from 'shared';
 import { AuthContext, SupabaseContext } from '../App';
@@ -145,6 +146,12 @@ export default function Settings() {
                 />
                 שלח לי סיכום שבועי
               </label>
+            </Section>
+
+            <Section title={`${t('sched.setup.title')} · Calendar`} hint={t('sched.setup.public.hint')}>
+              <Link to="/calendar/setup" style={{ fontSize: 13, fontWeight: 600, color: 'var(--gold-deep)' }}>
+                {t('sched.cal.setup')} ←
+              </Link>
             </Section>
 
             <Section

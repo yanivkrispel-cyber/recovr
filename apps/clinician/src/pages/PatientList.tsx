@@ -288,14 +288,25 @@ function presSummary(p: ProtoExercise['prescription']): string {
   return parts.join(' · ');
 }
 
-function AddPatientModal({
+/** Contact details from a website booking request (calendar, T-35). */
+export interface PatientPrefill {
+  name: string;
+  email: string;
+  phone?: string;
+  /** the created card is linked to this request and its appointment */
+  bookingRequestId: string;
+}
+
+export function AddPatientModal({
   open,
   onClose,
   onCreated,
+  prefill,
 }: {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
+  prefill?: PatientPrefill;
 }) {
   const supabase = useContext(SupabaseContext);
   const toast = useToast();
@@ -326,6 +337,14 @@ function AddPatientModal({
       return data as ProtocolOption[];
     },
   });
+
+  // Opened from a booking request: start from what the visitor typed.
+  useEffect(() => {
+    if (!open || !prefill) return;
+    setName(prefill.name);
+    setEmail(prefill.email);
+    setPhone(prefill.phone ?? '');
+  }, [open, prefill]);
 
   const isOther = protocolId === OTHER;
   const selectedProtocol = protocols?.find((p) => p.id === protocolId) ?? null;
@@ -387,6 +406,7 @@ function AddPatientModal({
             email: email.trim(),
             condition: condition.trim(),
             intake_note: notes.trim() || undefined,
+            booking_request_id: prefill?.bookingRequestId,
           }
         : {
             name: name.trim(),
@@ -395,6 +415,7 @@ function AddPatientModal({
             start_phase_n: phaseN,
             excluded_exercise_ids: excluded,
             intake_note: notes.trim() || undefined,
+            booking_request_id: prefill?.bookingRequestId,
           },
     });
     setSaving(false);

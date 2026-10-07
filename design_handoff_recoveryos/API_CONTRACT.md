@@ -91,6 +91,35 @@ patient's timezone · cursor pagination (`?cursor=&limit=`) · `Idempotency-Key`
 | POST | `/me/push-subscription` | Web Push registration |
 | GET | `/me/export` · POST `/me/delete-request` | privacy endpoints |
 
+## Scheduling (M6 — T-34 / T-35)
+Edge functions `scheduling` (clinician, MFA), `me-appointments` (patient session) and
+`public-booking` (no session, rate-limited per hashed IP / address / clinic). Instants are ISO
+8601; `from`/`to` days are clinic-local `YYYY-MM-DD`.
+
+| Method | Path | Returns |
+|---|---|---|
+| GET | `/scheduling/setup` | `{me, role, timezone, clinic_name, booking_slug, booking_url, settings, practitioners, types, availability}` |
+| PATCH | `/scheduling/settings` | patch of `slot_step_min, buffer_min, min_notice_min, horizon_days, free_cancel_hours, contact_address, contact_phone, practitioner_id, booking_enabled, booking_slug` → `{settings, booking_slug, booking_url}`; `slug_taken` 409, `slug_required` 422 |
+| POST | `/scheduling/types` | create (no `id`) / update an appointment type → `{type}` |
+| PUT | `/scheduling/availability` | `{practitioner_id?, rules:[{weekday, start_time, end_time}]}` replaces weekly hours (own, or anyone's for an admin) |
+| GET | `/scheduling/calendar?from&to` | `{timezone, appointments (any status, with clinical phase + server adherence), time_off, pending_count}` — ≤ 62 days |
+| POST | `/scheduling/appointments` | `{patient_id, type_id, starts_at, duration_min?, note?, notify?}` → confirmed booking; 409 `conflict` with `{conflicts:{appointments, time_off}}` |
+| PATCH | `/scheduling/appointments/:id` | move / resize / retype / note / status (`pending→confirmed\|declined`, `confirmed→cancelled\|attended\|no_show`, back to `confirmed`) → `{appointment, change, emailed}` |
+| POST · DELETE | `/scheduling/time-off` · `/scheduling/time-off/:id` | block / unblock time; 409 `conflict` when appointments are in the way |
+| GET | `/scheduling/requests[?count=1]` | pending requests (website + app) with existing-patient matches · `{count}` for the nav badge |
+| POST | `/scheduling/requests/:id/link` | `{patient_id}` — tie a website request and its appointment to a card (`patient-invite` also accepts `booking_request_id`) |
+| GET | `/me-appointments` | `{timezone, clinic, free_cancel_hours, horizon_days, upcoming, past, types}` |
+| GET | `/me-appointments/slots?type_id&from&to` | `{slots:[instant]}` |
+| POST | `/me-appointments` | `{type_id, starts_at}` → `{appointment, emailed}`; 409 `slot_taken` / `limit_reached` (4 upcoming) |
+| POST · GET | `/me-appointments/:id/cancel` · `/me-appointments/:id/ics` | cancel inside the free-cancellation window (409 `too_late`) · calendar file |
+| GET | `/public-booking/:slug` | clinic contact, public types, body regions, policy, `consent_version` — 404 when booking is off |
+| GET | `/public-booking/:slug/slots?type_id&from&to` | `{slots}` (≤ 31 days per call) |
+| POST | `/public-booking/:slug/request` | `{type_id, starts_at, name, phone, email, body_region_id?, consent: true}` → e-mails a 6-digit code → `{request_id, email}`; 409 `slot_taken` / `already_booked` |
+| POST | `/public-booking/:slug/confirm` | `{request_id, code, starts_at?}` → `{status: pending\|confirmed, token, appointment, clinic}`; 422 `invalid_code` (+`attempts_left`) / `code_expired` / `too_many_attempts`; 409 `slot_taken` keeps the code valid for another time |
+| POST | `/public-booking/:slug/resend` | `{request_id}` — new code (3 per request) |
+| GET · POST | `/public-booking/manage/:token` · `/public-booking/manage/:token/cancel` | the appointment behind a manage link (stateless HMAC token) · cancel within policy |
+| GET | `/public-booking/ics/:token` | calendar file |
+
 ## Errors
 `{"error":{"code":"plan_version_conflict","message":"...","details":{...}}}`
 Codes to implement: `unauthorized`, `forbidden`, `not_found`, `validation_failed`,
