@@ -1,5 +1,6 @@
 import { useRef, type CSSProperties, type ReactNode, type TouchEvent } from 'react';
-import { t, type AppointmentStatus, type CalendarAppointment, type TypeColor, type I18nKey } from 'shared';
+import { formatLocalDate, t, type AppointmentStatus, type CalendarAppointment, type TypeColor, type I18nKey } from 'shared';
+import '../../calendar.css';
 
 // Look of the calendar, from the token layer only (CLAUDE.md rule 11).
 
@@ -233,4 +234,102 @@ export function useHorizontalSwipe(onSwipe: (delta: 1 | -1) => void) {
       onSwipe(dx > 0 ? 1 : -1);
     },
   };
+}
+
+export function CalendarIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+      <path d="M3.5 10h17M8 3v4M16 3v4" />
+    </svg>
+  );
+}
+
+/** A date shown as Hebrew text ("יום שני, 19 באוקטובר") over an invisible
+ *  native date input: a tap still opens the phone's own calendar, but what's
+ *  on screen never depends on the browser's locale (an English phone showed
+ *  "10/19/2026", cut off). `icon`: just the calendar button. */
+export function DateField({
+  value,
+  onChange,
+  label,
+  min,
+  variant = 'field',
+}: {
+  value: string;
+  onChange: (date: string) => void;
+  label: string;
+  min?: string;
+  variant?: 'field' | 'icon';
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <span className="cal-datefield" style={{ position: 'relative', display: 'flex', flex: variant === 'icon' ? 'none' : undefined, minWidth: 0 }}>
+      {variant === 'icon' ? (
+        <span aria-hidden style={{ ...iconButton, width: 40, height: 40, color: 'var(--navy)' }}>
+          <CalendarIcon />
+        </span>
+      ) : (
+        <span aria-hidden style={{ ...fieldStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minWidth: 0 }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value ? formatLocalDate(value, 'long') : '—'}</span>
+          <span style={{ color: 'var(--navy)', display: 'flex', flex: 'none' }}>
+            <CalendarIcon />
+          </span>
+        </span>
+      )}
+      <input
+        ref={input}
+        type="date"
+        aria-label={label}
+        value={value}
+        min={min}
+        onChange={(e) => e.target.value && onChange(e.target.value)}
+        onClick={() => {
+          try {
+            input.current?.showPicker();
+          } catch {
+            // no showPicker (older browsers): a tap on the input opens it anyway
+          }
+        }}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, border: 0, margin: 0, padding: 0, cursor: 'pointer' }}
+      />
+    </span>
+  );
+}
+
+const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'));
+
+/** 24-hour time as hour : minute selects (5-minute steps). A native time
+ *  input follows the phone's locale — "06:00 PM" on an English phone. */
+export function TimeField({ value, onChange, label, bare = false }: { value: string; onChange: (time: string) => void; label: string; bare?: boolean }) {
+  const [h, m] = /^\d{2}:\d{2}/.test(value) ? [value.slice(0, 2), value.slice(3, 5)] : ['', ''];
+  const minutes = m && !MINUTES.includes(m) ? [...MINUTES, m].sort() : MINUTES;
+  const select: CSSProperties = bare
+    ? { border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: 14, color: 'var(--ink)', padding: '2px 0', cursor: 'pointer', fontVariantNumeric: 'tabular-nums' }
+    : { ...fieldStyle, width: 'auto', padding: '9px 6px', cursor: 'pointer', fontVariantNumeric: 'tabular-nums' };
+  return (
+    // Times read left to right in Hebrew too: 18:30.
+    <span role="group" aria-label={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, direction: 'ltr' }}>
+      <select aria-label={`${label} · ${t('sched.time.hour')}`} value={h} onChange={(e) => onChange(`${e.target.value}:${m || '00'}`)} style={select}>
+        {!h && <option value="">--</option>}
+        {HOURS.map((x) => (
+          <option key={x} value={x}>
+            {x}
+          </option>
+        ))}
+      </select>
+      <span aria-hidden style={{ fontWeight: 700, color: 'var(--ink)' }}>
+        :
+      </span>
+      <select aria-label={`${label} · ${t('sched.time.minute')}`} value={m} onChange={(e) => onChange(`${h || '09'}:${e.target.value}`)} style={select}>
+        {!m && <option value="">--</option>}
+        {minutes.map((x) => (
+          <option key={x} value={x}>
+            {x}
+          </option>
+        ))}
+      </select>
+    </span>
+  );
 }

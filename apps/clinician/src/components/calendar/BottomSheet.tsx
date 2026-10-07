@@ -12,9 +12,11 @@ interface Props {
   children: ReactNode;
   /** sticky actions under the scrolling content */
   footer?: ReactNode;
+  /** replaces the visible heading (the title still names the dialog) */
+  header?: ReactNode;
 }
 
-export default function BottomSheet({ open, onClose, title, children, footer }: Props) {
+export default function BottomSheet({ open, onClose, title, children, footer, header }: Props) {
   const panel = useRef<HTMLDivElement>(null);
   // Parents pass a fresh onClose every render; reading it through a ref keeps
   // the effect below from re-running (and re-focusing the panel, which would
@@ -70,7 +72,11 @@ export default function BottomSheet({ open, onClose, title, children, footer }: 
       >
         <div aria-hidden style={{ width: 40, height: 4, borderRadius: 2, background: 'var(--shell-border)', margin: '10px auto 2px', flex: 'none' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 16px 4px', flex: 'none' }}>
-          <h2 style={{ margin: 0, flex: 1, fontSize: 19, fontWeight: 800, color: 'var(--ink)' }}>{title}</h2>
+          {header ? (
+            <div style={{ flex: 1, minWidth: 0 }}>{header}</div>
+          ) : (
+            <h2 style={{ margin: 0, flex: 1, fontSize: 19, fontWeight: 800, color: 'var(--ink)' }}>{title}</h2>
+          )}
           <button
             type="button"
             onClick={onClose}

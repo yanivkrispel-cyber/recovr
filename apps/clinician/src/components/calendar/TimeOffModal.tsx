@@ -4,7 +4,7 @@ import { addDays, clinicDate, formatDayLong, formatTime, minutesOf, t, zonedTime
 import { SchedulingError, useCreateTimeOff, useDeleteTimeOff } from '../../lib/scheduling';
 import { ConflictList } from './ConflictList';
 import { DialogFrame } from './BottomSheet';
-import { Segmented, fieldStyle, labelStyle } from './calendarUi';
+import { DateField, Segmented, TimeField, fieldStyle, labelStyle } from './calendarUi';
 
 interface Props {
   /** 'new' opens the form; a TimeOff shows it with a remove button */
@@ -107,7 +107,20 @@ export default function TimeOffModal({ target, defaultDate, tz, onClose, sheet =
       sheet={sheet}
       open
       onClose={onClose}
-      title={onSwitchToAppointment ? t('sched.mobile.new_or_block') : t('sched.off.title')}
+      title={t('sched.off.title')}
+      header={
+        onSwitchToAppointment && (
+          <Segmented
+            label={t('sched.mobile.new_or_block')}
+            options={[
+              { value: 'appt', label: t('sched.appt.new') },
+              { value: 'off', label: t('sched.cal.block') },
+            ]}
+            value="off"
+            onChange={(v) => v === 'appt' && onSwitchToAppointment()}
+          />
+        )
+      }
       footer={
         sheet ? (
           <Button onClick={submit} disabled={!valid} loading={create.isPending} style={{ width: '100%' }} size="lg">
@@ -126,42 +139,34 @@ export default function TimeOffModal({ target, defaultDate, tz, onClose, sheet =
       }
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {onSwitchToAppointment && (
-          <Segmented
-            label={t('sched.mobile.new_or_block')}
-            options={[
-              { value: 'appt', label: t('sched.appt.new') },
-              { value: 'off', label: t('sched.cal.block') },
-            ]}
-            value="off"
-            onChange={(v) => v === 'appt' && onSwitchToAppointment()}
-          />
-        )}
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
-          <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, minHeight: 28 }}>
+          <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} style={{ width: 18, height: 18, margin: 0 }} />
           {t('sched.off.all_day')}
         </label>
-        <div style={{ display: 'grid', gridTemplateColumns: allDay ? '1fr' : 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
-          <label style={labelStyle}>
-            {t('sched.off.from')}
-            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} style={fieldStyle} />
-          </label>
-          {!allDay && (
-            <label style={labelStyle}>
-              {t('sched.appt.time')}
-              <input type="time" step={300} value={fromTime} onChange={(e) => setFromTime(e.target.value)} style={fieldStyle} />
-            </label>
-          )}
-          <label style={labelStyle}>
-            {t('sched.off.to')}
-            <input type="date" value={toDate} min={fromDate} onChange={(e) => setToDate(e.target.value)} style={fieldStyle} />
-          </label>
-          {!allDay && (
-            <label style={labelStyle}>
-              {t('sched.appt.time')}
-              <input type="time" step={300} value={toTime} onChange={(e) => setToTime(e.target.value)} style={fieldStyle} />
-            </label>
-          )}
+        <div style={labelStyle}>
+          {t('sched.off.from')}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <DateField
+                value={fromDate}
+                label={t('sched.off.from')}
+                onChange={(d) => {
+                  setFromDate(d);
+                  if (toDate < d) setToDate(d);
+                }}
+              />
+            </div>
+            {!allDay && <TimeField value={fromTime} onChange={setFromTime} label={t('sched.off.from')} />}
+          </div>
+        </div>
+        <div style={labelStyle}>
+          {t('sched.off.to')}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <DateField value={toDate} min={fromDate} label={t('sched.off.to')} onChange={setToDate} />
+            </div>
+            {!allDay && <TimeField value={toTime} onChange={setToTime} label={t('sched.off.to')} />}
+          </div>
         </div>
         <label style={labelStyle}>
           {t('sched.off.reason')}

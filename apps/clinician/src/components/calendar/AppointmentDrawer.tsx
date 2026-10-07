@@ -23,7 +23,7 @@ import { SchedulingError, useLinkRequest, useUpdateAppointment, type Appointment
 import { AddPatientModal, type PatientPrefill } from '../../pages/PatientList';
 import { ConflictList } from './ConflictList';
 import BottomSheet from './BottomSheet';
-import { StatusPill, TypeSwatch, fieldStyle, isLead, labelStyle, personName } from './calendarUi';
+import { DateField, StatusPill, TimeField, TypeSwatch, fieldStyle, isLead, labelStyle, personName } from './calendarUi';
 
 interface Props {
   appointment: CalendarAppointment | null;
@@ -311,14 +311,15 @@ function DrawerBody({ a, tz, types, rules, editable, compact, onClose }: { a: Ca
       {moving && (
         <Section title={t('sched.appt.move')}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
-            <label style={labelStyle}>
+            <div style={{ ...labelStyle, gridColumn: '1 / -1' }}>
               {t('sched.appt.date')}
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={fieldStyle} />
-            </label>
-            <label style={labelStyle}>
-              {t('sched.appt.time')}
-              <input type="time" step={300} value={time} onChange={(e) => setTime(e.target.value)} style={fieldStyle} />
-            </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <DateField value={date} onChange={setDate} label={t('sched.appt.date')} />
+                </div>
+                <TimeField value={time} onChange={setTime} label={t('sched.appt.time')} />
+              </div>
+            </div>
             <label style={labelStyle}>
               {t('sched.appt.duration')}
               <select value={duration} onChange={(e) => setDuration(Number(e.target.value))} style={fieldStyle}>

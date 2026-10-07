@@ -25,3 +25,9 @@
 .cal-sheet select {
   font-size: 16px !important;
 }
+
+/* DateField: the native input is invisible, so show its focus on the face. */
+.cal-datefield:focus-within > span[aria-hidden] {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}

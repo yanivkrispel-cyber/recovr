@@ -22,7 +22,7 @@ import {
 } from 'shared';
 import { AuthContext } from '../App';
 import AppShell from '../components/AppShell';
-import { TYPE_STYLE, TypeSwatch, fieldStyle, labelStyle, panelStyle, weekdayLabel } from '../components/calendar/calendarUi';
+import { TYPE_STYLE, TimeField, TypeSwatch, fieldStyle, labelStyle, panelStyle, weekdayLabel } from '../components/calendar/calendarUi';
 import {
   SchedulingError,
   useSaveAppointmentType,
@@ -117,22 +117,18 @@ function WeeklyHours({ setup }: { setup: SchedulingSetup }) {
                 {list.length === 0 && <span style={{ fontSize: 13, color: 'var(--muted-2)', paddingInlineEnd: 6 }}>{t('sched.setup.hours.closed')}</span>}
                 {list.map((win, i) => (
                   <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--white)', border: '1px solid var(--line-input)', borderRadius: 'var(--radius-button)', padding: '3px 6px' }}>
-                    <input
-                      type="time"
-                      step={300}
+                    <TimeField
+                      bare
                       value={win.start_time}
-                      aria-label={`${weekdayLabel(d)} — ${t('sched.off.from')}`}
-                      onChange={(e) => setDay(d, list.map((x, j) => (j === i ? { ...x, start_time: e.target.value } : x)))}
-                      style={timeInput}
+                      label={`${weekdayLabel(d)} — ${t('sched.off.from')}`}
+                      onChange={(v) => setDay(d, list.map((x, j) => (j === i ? { ...x, start_time: v } : x)))}
                     />
                     –
-                    <input
-                      type="time"
-                      step={300}
+                    <TimeField
+                      bare
                       value={win.end_time}
-                      aria-label={`${weekdayLabel(d)} — ${t('sched.off.to')}`}
-                      onChange={(e) => setDay(d, list.map((x, j) => (j === i ? { ...x, end_time: e.target.value } : x)))}
-                      style={timeInput}
+                      label={`${weekdayLabel(d)} — ${t('sched.off.to')}`}
+                      onChange={(v) => setDay(d, list.map((x, j) => (j === i ? { ...x, end_time: v } : x)))}
                     />
                     <button
                       type="button"
@@ -193,7 +189,6 @@ function addHour(hhmm: string): string {
   return `${String(Math.min(23, h + 1)).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-const timeInput = { border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: 14, color: 'var(--ink)', padding: 2 } as const;
 
 // --- appointment types -----------------------------------------------------------
 
