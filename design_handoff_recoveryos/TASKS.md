@@ -223,6 +223,76 @@ browser-print PDF · minimal (undesigned) auth screens · dataset media dev-only
 - Patient app: interactive < 2s on mid-tier Android over 4G; installable PWA.
 - Error tracking, structured logs, backup + restore rehearsed once.
 
+## M6 — Scheduling
+Scope (product owner, 2026-10-06/07): replaces WhatsApp/paper booking. One practitioner today,
+but every table is clinic-scoped and per-practitioner so the feature sells to multi-therapist
+clinics later. Channel is **email only** (no SMS/WhatsApp). Payments are recorded, not charged.
+Decisions: new-patient first visits need **manual approval**; waitlist offers are **sent by the
+clinician** (system suggests, one click sends); **new and existing patients** may self-book.
+Build order: T-34 + T-35 together, then T-36, T-37, T-38. Mockup:
+https://claude.ai/artifact/XzBGp2VWhrZkqCQzF4qDUd
+
+**T-34 Availability & clinician calendar**
+- Settings › Calendar: weekly availability per practitioner (several windows per day), appointment
+  types (name, duration, price shown as text, colour, who may book: `anyone` | `existing` |
+  `clinician_only`, confirmation: `manual` | `auto`), buffer between appointments, minimum
+  notice, booking horizon, free-cancellation window.
+- Calendar screen (day / week), Sun–Fri, clinic timezone (`Asia/Jerusalem`): create, move,
+  resize, cancel and mark attended / no-show; block time (vacation, conference) as a time-off
+  row; each card shows the patient's current phase and 7-day adherence (existing engines, read
+  only).
+- Double booking is impossible at the database level: an exclusion constraint on
+  `(practitioner_id, tstzrange(starts_at, ends_at))` over live statuses (`pending`, `confirmed`,
+  `attended`) and time-off. Moving an appointment onto a taken slot fails with a clear error.
+- Slot generation (`app.available_slots(practitioner, type, from, to)`) = availability minus
+  appointments, time-off, buffer, minimum notice; mirrored and tested in
+  `packages/shared/src/slots.ts` (DST change weeks, buffers, windows split by time-off).
+- Phone (<768px) shows the day view, read + mark attended; week view and editing are ≥1024px
+  (T-22 rule unchanged).
+- Every appointment change is written to `audit_log`.
+
+**T-35 Public booking page & new-patient intake**
+- Public route `/book/<clinic-slug>` (no login, Hebrew, phone-first): choose type → day →
+  slot → name, mobile, email, optional body region (from `app.body_region`; no free-text
+  medical details), privacy + cancellation consent → 6-digit email code → request created.
+- Only types with `who_may_book = anyone` are offered publicly. Requests are `pending` and hold
+  their slot for 24 h; unverified requests never hold a slot and expire after 15 min.
+- Abuse limits: per-IP and per-email rate limits, Cloudflare Turnstile on the code request,
+  code valid 10 min / 5 attempts. The edge function runs with the service role and is the only
+  public write path (no anon RLS on scheduling tables).
+- Clinician sees "new website requests" (calendar sidebar + dashboard badge): approve → creates
+  the `patient` (status `invited`, existing invite flow sends the app invite) and confirms the
+  appointment; or propose another time; or decline. Matching an existing patient by
+  email/phone is offered, never automatic.
+- Existing patients book from the patient app (types with `who_may_book` in `anyone|existing`);
+  `auto`-confirm types confirm instantly, `manual` ones go to the same queue.
+- Emails (existing SMTP / notification pipeline, no medical content): code, "request received",
+  confirmed (with .ics attachment + manage link), declined/alternative proposed.
+- Consent version and timestamp stored on the booking request and carried to the patient row.
+
+**T-36 Reminders, self-service changes & waitlist**
+- Reminder emails 48 h and 3 h before (configurable); signed manage link to cancel or move
+  within policy; late cancel / no-show flagged per policy.
+- Waitlist entries (patient or public lead): preferred days, time bands, type, clinical priority
+  flag, notes. A freed slot lists matching entries ordered priority → time waiting; the
+  clinician presses send; offer email with a claim link; first valid claim books the slot
+  (atomic), later claims get "already taken, you stay on the list". Offers never go out for slots
+  starting in under the configured minimum (default 2 h).
+- Public page "no suitable time? join the waitlist" (same email-code verification).
+
+**T-37 Packages / punch cards**
+- Package products (sessions, applicable types, validity) and per-patient package instances;
+  marking an appointment attended punches the active package; late cancel / no-show punches
+  per policy; balance and expiry visible to clinician and in the patient app. Payment is a
+  manual record (method, amount, date) — no processor in this task.
+
+**T-38 Clinical scheduling hooks**
+- Phase ending (or `ready_for_advance`) suggests a reassessment booking to the clinician and,
+  if enabled, to the patient app, offering only slots the clinician opened for reassessments.
+- Calendar utilisation, no-show rate and waitlist fill rate on the dashboard.
+- Later, not specced: payments + invoicing via an Israeli invoicing API, WhatsApp/SMS, Google
+  Calendar two-way sync, multi-room resources.
+
 ## Cross-cutting
 **T-25 Hebrew copy layer**
 - Every user-facing string comes from the i18n layer, keys per `COPY.md`. No inline JSX text.

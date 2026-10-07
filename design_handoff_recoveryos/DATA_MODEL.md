@@ -138,6 +138,31 @@ Full field-by-field spec in `ROM_MEASUREMENT.md` §5.
   sent_at, read_at
 - **audit_log** — id, actor_type, actor_id, action, entity_type, entity_id, ip, user_agent, at
 
+## Scheduling (M6, T-34..T-37 — planned)
+- **appointment_type** — id, clinic_id, name, name_en, duration_min, price_label, color,
+  who_may_book (`anyone`|`existing`|`clinician_only`), confirmation (`manual`|`auto`),
+  is_reassessment, active, sort
+- **availability_rule** — id, clinic_id, practitioner_id → user, weekday (0–6), start_time,
+  end_time, valid_from, valid_to
+- **time_off** — id, clinic_id, practitioner_id, starts_at, ends_at, reason
+- **appointment** — id, clinic_id, practitioner_id, patient_id (null while a lead),
+  booking_request_id, type_id, starts_at, ends_at, status (`pending`|`confirmed`|`attended`|
+  `no_show`|`cancelled`|`late_cancelled`|`declined`|`expired`), source (`clinician`|`patient_app`|
+  `public`|`waitlist`), cancelled_by, cancel_reason, package_instance_id, notes. Exclusion
+  constraint: no overlapping live rows per practitioner.
+- **booking_request** — id, clinic_id, name, phone, email, body_region_id, consent_version,
+  consent_at, email_verified_at, code_hash, code_attempts, ip_hash, status
+  (`unverified`|`pending`|`approved`|`declined`|`expired`), matched_patient_id
+- **clinic settings** (`clinic.settings.scheduling`): buffer_min, min_notice_min, horizon_days,
+  free_cancel_hours, reminder_hours[], waitlist_min_lead_min, public_slug, booking_enabled
+- **waitlist_entry** (T-36) — id, clinic_id, patient_id | booking_request_id, type_id, weekdays[],
+  time_bands[], priority, note, status (`active`|`booked`|`removed`), created_at
+- **waitlist_offer** (T-36) — id, entry_id, appointment slot (practitioner_id, starts_at,
+  ends_at, type_id), token_hash, sent_at, claimed_at, outcome
+- **package_product** / **package_instance** (T-37) — product: id, clinic_id, name, sessions,
+  type_ids[], validity_days, price_label; instance: id, patient_id, product_id, sessions_total,
+  sessions_used, expires_at, payment jsonb (manual record)
+
 ## Key indexes
 `measurement(patient_id, measure_code, measured_at desc)` · `measurement(visit_id)`
 `session(patient_id, date)` · `session_item(session_id)` · `adherence_daily(patient_id, date)`
